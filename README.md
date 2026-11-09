@@ -28,6 +28,14 @@ docker compose up --build -d
 docker compose logs -f api
 ```
 
+Если Docker Desktop не выдерживает сборку Go-образа из-за нехватки места на системном диске, можно собрать Linux-бинарник установленным Go и использовать `Dockerfile.prebuilt`:
+
+```bash
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -buildvcs=false -o bin/knowledge-api-linux ./cmd/server
+docker buildx build --load -f Dockerfile.prebuilt -t avito-rag-api:server .
+docker compose up -d --no-build api
+```
+
 На первом запуске образ модели и её веса могут скачиваться несколько минут. API готов, когда команда вернёт `"status":"ok"`:
 
 ```bash
@@ -97,6 +105,23 @@ curl -X POST http://localhost:8000/v1/knowledge/reindex
 `/reindex` полностью пересобирает коллекцию, поэтому удалённые документы не останутся в выдаче.
 
 ## Доступ и данные
+
+### Тестовая Jira-заявка
+
+На главной странице есть форма заявки на доступ. Пользователь вводит ресурс и причину, отмечает подтверждение; сервис создаёт тестовую задачу и показывает ключ, статус и ссылку. Результат хранится в Docker volume `jira-data` и доступен через `GET /v1/access-requests` и `GET /v1/access-requests/{id}`. Повторный `POST` с тем же заголовком `Idempotency-Key` возвращает сохранённую задачу.
+
+По умолчанию `JIRA_MODE=mock`: задача сохраняется локально с ключом `SCRUM-MOCK-N`. Для тестового проекта `SCRUM` на `gapshinmihael.atlassian.net` задайте в локальном `.env` `JIRA_MODE=live`, `JIRA_EMAIL`, `JIRA_API_TOKEN` и `JIRA_ISSUE_TYPE=Задача`. API-токен создаётся в [профиле Atlassian](https://id.atlassian.com/manage-profile/security/api-tokens). `.env` не коммитится. Вход через Google в браузере не авторизует Go-сервис; ему нужен отдельный API-токен. Демо роль задаётся в запросе (`role: "intern"`) и не является защитой для рабочего окружения. Операции тестового проекта доступны каждому, кто имеет доступ к этому API.
+
+Пример без фронтенда:
+
+```bash
+curl -X POST http://localhost:8000/v1/access-requests \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: demo-request-001' \
+  -d '{"resource":"Учебное пространство команды","reason":"Для онбординга стажёра","confirmed":true,"role":"intern"}'
+```
+
+Режим и схема описаны в `specs/003-jira-access-request.md`.
 
 API и Qdrant опубликованы только на `127.0.0.1`. Для доступа из другой машины поменяйте порт в `docker-compose.yml` осознанно и задайте длинный `API_KEY` в `.env`. Тогда все вызовы, кроме `/health`, должны передавать заголовок:
 

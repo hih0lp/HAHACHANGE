@@ -41,14 +41,21 @@ services:
       INDEX_ON_STARTUP: "true"
       LLM_URL: http://host.docker.internal:1234
       LLM_MODEL: ${LLM_MODEL:-qwen3-8b}
+      JIRA_MODE: ${JIRA_MODE:-mock}
+      JIRA_BASE_URL: ${JIRA_BASE_URL:-https://gapshinmihael.atlassian.net}
+      JIRA_PROJECT_KEY: ${JIRA_PROJECT_KEY:-SCRUM}
+      JIRA_ISSUE_TYPE: ${JIRA_ISSUE_TYPE:-Task}
+      JIRA_DATA_PATH: /data/jira/access-requests.json
     volumes:
       # Keep sources outside the image: pull the repo, then call /reindex.
       - ../playbook:/data/knowledge/playbook:ro
       - ../knowledge:/data/knowledge/onboarding:ro
+      - jira-data:/data/jira
     ports:
       - "127.0.0.1:8000:8000"
 
 volumes:
   qdrant-data:
   model-cache:
+  jira-data:
 

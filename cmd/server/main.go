@@ -18,6 +18,7 @@ type config struct {
 	APIKey         string
 	IndexOnStartup bool
 	RAG            rag.Config
+	Jira           jiraConfig
 }
 
 func main() {
@@ -30,6 +31,9 @@ var listenAndServe = http.ListenAndServe
 
 func run() error {
 	cfg := loadConfig()
+	if err := cfg.Jira.validate(); err != nil {
+		return err
+	}
 	service := rag.New(cfg.RAG)
 	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
 	defer cancel()
@@ -53,6 +57,7 @@ func newHandler(service *rag.Service, cfg config) http.Handler {
 	answer := answerer{service: service, url: env("LLM_URL", "http://host.docker.internal:1234"), model: env("LLM_MODEL", "qwen3-8b")}
 	jobs := newJobManager(envInt("JOB_WORKERS", 2), envInt("JOB_QUEUE_SIZE", 32), time.Duration(envInt("JOB_TIMEOUT_SECONDS", 180))*time.Second, answer.Ask)
 	registerJobRoutes(mux, jobs, cfg.APIKey)
+	registerAccessRoutes(mux, cfg.APIKey, cfg.Jira)
 	mux.HandleFunc("GET /", webPage)
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		count, err := service.Count(r.Context())
@@ -134,6 +139,7 @@ func loadConfig() config {
 	return config{
 		APIKey:         os.Getenv("API_KEY"),
 		IndexOnStartup: envBool("INDEX_ON_STARTUP", true),
+		Jira:           jiraConfig{Mode: env("JIRA_MODE", "mock"), BaseURL: env("JIRA_BASE_URL", "https://gapshinmihael.atlassian.net"), ProjectKey: env("JIRA_PROJECT_KEY", "SCRUM"), IssueType: env("JIRA_ISSUE_TYPE", "Задача"), Email: os.Getenv("JIRA_EMAIL"), APIToken: os.Getenv("JIRA_API_TOKEN"), DataPath: env("JIRA_DATA_PATH", "/data/jira/access-requests.json")},
 		RAG: rag.Config{
 			QdrantURL:      env("QDRANT_URL", "http://qdrant:6333"),
 			EmbeddingsURL:  env("EMBEDDINGS_URL", "http://embeddings:80"),
