@@ -1,0 +1,6 @@
+.env
+bin/
+.docker-images/
+coverage.out
+.smbdelete*
+

@@ -1,0 +1,54 @@
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.12.6
+    restart: unless-stopped
+    volumes:
+      - qdrant-data:/qdrant/storage
+    ports:
+      - "127.0.0.1:6333:6333"
+
+  # TEI provides local multilingual embeddings. The first run downloads the
+  # public model into the named volume; no document contents leave Docker.
+  embeddings:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.6
+    # The upstream CPU image is currently amd64-only. Docker Desktop runs it
+    # through its built-in emulation on Apple Silicon; x86 Linux runs natively.
+    platform: linux/amd64
+    restart: unless-stopped
+    command:
+      - --model-id
+      - intfloat/multilingual-e5-small
+      - --max-client-batch-size
+      - "64"
+    volumes:
+      - model-cache:/data
+
+  api:
+    image: avito-rag-api:server
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - qdrant
+      - embeddings
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      QDRANT_URL: http://qdrant:6333
+      EMBEDDINGS_URL: http://embeddings:80
+      DOCUMENTS_PATH: /data/knowledge
+      COLLECTION_NAME: avito_playbook
+      INDEX_ON_STARTUP: "true"
+      LLM_URL: http://host.docker.internal:1234
+      LLM_MODEL: ${LLM_MODEL:-qwen3-8b}
+    volumes:
+      # Keep sources outside the image: pull the repo, then call /reindex.
+      - ../playbook:/data/knowledge/playbook:ro
+      - ../knowledge:/data/knowledge/onboarding:ro
+    ports:
+      - "127.0.0.1:8000:8000"
+
+volumes:
+  qdrant-data:
+  model-cache:
+
