@@ -50,6 +50,9 @@ func run() error {
 
 func newHandler(service *rag.Service, cfg config) http.Handler {
 	mux := http.NewServeMux()
+	answer := answerer{service: service, url: env("LLM_URL", "http://host.docker.internal:1234"), model: env("LLM_MODEL", "qwen3-8b")}
+	jobs := newJobManager(envInt("JOB_WORKERS", 2), envInt("JOB_QUEUE_SIZE", 32), time.Duration(envInt("JOB_TIMEOUT_SECONDS", 180))*time.Second, answer.Ask)
+	registerJobRoutes(mux, jobs, cfg.APIKey)
 	mux.HandleFunc("GET /", webPage)
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		count, err := service.Count(r.Context())
@@ -116,7 +119,7 @@ func newHandler(service *rag.Service, cfg config) http.Handler {
 			writeError(w, http.StatusBadRequest, errText("query must be at least 2 characters"))
 			return
 		}
-		answer, _, err := (answerer{service: service, url: env("LLM_URL", "http://host.docker.internal:1234"), model: env("LLM_MODEL", "qwen3-8b")}).Ask(r.Context(), input.Query)
+		answer, _, err := answer.Ask(r.Context(), input.Query)
 		if err != nil {
 			writeError(w, http.StatusBadGateway, err)
 			return

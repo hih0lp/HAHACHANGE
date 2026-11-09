@@ -25,15 +25,24 @@ button:disabled{opacity:.55;cursor:wait}.card{margin-top:16px}pre{white-space:pr
 <button id="submit" type="submit" value="ask">Спросить Qwen</button> <button type="submit" value="search">Только поиск</button></form><p id="status" role="status"></p><section id="results" aria-live="polite"></section></main>
 <script>
 const form=document.getElementById('form'),results=document.getElementById('results'),status=document.getElementById('status'),button=document.getElementById('submit');
-form.addEventListener('submit',async event=>{event.preventDefault();const ask=event.submitter.value==='ask';button.disabled=true;status.textContent=ask?'Qwen готовит ответ…':'Ищу…';status.className='';results.replaceChildren();
-try{const headers={'Content-Type':'application/json'},key=document.getElementById('key').value;if(key)headers['X-API-Key']=key;
-const response=await fetch(ask?'/v1/ask':'/v1/knowledge/search',{method:'POST',headers,body:JSON.stringify({query:document.getElementById('query').value,limit:5})});
-const data=await response.json();if(!response.ok)throw Error(data.error||'HTTP '+response.status);
-const hits=ask?[]:data.hits;status.textContent=ask?'Ответ Qwen':'Найдено фрагментов: '+hits.length;
-if(ask){const card=document.createElement('article');card.className='card';const title=document.createElement('h2');title.textContent='Ответ Qwen';const text=document.createElement('pre');const pattern=/\[([^\]]+)\]\((https:\/\/[^\s)]+)\)/g;let position=0,match;while((match=pattern.exec(data.answer))!==null){text.append(document.createTextNode(data.answer.slice(position,match.index)));const link=document.createElement('a');link.href=match[2];link.target='_blank';link.rel='noopener noreferrer';link.textContent=match[1];text.append(link);position=pattern.lastIndex}text.append(document.createTextNode(data.answer.slice(position)));card.append(title,text);results.append(card)}
-if(!ask)for(const hit of hits){const card=document.createElement('article');card.className='card';const title=document.createElement('h2');title.textContent=hit.title;
+function sourceCard(hit){const card=document.createElement('article');card.className='card';const title=document.createElement('h3');title.textContent=hit.title;
 const meta=document.createElement('div');meta.className='meta';meta.textContent=hit.path+' · фрагмент '+hit.chunk_index+' · оценка '+hit.score.toFixed(3);
-const text=document.createElement('pre');text.textContent=hit.text;card.append(title,meta);if(hit.source_url){const link=document.createElement('a');link.className='source';link.href=hit.source_url;link.target='_blank';link.rel='noopener noreferrer';link.textContent=hit.path.startsWith('onboarding/')?'Открыть исходный чек-лист ↗':'Открыть документ Playbook ↗';card.append(link)}card.append(text);results.append(card)}
-if(!ask&&!hits.length){const empty=document.createElement('p');empty.className='empty';empty.textContent='Ничего не найдено.';results.append(empty)}
+const body=document.createElement('pre');body.textContent=hit.text;card.append(title,meta);if(hit.source_url){const link=document.createElement('a');link.className='source';link.href=hit.source_url;link.target='_blank';link.rel='noopener noreferrer';link.textContent='Открыть первоисточник ↗';card.append(link)}card.append(body);return card}
+function showJob(card,job){const state=card.querySelector('[data-state]'),body=card.querySelector('[data-body]');
+state.textContent=job.status==='queued'?'В очереди':job.status==='running'?'Готовим ответ':job.status==='completed'?'Готово':'Ошибка';
+if(job.status==='completed'){body.replaceChildren();const answer=document.createElement('pre');answer.textContent=job.answer;body.append(answer);for(const hit of job.sources||[])body.append(sourceCard(hit))}
+if(job.status==='failed'){body.textContent=job.error||'Не удалось получить ответ';body.className='error'}}
+function watchJob(job,card,key){let finished=false;const url=(location.protocol==='https:'?'wss://':'ws://')+location.host+'/v1/jobs/'+job.id+'/ws';const socket=new WebSocket(url);
+socket.onopen=()=>{if(key)socket.send(JSON.stringify({api_key:key}))};
+socket.onmessage=event=>{const update=JSON.parse(event.data);showJob(card,update);if(update.status==='completed'||update.status==='failed'){finished=true;socket.close()}};
+socket.onclose=()=>{if(!finished)pollJob(job.id,card,key)};socket.onerror=()=>socket.close()}
+async function pollJob(id,card,key){for(;;){await new Promise(resolve=>setTimeout(resolve,2000));try{const headers={};if(key)headers['X-API-Key']=key;const response=await fetch('/v1/jobs/'+id,{headers});if(!response.ok)throw Error('HTTP '+response.status);const job=await response.json();showJob(card,job);if(job.status==='completed'||job.status==='failed')return}catch(error){card.querySelector('[data-state]').textContent='Переподключение…'}}}
+form.addEventListener('submit',async event=>{event.preventDefault();const ask=event.submitter.value==='ask',query=document.getElementById('query').value,key=document.getElementById('key').value;
+button.disabled=true;status.textContent='Отправляю…';status.className='';
+try{const headers={'Content-Type':'application/json'};if(key)headers['X-API-Key']=key;
+const response=await fetch(ask?'/v1/jobs':'/v1/knowledge/search',{method:'POST',headers,body:JSON.stringify({query,limit:5})});
+const data=await response.json();if(!response.ok)throw Error(data.error||'HTTP '+response.status);
+if(ask){const card=document.createElement('article');card.className='card';const title=document.createElement('h2');title.textContent=query;const state=document.createElement('div');state.className='meta';state.dataset.state='';const body=document.createElement('div');body.dataset.body='';card.append(title,state,body);results.prepend(card);showJob(card,data);watchJob(data,card,key);status.textContent='Запрос принят: '+data.id}
+else{const section=document.createElement('section');const heading=document.createElement('h2');heading.textContent='Поиск: '+query;section.append(heading);for(const hit of data.hits)section.append(sourceCard(hit));results.prepend(section);status.textContent='Найдено фрагментов: '+data.hits.length}
 }catch(error){status.textContent=error.message;status.className='error'}finally{button.disabled=false}});
 </script></body></html>`

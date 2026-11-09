@@ -263,3 +263,15 @@ func TestEmbeddingsAreBatched(t *testing.T) {
 		t.Fatalf("vectors=%d calls=%d err=%v", len(vectors), calls, err)
 	}
 }
+
+func TestSourceLinks(t *testing.T) {
+	if got := sourceURL("onboarding/intern-checklist.md"); got != "https://docs.google.com/spreadsheets/d/1qKFqOzfSZ2jEz57jBSmq7rukDXi_tRfWohgemViceV0/edit?usp=sharing" {
+		t.Fatalf("checklist URL = %s", got)
+	}
+	if got := sourceURL("playbook/students.md"); got != "https://github.com/avito-tech/playbook/blob/master/students.md" {
+		t.Fatalf("playbook URL = %s", got)
+	}
+	if got := sourceURL("unknown.md"); got != "" {
+		t.Fatalf("unknown URL = %s", got)
+	}
+}
