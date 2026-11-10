@@ -6,6 +6,7 @@ services:
       - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
       - "127.0.0.1:18000:80"
+      - "100.105.236.12:18000:80"
     depends_on:
       - api
 
