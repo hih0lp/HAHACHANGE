@@ -29,7 +29,9 @@ func (t headerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 
 func mcpJiraContext(ctx context.Context, endpoint, key, question string) (string, bool, error) {
 	issueKey := jiraMention.FindString(question)
-	wantsList := issueKey == "" && (strings.Contains(strings.ToLower(question), "jira") || strings.Contains(strings.ToLower(question), "задач"))
+	lower := strings.ToLower(question)
+	mentionsJira := strings.Contains(lower, "jira") || strings.Contains(lower, "джир")
+	wantsList := issueKey == "" && mentionsJira && (strings.Contains(lower, "задач") || strings.Contains(lower, "статус") || strings.Contains(lower, "тикет") || strings.Contains(lower, "issue"))
 	if issueKey == "" && !wantsList {
 		return "", false, nil
 	}

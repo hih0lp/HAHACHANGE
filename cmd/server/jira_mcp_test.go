@@ -37,8 +37,10 @@ func TestAgentReadsJiraThroughMCP(t *testing.T) {
 	if err != nil || !used || !strings.Contains(list, "SCRUM-5") {
 		t.Fatalf("list: used=%v err=%v data=%s", used, err, list)
 	}
-	if _, used, err := mcpJiraContext(context.Background(), mcpServer.URL, "", "Как пройти онбординг?"); used || err != nil {
-		t.Fatalf("unrelated query: used=%v err=%v", used, err)
+	for _, question := range []string{"Как пройти онбординг?", "Помоги решить задачу по математике", "Что такое Jira?"} {
+		if _, used, err := mcpJiraContext(context.Background(), mcpServer.URL, "", question); used || err != nil {
+			t.Fatalf("unrelated query %q: used=%v err=%v", question, used, err)
+		}
 	}
 }
 

@@ -1,0 +1,7 @@
+FROM alpine:3.20
+RUN adduser -D -u 10001 appuser && apk add --no-cache ca-certificates && mkdir -p /data/keys && chown appuser /data/keys
+COPY bin/team-access-linux /usr/local/bin/team-access
+COPY migrations/team_access/001_schema.sql /app/migrations/001_schema.sql
+USER appuser
+EXPOSE 8080
+ENTRYPOINT ["/usr/local/bin/team-access"]

@@ -106,8 +106,11 @@ func call(handler http.Handler, method, path, body, apiKey string) *httptest.Res
 
 func TestKnowledgeHandlers(t *testing.T) {
 	handler := testHandler(t, "secret")
-	if response := call(handler, http.MethodGet, "/", "", ""); response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "AI-buddy: база знаний") {
+	if response := call(handler, http.MethodGet, "/", "", ""); response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "Бобби · AI-buddy") {
 		t.Fatalf("web page = %d", response.Code)
+	}
+	if response := call(handler, http.MethodPost, "/v1/access-requests", `{}`, "secret"); response.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("disabled access route = %d", response.Code)
 	}
 	if response := call(handler, http.MethodGet, "/health", "", ""); response.Code != http.StatusOK {
 		t.Fatalf("health = %d", response.Code)
@@ -143,13 +146,14 @@ func TestAskWithLLM(t *testing.T) {
 		var request struct {
 			Model    string `json:"model"`
 			Messages []struct {
+				Role    string `json:"role"`
 				Content string `json:"content"`
 			} `json:"messages"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 			t.Error(err)
 		}
-		if request.Model != "qwen3-8b" || len(request.Messages) == 0 || !strings.Contains(request.Messages[0].Content, "rules.md") {
+		if request.Model != "qwen3-8b" || len(request.Messages) != 2 || request.Messages[0].Role != "system" || !strings.Contains(request.Messages[0].Content, "Тебя зовут Бобби") || request.Messages[1].Role != "user" || !strings.Contains(request.Messages[1].Content, "rules.md") {
 			t.Errorf("bad LLM prompt: %+v", request)
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]string{"content": "Ревью описано в rules.md"}}}})
@@ -250,5 +254,25 @@ func TestRunBootstrapsService(t *testing.T) {
 	}
 	if err := run(); !errors.Is(err, want) {
 		t.Fatalf("run error = %v", err)
+	}
+}
+
+func TestRunDegradedModeServesWithoutDocumentDependencies(t *testing.T) {
+	t.Setenv("ALLOW_DEGRADED_STARTUP", "true")
+	t.Setenv("INDEX_ON_STARTUP", "false")
+	t.Setenv("JIRA_MODE", "off")
+	t.Setenv("QDRANT_URL", "http://127.0.0.1:1")
+	t.Setenv("EMBEDDINGS_URL", "http://127.0.0.1:1")
+	original := listenAndServe
+	defer func() { listenAndServe = original }()
+	want := errors.New("listener stopped")
+	listenAndServe = func(address string, handler http.Handler) error {
+		if address != ":8000" {
+			t.Fatalf("address = %s", address)
+		}
+		return want
+	}
+	if err := run(); !errors.Is(err, want) {
+		t.Fatalf("degraded startup = %v", err)
 	}
 }

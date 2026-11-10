@@ -96,13 +96,7 @@ func registerAccessRoutes(mux *http.ServeMux, key string, cfg jiraConfig) {
 		mux.Handle("/v1/access-requests/", authorize(key, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { writeError(w, 500, err) })))
 		return
 	}
-	var tracker issueTracker
-	if cfg.Mode == "live" {
-		tracker = jiraTracker{config: cfg}
-	} else {
-		tracker = mockTracker{project: cfg.ProjectKey, next: func() int { return len(store.records) + 1 }}
-	}
-	registerAccessRoutesWithStore(mux, key, cfg, store, tracker)
+	registerAccessRoutesWithStore(mux, key, cfg, store, jiraTracker{config: cfg})
 }
 func registerAccessRoutesWithStore(mux *http.ServeMux, key string, cfg jiraConfig, store *accessStore, tracker issueTracker) {
 	mux.Handle("POST /v1/access-requests", authorize(key, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

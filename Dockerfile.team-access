@@ -1,0 +1,14 @@
+FROM golang:1.23-alpine AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+COPY cmd/team-access ./cmd/team-access
+COPY internal/teamaccess ./internal/teamaccess
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/team-access ./cmd/team-access
+
+FROM alpine:3.20
+RUN adduser -D -u 10001 appuser && apk add --no-cache ca-certificates && mkdir -p /data/keys && chown appuser /data/keys
+COPY --from=build /out/team-access /usr/local/bin/team-access
+COPY migrations/team_access/001_schema.sql /app/migrations/001_schema.sql
+USER appuser
+EXPOSE 8080
+ENTRYPOINT ["/usr/local/bin/team-access"]

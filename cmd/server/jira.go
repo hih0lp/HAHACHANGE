@@ -16,10 +16,10 @@ import (
 type jiraConfig struct{ Mode, BaseURL, ProjectKey, IssueType, Email, APIToken, DataPath string }
 
 func (c jiraConfig) validate() error {
-	if c.Mode != "off" && c.Mode != "mock" && c.Mode != "live" {
-		return errors.New("JIRA_MODE must be off, mock or live")
+	if c.Mode != "off" && c.Mode != "live" {
+		return errors.New("JIRA_MODE must be off or live")
 	}
-	if c.Mode == "off" || c.Mode == "mock" {
+	if c.Mode == "off" {
 		return nil
 	}
 	u, err := url.Parse(c.BaseURL)
@@ -36,15 +36,6 @@ type issueInput struct{ Resource, Reason string }
 type issueResult struct{ Key, Status, URL string }
 type issueTracker interface {
 	CreateIssue(context.Context, issueInput) (issueResult, error)
-}
-
-type mockTracker struct {
-	project string
-	next    func() int
-}
-
-func (m mockTracker) CreateIssue(_ context.Context, _ issueInput) (issueResult, error) {
-	return issueResult{Key: fmt.Sprintf("%s-MOCK-%d", m.project, m.next()), Status: "To Do"}, nil
 }
 
 type jiraTracker struct {

@@ -1,0 +1,182 @@
+services:
+  gateway:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "127.0.0.1:18000:80"
+    depends_on:
+      - api
+
+  api:
+    build: .
+    image: avito-rag-api:distributed
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      APP_ROLE: api
+      DISTRIBUTED_MODE: "true"
+      QDRANT_URL: http://avito-rag-qdrant-1:6333
+      EMBEDDINGS_URL: http://avito-rag-embeddings-1:80
+      DOCUMENTS_PATH: /data/knowledge
+      MCP_URL: http://api:8000/mcp
+      TEAM_ACCESS_URL: http://team-access:8080
+      DATABASE_URL: postgres://${POSTGRES_USER:-aibuddy}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-aibuddy}?sslmode=disable
+    volumes:
+      - ../playbook:/data/knowledge/playbook:ro
+      - ../knowledge:/data/knowledge/onboarding:ro
+    networks:
+      - default
+      - shared
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+      team-access:
+        condition: service_started
+
+  worker:
+    build: .
+    image: avito-rag-api:distributed
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      APP_ROLE: worker
+      DISTRIBUTED_MODE: "true"
+      QDRANT_URL: http://avito-rag-qdrant-1:6333
+      EMBEDDINGS_URL: http://avito-rag-embeddings-1:80
+      MCP_URL: http://api:8000/mcp
+      DATABASE_URL: postgres://${POSTGRES_USER:-aibuddy}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-aibuddy}?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    networks:
+      - default
+      - shared
+
+  postgres:
+    image: postgres:17.5
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-aibuddy}
+      POSTGRES_USER: ${POSTGRES_USER:-aibuddy}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./migrations/001_distributed_jobs.sql:/docker-entrypoint-initdb.d/001_distributed_jobs.sql:ro
+      - ./migrations/002_scenarios.sql:/docker-entrypoint-initdb.d/002_scenarios.sql:ro
+      - ./migrations/003_team_context.sql:/docker-entrypoint-initdb.d/003_team_context.sql:ro
+      - ./migrations/004_scenario_events.sql:/docker-entrypoint-initdb.d/004_scenario_events.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  kafka:
+    image: apache/kafka:4.2.2
+    restart: unless-stopped
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+
+  kafka-init:
+    image: apache/kafka:4.2.2
+    depends_on:
+      - kafka
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - >-
+        until /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list >/dev/null 2>&1;
+        do sleep 2; done;
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092
+        --create --if-not-exists --topic ${KAFKA_TOPIC:-ai-buddy-requests} --partitions 6 --replication-factor 1;
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092
+        --create --if-not-exists --topic team-access-events --partitions 3 --replication-factor 1
+
+  team-access:
+    build:
+      context: .
+      dockerfile: Dockerfile.team-access
+    image: avito-rag-team-access:local
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-aibuddy}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-aibuddy}?sslmode=disable
+      KAFKA_BROKERS: kafka:9092
+      TEAM_ACCESS_MIGRATION: /app/migrations/001_schema.sql
+      TEAM_ACCESS_KEY_FILE: /data/keys/private.pem
+      TEAM_ACCESS_SEED_JIRA_URL: ${TEAM_ACCESS_SEED_JIRA_URL:-}
+    volumes:
+      - team-access-keys:/data/keys
+    ports:
+      - "127.0.0.1:18080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+
+  qdrant:
+    profiles: [standalone]
+    image: qdrant/qdrant:v1.12.6
+    restart: unless-stopped
+    volumes:
+      - qdrant-data:/qdrant/storage
+
+  embeddings:
+    profiles: [standalone]
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.6
+    platform: linux/amd64
+    restart: unless-stopped
+    command: ["--model-id", "intfloat/multilingual-e5-small", "--max-client-batch-size", "64"]
+    volumes:
+      - model-cache:/data
+
+volumes:
+  postgres-data:
+  redis-data:
+  kafka-data:
+  qdrant-data:
+    external: true
+    name: avito-rag_qdrant-data
+  model-cache:
+    external: true
+    name: avito-rag_model-cache
+  team-access-keys:
+
+networks:
+  shared:
+    external: true
+    name: avito-rag_default

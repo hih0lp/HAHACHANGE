@@ -54,7 +54,7 @@ func TestJiraConfigValidation(t *testing.T) {
 			t.Fatalf("invalid config accepted: %+v", cfg)
 		}
 	}
-	if err := (jiraConfig{Mode: "mock"}).validate(); err != nil {
+	if err := (jiraConfig{Mode: "off"}).validate(); err != nil {
 		t.Fatal(err)
 	}
 }

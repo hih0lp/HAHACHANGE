@@ -24,13 +24,10 @@ func TestJiraDisabledByDefault(t *testing.T) {
 	}
 }
 
-func TestJiraMockRequiresExplicitSelection(t *testing.T) {
+func TestJiraMockModeRejected(t *testing.T) {
 	t.Setenv("JIRA_MODE", "mock")
 	cfg := loadConfig().Jira
-	if cfg.Mode != "mock" {
-		t.Fatalf("explicit Jira mode = %q, want mock", cfg.Mode)
-	}
-	if err := cfg.validate(); err != nil {
-		t.Fatal(err)
+	if err := cfg.validate(); err == nil {
+		t.Fatal("mock mode must be rejected")
 	}
 }

@@ -11,7 +11,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hackchange/avito-rag/internal/distributed"
 	"github.com/hackchange/avito-rag/internal/rag"
+	"github.com/hackchange/avito-rag/internal/scenario"
 )
 
 type config struct {
@@ -19,6 +21,8 @@ type config struct {
 	IndexOnStartup bool
 	RAG            rag.Config
 	Jira           jiraConfig
+	Reminder       reminderConfig
+	Distributed    *distributed.System
 }
 
 func main() {
@@ -31,21 +35,28 @@ var listenAndServe = http.ListenAndServe
 
 func run() error {
 	cfg := loadConfig()
+	if envBool("DISTRIBUTED_MODE", false) {
+		return runDistributed(cfg)
+	}
 	if err := cfg.Jira.validate(); err != nil {
 		return err
 	}
 	service := rag.New(cfg.RAG)
-	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
-	defer cancel()
-	if err := service.WaitReady(ctx); err != nil {
-		return fmt.Errorf("dependencies are not ready: %w", err)
-	}
-	if cfg.IndexOnStartup {
-		result, err := service.IndexIfEmpty(ctx)
-		if err != nil {
-			return fmt.Errorf("initial indexing failed: %w", err)
+	if envBool("ALLOW_DEGRADED_STARTUP", false) {
+		log.Printf("starting without document search; internal answers require available sources")
+	} else {
+		ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+		defer cancel()
+		if err := service.WaitReady(ctx); err != nil {
+			return fmt.Errorf("dependencies are not ready: %w", err)
 		}
-		log.Printf("knowledge base ready: %d documents, %d chunks", result.Documents, result.Chunks)
+		if cfg.IndexOnStartup {
+			result, err := service.IndexIfEmpty(ctx)
+			if err != nil {
+				return fmt.Errorf("initial indexing failed: %w", err)
+			}
+			log.Printf("knowledge base ready: %d documents, %d chunks", result.Documents, result.Chunks)
+		}
 	}
 
 	log.Printf("knowledge API listens on :8000")
@@ -55,9 +66,21 @@ func run() error {
 func newHandler(service *rag.Service, cfg config) http.Handler {
 	mux := http.NewServeMux()
 	answer := answerer{service: service, url: env("LLM_URL", "http://host.docker.internal:1234"), model: env("LLM_MODEL", "qwen3-8b"), mcpURL: env("MCP_URL", "http://127.0.0.1:8000/mcp"), mcpKey: cfg.APIKey, jiraMode: cfg.Jira.Mode}
-	jobs := newJobManager(envInt("JOB_WORKERS", 2), envInt("JOB_QUEUE_SIZE", 32), time.Duration(envInt("JOB_TIMEOUT_SECONDS", 180))*time.Second, answer.Ask)
-	registerJobRoutes(mux, jobs, cfg.APIKey)
-	registerAccessRoutes(mux, cfg.APIKey, cfg.Jira)
+	if cfg.Distributed != nil {
+		registerDistributedJobRoutes(mux, cfg.Distributed, cfg.APIKey)
+		registerHistoryRoutes(mux, cfg.APIKey, cfg.Distributed)
+		if endpoint := os.Getenv("TEAM_ACCESS_URL"); endpoint != "" {
+			registerScenarioRoutes(mux, scenario.Store{DB: cfg.Distributed.DB}, scenario.Client{BaseURL: endpoint})
+		}
+	} else {
+		jobs := newJobManager(envInt("JOB_WORKERS", 2), envInt("JOB_QUEUE_SIZE", 32), time.Duration(envInt("JOB_TIMEOUT_SECONDS", 180))*time.Second, answer.Ask)
+		registerJobRoutes(mux, jobs, cfg.APIKey)
+	}
+	// Создание заявки на доступ отключено: в доступных источниках не найден
+	// подтверждённый порядок оформления доступа. Исторический демо-код сохранён.
+	// registerAccessRoutes(mux, cfg.APIKey, cfg.Jira)
+	// registerDistributedAccessRoutes(mux, cfg.APIKey, cfg.Jira, cfg.Distributed)
+	registerReminderRoutes(mux, cfg.APIKey, cfg.Jira, cfg.Reminder)
 	mcpHandler := authorize(cfg.APIKey, newJiraMCP(cfg.Jira))
 	mux.Handle("POST /mcp", mcpHandler)
 	mux.Handle("GET /mcp", mcpHandler)
@@ -144,6 +167,7 @@ func loadConfig() config {
 		APIKey:         os.Getenv("API_KEY"),
 		IndexOnStartup: envBool("INDEX_ON_STARTUP", true),
 		Jira:           jiraConfig{Mode: env("JIRA_MODE", "off"), BaseURL: env("JIRA_BASE_URL", "https://gapshinmihael.atlassian.net"), ProjectKey: env("JIRA_PROJECT_KEY", "SCRUM"), IssueType: env("JIRA_ISSUE_TYPE", "Задача"), Email: os.Getenv("JIRA_EMAIL"), APIToken: os.Getenv("JIRA_API_TOKEN"), DataPath: env("JIRA_DATA_PATH", "/data/jira/access-requests.json")},
+		Reminder:       reminderConfig{InternAccountID: os.Getenv("REMINDER_INTERN_ACCOUNT_ID"), HoursBefore: envInt("REMINDER_HOURS_BEFORE", 24), TimeZone: env("REMINDER_TIMEZONE", "Europe/Moscow")},
 		RAG: rag.Config{
 			QdrantURL:      env("QDRANT_URL", "http://qdrant:6333"),
 			EmbeddingsURL:  env("EMBEDDINGS_URL", "http://embeddings:80"),
