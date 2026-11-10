@@ -22,7 +22,7 @@
 | Метод | Путь | Результат |
 | --- | --- | --- |
 | `GET` | `/v1/me` | `{id,display_name,roles,teams:[{id,name,mentor_id,lead_id}],current_team_id}` из БД |
-| `GET` | `/v1/teams/{team_id}/resources` | Видимый участнику каталог `{id,kind,name,external_ref,url,capabilities,approver_id}`; `kind` — `jira_project`, `gitlab_project`, `confluence_space`, `environment` или расширяемое значение |
+| `GET` | `/v1/teams/{team_id}/resources` | `{resources:[{id,kind,name,external_ref,url,capabilities,approver_id}]}` — видимый участнику каталог; `kind` — `jira_project`, `gitlab_project`, `confluence_space`, `environment` или расширяемое значение |
 | `POST` | `/v1/access/check` | Запрос `{resource_id,capability}` → `{state:"granted|missing|pending|unknown",resource_id,capability,request_id?,checked_at}` |
 | `POST` | `/v1/access-requests` | Запрос `{resource_id,capability,reason,form_values,confirmed:true}` и заголовок `Idempotency-Key`; ответ `{id,status:"pending",resource_id,capability,approver_id,created_at}` |
 | `GET` | `/v1/access-requests/{id}` | Текущая заявка и допустимые для заявителя поля, включая `status`, `decision_reason?`, `updated_at` |
