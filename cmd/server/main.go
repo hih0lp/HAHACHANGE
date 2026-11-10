@@ -11,7 +11,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hackchange/avito-rag/internal/distributed"
 	"github.com/hackchange/avito-rag/internal/rag"
+	"github.com/hackchange/avito-rag/internal/scenario"
 )
 
 type config struct {
@@ -19,6 +21,7 @@ type config struct {
 	IndexOnStartup bool
 	RAG            rag.Config
 	Jira           jiraConfig
+	Distributed    *distributed.System
 }
 
 func main() {
@@ -31,6 +34,9 @@ var listenAndServe = http.ListenAndServe
 
 func run() error {
 	cfg := loadConfig()
+	if envBool("DISTRIBUTED_MODE", false) {
+		return runDistributed(cfg)
+	}
 	if err := cfg.Jira.validate(); err != nil {
 		return err
 	}
@@ -55,9 +61,20 @@ func run() error {
 func newHandler(service *rag.Service, cfg config) http.Handler {
 	mux := http.NewServeMux()
 	answer := answerer{service: service, url: env("LLM_URL", "http://host.docker.internal:1234"), model: env("LLM_MODEL", "qwen3-8b"), mcpURL: env("MCP_URL", "http://127.0.0.1:8000/mcp"), mcpKey: cfg.APIKey, jiraMode: cfg.Jira.Mode}
-	jobs := newJobManager(envInt("JOB_WORKERS", 2), envInt("JOB_QUEUE_SIZE", 32), time.Duration(envInt("JOB_TIMEOUT_SECONDS", 180))*time.Second, answer.Ask)
-	registerJobRoutes(mux, jobs, cfg.APIKey)
-	registerAccessRoutes(mux, cfg.APIKey, cfg.Jira)
+	if cfg.Distributed != nil {
+		registerDistributedJobRoutes(mux, cfg.Distributed, cfg.APIKey)
+		if endpoint := os.Getenv("TEAM_ACCESS_URL"); endpoint != "" {
+			registerScenarioRoutes(mux, scenario.Store{DB: cfg.Distributed.DB}, scenario.Client{BaseURL: endpoint})
+		}
+	} else {
+		jobs := newJobManager(envInt("JOB_WORKERS", 2), envInt("JOB_QUEUE_SIZE", 32), time.Duration(envInt("JOB_TIMEOUT_SECONDS", 180))*time.Second, answer.Ask)
+		registerJobRoutes(mux, jobs, cfg.APIKey)
+	}
+	if cfg.Distributed != nil {
+		registerDistributedAccessRoutes(mux, cfg.APIKey, cfg.Jira, cfg.Distributed)
+	} else {
+		registerAccessRoutes(mux, cfg.APIKey, cfg.Jira)
+	}
 	mcpHandler := authorize(cfg.APIKey, newJiraMCP(cfg.Jira))
 	mux.Handle("POST /mcp", mcpHandler)
 	mux.Handle("GET /mcp", mcpHandler)
