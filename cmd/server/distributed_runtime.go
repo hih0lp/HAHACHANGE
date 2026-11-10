@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -21,6 +20,10 @@ import (
 func runDistributed(cfg config) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	return runDistributedContext(ctx, cfg)
+}
+
+func runDistributedContext(ctx context.Context, cfg config) error {
 	if os.Getenv("DATABASE_URL") == "" || os.Getenv("SESSION_SECRET") == "" {
 		return fmt.Errorf("distributed mode requires DATABASE_URL and SESSION_SECRET")
 	}
@@ -33,7 +36,7 @@ func runDistributed(cfg config) error {
 		return fmt.Errorf("PostgreSQL: %w", err)
 	}
 	var schemaReady bool
-	if err := pool.QueryRow(ctx, `SELECT to_regclass('public.ai_jobs') IS NOT NULL`).Scan(&schemaReady); err != nil {
+	if err := pool.QueryRow(ctx, `SELECT to_regclass('ai_jobs') IS NOT NULL`).Scan(&schemaReady); err != nil {
 		return fmt.Errorf("job schema: %w", err)
 	}
 	if !schemaReady {
@@ -89,5 +92,5 @@ func runDistributed(cfg config) error {
 	}()
 	log.Printf("distributed API listens on :8000")
 	handler := demoSession(os.Getenv("SESSION_SECRET"), logging(newHandler(service, cfg)))
-	return http.ListenAndServe(":8000", handler)
+	return listenAndServe(":8000", handler)
 }

@@ -6,6 +6,8 @@
 
 Для существующей базы примените `migrations/002_scenarios.sql` отдельно; init-скрипты PostgreSQL выполняются только при создании нового volume. Не удаляйте volume ради применения миграции.
 
+Полная проверка покрытия: `sh scripts/test-coverage.sh` (нужны Go и PostgreSQL `initdb`/`pg_ctl` в PATH). Скрипт создаёт временную PostgreSQL и удаляет её после тестов. Можно передать `TEST_DATABASE_URL` отдельной тестовой БД: каждый тест получает собственную схему. Порог — 90%; профиль сохраняется в `COVERAGE_FILE` (по умолчанию `/tmp/ai-buddy-coverage.out`). Обычный `go test ./...` без TEST_DATABASE_URL пропускает PostgreSQL-тесты и не заменяет полный прогон.
+
 Go-сервис семантического поиска по Markdown-документам из `../playbook` и выдержке из открытого чек-листа в `../knowledge`. Он состоит из контейнеров и запускается на macOS, Linux и Windows с Docker Desktop:
 
 - **Go API** — загрузка документов, разбиение на фрагменты и API для агента;

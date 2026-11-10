@@ -28,10 +28,18 @@ type Job struct {
 type System struct {
 	DB       *pgxpool.Pool
 	Redis    *redis.Client
-	Writer   *kafka.Writer
-	Reader   *kafka.Reader
+	Writer   MessageWriter
+	Reader   MessageReader
 	Topic    string
 	MaxTries int
+}
+
+type MessageWriter interface {
+	WriteMessages(context.Context, ...kafka.Message) error
+}
+type MessageReader interface {
+	FetchMessage(context.Context) (kafka.Message, error)
+	CommitMessages(context.Context, ...kafka.Message) error
 }
 
 func NewID() (string, error) {
@@ -81,7 +89,9 @@ func (s *System) Get(ctx context.Context, owner, id string) (Job, error) {
 	job.Sources = json.RawMessage(sources)
 	if s.Redis != nil && (job.Status == "queued" || job.Status == "running") {
 		if cached, err := s.Redis.Get(ctx, "ai-job:"+id).Bytes(); err == nil {
-			var quick struct{ Status string `json:"status"` }
+			var quick struct {
+				Status string `json:"status"`
+			}
 			if json.Unmarshal(cached, &quick) == nil && quick.Status == "running" {
 				job.Status = "running"
 			}
@@ -113,7 +123,10 @@ func (s *System) PublishPending(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	type event struct{ row int64; job string }
+	type event struct {
+		row int64
+		job string
+	}
 	var pending []event
 	for rows.Next() {
 		var item event
