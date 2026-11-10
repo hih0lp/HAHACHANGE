@@ -143,7 +143,7 @@ func loadConfig() config {
 	return config{
 		APIKey:         os.Getenv("API_KEY"),
 		IndexOnStartup: envBool("INDEX_ON_STARTUP", true),
-		Jira:           jiraConfig{Mode: env("JIRA_MODE", "mock"), BaseURL: env("JIRA_BASE_URL", "https://gapshinmihael.atlassian.net"), ProjectKey: env("JIRA_PROJECT_KEY", "SCRUM"), IssueType: env("JIRA_ISSUE_TYPE", "Задача"), Email: os.Getenv("JIRA_EMAIL"), APIToken: os.Getenv("JIRA_API_TOKEN"), DataPath: env("JIRA_DATA_PATH", "/data/jira/access-requests.json")},
+		Jira:           jiraConfig{Mode: env("JIRA_MODE", "off"), BaseURL: env("JIRA_BASE_URL", "https://gapshinmihael.atlassian.net"), ProjectKey: env("JIRA_PROJECT_KEY", "SCRUM"), IssueType: env("JIRA_ISSUE_TYPE", "Задача"), Email: os.Getenv("JIRA_EMAIL"), APIToken: os.Getenv("JIRA_API_TOKEN"), DataPath: env("JIRA_DATA_PATH", "/data/jira/access-requests.json")},
 		RAG: rag.Config{
 			QdrantURL:      env("QDRANT_URL", "http://qdrant:6333"),
 			EmbeddingsURL:  env("EMBEDDINGS_URL", "http://embeddings:80"),

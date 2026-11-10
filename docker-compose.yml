@@ -41,7 +41,7 @@ services:
       INDEX_ON_STARTUP: "true"
       LLM_URL: ${LLM_URL:-http://host.docker.internal:1234}
       LLM_MODEL: ${LLM_MODEL:-qwen3-8b}
-      JIRA_MODE: ${JIRA_MODE:-mock}
+      JIRA_MODE: ${JIRA_MODE:-off}
       JIRA_BASE_URL: ${JIRA_BASE_URL:-https://gapshinmihael.atlassian.net}
       JIRA_PROJECT_KEY: ${JIRA_PROJECT_KEY:-SCRUM}
       JIRA_ISSUE_TYPE: ${JIRA_ISSUE_TYPE:-Task}

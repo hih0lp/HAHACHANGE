@@ -87,6 +87,9 @@ func (s *accessStore) save(record accessRequest) error {
 	return nil
 }
 func registerAccessRoutes(mux *http.ServeMux, key string, cfg jiraConfig) {
+	if cfg.Mode == "off" {
+		return
+	}
 	store, err := loadAccessStore(cfg.DataPath)
 	if err != nil { // Keep the API available, but writes report the store error.
 		mux.Handle("/v1/access-requests", authorize(key, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { writeError(w, 500, err) })))

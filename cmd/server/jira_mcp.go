@@ -120,14 +120,14 @@ func newJiraMCP(cfg jiraConfig) http.Handler {
 	server := mcp.NewServer(&mcp.Implementation{Name: "hackchange-jira", Version: "1.0.0"}, nil)
 	mcp.AddTool(server, &mcp.Tool{Name: "jira_get_issue", Description: "Read a task from the configured test Jira project, including its description, status and URL."}, func(ctx context.Context, _ *mcp.CallToolRequest, arg jiraIssueArg) (*mcp.CallToolResult, jiraIssue, error) {
 		if cfg.Mode != "live" {
-			return nil, jiraIssue{}, errors.New("Jira is in mock mode")
+			return nil, jiraIssue{}, errors.New("Jira is disabled")
 		}
 		issue, err := jiraGetIssue(ctx, cfg, arg.Key)
 		return nil, issue, err
 	})
 	mcp.AddTool(server, &mcp.Tool{Name: "jira_list_issues", Description: "List up to ten recently updated tasks in the configured test Jira project."}, func(ctx context.Context, _ *mcp.CallToolRequest, _ jiraEmptyArg) (*mcp.CallToolResult, jiraIssues, error) {
 		if cfg.Mode != "live" {
-			return nil, jiraIssues{}, errors.New("Jira is in mock mode")
+			return nil, jiraIssues{}, errors.New("Jira is disabled")
 		}
 		issues, err := jiraListIssues(ctx, cfg)
 		return nil, issues, err

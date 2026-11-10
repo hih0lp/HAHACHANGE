@@ -16,10 +16,10 @@ import (
 type jiraConfig struct{ Mode, BaseURL, ProjectKey, IssueType, Email, APIToken, DataPath string }
 
 func (c jiraConfig) validate() error {
-	if c.Mode != "mock" && c.Mode != "live" {
-		return errors.New("JIRA_MODE must be mock or live")
+	if c.Mode != "off" && c.Mode != "mock" && c.Mode != "live" {
+		return errors.New("JIRA_MODE must be off, mock or live")
 	}
-	if c.Mode == "mock" {
+	if c.Mode == "off" || c.Mode == "mock" {
 		return nil
 	}
 	u, err := url.Parse(c.BaseURL)
