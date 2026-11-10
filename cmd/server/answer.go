@@ -14,16 +14,27 @@ import (
 )
 
 type answerer struct {
-	service *rag.Service
-	url     string
-	model   string
-	client  *http.Client
+	service  *rag.Service
+	url      string
+	model    string
+	client   *http.Client
+	mcpURL   string
+	mcpKey   string
+	jiraMode string
 }
 
 func (a answerer) Ask(ctx context.Context, question string) (string, []rag.SearchHit, error) {
 	hits, err := a.service.Search(ctx, question, 5)
 	if err != nil {
 		return "", nil, err
+	}
+	var jiraContext string
+	if a.jiraMode == "live" {
+		var requested bool
+		jiraContext, requested, err = mcpJiraContext(ctx, a.mcpURL, a.mcpKey, question)
+		if err != nil && requested {
+			return "", hits, fmt.Errorf("Jira MCP: %w", err)
+		}
 	}
 	var sources strings.Builder
 	for _, hit := range hits {
@@ -33,7 +44,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 		}
 		fmt.Fprintf(&sources, "[Источник: %s, URL: %s, фрагмент %d]\n%s\n\n", hit.Path, link, hit.ChunkIndex, hit.Text)
 	}
-	prompt := "Ответь на вопрос по-русски, используя только приведённые фрагменты базы знаний (открытый Playbook и чек-лист стажёра). Если ответа в них нет, прямо скажи об этом. Не придумывай внутренние инструкции Авито, порядок оформления заявок или API. Отделяй сведения из источников от предположений. После каждого утверждения укажи источник прямо в том же абзаце как Markdown-ссылку [имя файла](URL). Используй только URL, указанные у фрагментов; не придумывай другие адреса. Не добавляй отдельный список или раздел источников в конце ответа.\n\n" + sources.String() + "\nВопрос: " + question
+	prompt := "Ответь на вопрос по-русски, используя приведённые фрагменты базы знаний и, если есть, свежие данные Jira MCP. Для фактов из Jira используй только блок Jira MCP и его URL; для фактов из базы знаний укажи ссылку на источник. Если ответа нет, прямо скажи об этом. Не придумывай внутренние инструкции Авито, порядок оформления заявок или API. Не добавляй отдельный список источников в конце ответа.\n\nБаза знаний:\n" + sources.String() + "\nJira MCP:\n" + jiraContext + "\nВопрос: " + question
 	body, err := json.Marshal(map[string]any{"model": a.model, "stream": false, "messages": []map[string]string{{"role": "user", "content": prompt}}})
 	if err != nil {
 		return "", hits, err
@@ -72,5 +83,20 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 	if len(result.Choices) == 0 || strings.TrimSpace(result.Choices[0].Message.Content) == "" {
 		return "", hits, fmt.Errorf("LLM returned an empty answer")
 	}
-	return result.Choices[0].Message.Content, hits, nil
+	answerText := result.Choices[0].Message.Content
+	if jiraContext != "" {
+		var issue jiraIssue
+		if json.Unmarshal([]byte(jiraContext), &issue) == nil && issue.URL != "" && !strings.Contains(answerText, issue.URL) {
+			answerText += "\n\nИсточник Jira: [" + issue.Key + "](" + issue.URL + ")"
+		}
+		var listed jiraIssues
+		if json.Unmarshal([]byte(jiraContext), &listed) == nil {
+			for _, item := range listed.Issues {
+				if item.URL != "" && !strings.Contains(answerText, item.URL) {
+					answerText += "\n[" + item.Key + "](" + item.URL + ")"
+				}
+			}
+		}
+	}
+	return answerText, hits, nil
 }

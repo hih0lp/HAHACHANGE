@@ -54,10 +54,14 @@ func run() error {
 
 func newHandler(service *rag.Service, cfg config) http.Handler {
 	mux := http.NewServeMux()
-	answer := answerer{service: service, url: env("LLM_URL", "http://host.docker.internal:1234"), model: env("LLM_MODEL", "qwen3-8b")}
+	answer := answerer{service: service, url: env("LLM_URL", "http://host.docker.internal:1234"), model: env("LLM_MODEL", "qwen3-8b"), mcpURL: env("MCP_URL", "http://127.0.0.1:8000/mcp"), mcpKey: cfg.APIKey, jiraMode: cfg.Jira.Mode}
 	jobs := newJobManager(envInt("JOB_WORKERS", 2), envInt("JOB_QUEUE_SIZE", 32), time.Duration(envInt("JOB_TIMEOUT_SECONDS", 180))*time.Second, answer.Ask)
 	registerJobRoutes(mux, jobs, cfg.APIKey)
 	registerAccessRoutes(mux, cfg.APIKey, cfg.Jira)
+	mcpHandler := authorize(cfg.APIKey, newJiraMCP(cfg.Jira))
+	mux.Handle("POST /mcp", mcpHandler)
+	mux.Handle("GET /mcp", mcpHandler)
+	mux.Handle("DELETE /mcp", mcpHandler)
 	mux.HandleFunc("GET /", webPage)
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		count, err := service.Count(r.Context())
