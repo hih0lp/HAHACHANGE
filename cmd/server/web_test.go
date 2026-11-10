@@ -32,3 +32,20 @@ func TestWebPageShowsOnlyAnswerWithInlineLinks(t *testing.T) {
 		}
 	}
 }
+
+func TestWebPageOffersThreeScenariosThroughExistingJobFlow(t *testing.T) {
+	response := httptest.NewRecorder()
+	webPage(response, httptest.NewRequest(http.MethodGet, "/", nil))
+	page := response.Body.String()
+	for _, expected := range []string{
+		`data-scenario="first-week"`,
+		`data-scenario="access"`,
+		`data-scenario="absence"`,
+		`form.requestSubmit()`,
+		`fetch('/v1/jobs'`,
+	} {
+		if !strings.Contains(page, expected) {
+			t.Errorf("page missing %q", expected)
+		}
+	}
+}

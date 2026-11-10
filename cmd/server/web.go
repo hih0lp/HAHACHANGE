@@ -17,19 +17,25 @@ form,.card{background:white;border:1px solid #e1e5ed;border-radius:14px;padding:
 label{display:block;font-weight:600;margin:14px 0 6px}input{width:100%;padding:12px;border:1px solid #bfc8d4;border-radius:8px;font:inherit}
 button{background:#005bff;color:white;border:0;border-radius:8px;padding:12px 22px;font:inherit;cursor:pointer;margin-top:16px}
 button:disabled{opacity:.55;cursor:wait}.card{margin-top:16px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;line-height:1.5}
+.scenarios{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.scenarios button{margin:0;min-height:70px;text-align:left}.scenarios button:focus-visible{outline:3px solid #111;outline-offset:3px}@media(max-width:640px){.scenarios{grid-template-columns:1fr}}
 .meta{color:#586173;font-size:14px}.source{display:inline-block;margin:8px 0;color:#005bff}.error{color:#b42318}.empty{padding:20px 0}
 </style></head><body><main><h1>AI-buddy: база знаний</h1>
 <p>Поиск по открытому AvitoTech Playbook и чек-листу стажёра. Ответ модели показывает источники; внутренний порядок действий Авито здесь не представлен.</p>
+<section class="card" aria-labelledby="scenarios-title"><h2 id="scenarios-title">С чего начать</h2><p>Выберите тестовый сценарий или задайте свой вопрос ниже.</p>
+<div class="scenarios"><button type="button" data-scenario="first-week" data-query="Какие первые шаги и задачи стажёра в первую неделю по чек-листу?">Первые шаги</button>
+<button type="button" data-scenario="access" data-query="Как стажёру запросить доступ к рабочему инструменту? Покажи следующий шаг по чек-листу.">Доступ к инструменту</button>
+<button type="button" data-scenario="absence" data-query="Что известно об оформлении отгула? Если в доступных источниках нет порядка действий, скажи об этом и предложи обратиться к наставнику.">Отгул</button></div></section>
 <form id="form"><label for="query">Вопрос</label><input id="query" required minlength="2" placeholder="Как проходит ревью технического дизайна?">
 <label for="key">API-ключ (если задан на сервере)</label><input id="key" type="password" autocomplete="off" placeholder="Необязательно">
 <button id="submit" type="submit" value="ask">Спросить Qwen</button></form><p id="status" role="status"></p><section id="results" aria-live="polite"></section>
-<section class="card"><h2>Тестовая заявка на доступ</h2><p>Проект SCRUM в Jira. Сначала проверьте содержание заявки, затем подтвердите создание. В демо режиме задача сохранится только локально.</p>
+<section class="card"><h2>Тестовая заявка на доступ</h2><p>Проект SCRUM в Jira. Сначала проверьте содержание заявки, затем подтвердите создание. Результат и режим работы появятся после отправки.</p>
 <form id="access-form"><label for="resource">К какому ресурсу нужен доступ</label><input id="resource" required minlength="2" maxlength="120" placeholder="Тестовое пространство команды">
 <label for="reason">Зачем нужен доступ</label><input id="reason" required minlength="2" maxlength="500" placeholder="Для учебного онбординга">
 <label><input id="confirmed" type="checkbox" required style="width:auto"> Подтверждаю создание тестовой задачи</label><button type="submit">Создать тестовую заявку</button></form>
 <p id="access-status" role="status"></p><div id="access-list"></div></section></main>
 <script>
 const form=document.getElementById('form'),results=document.getElementById('results'),status=document.getElementById('status'),button=document.getElementById('submit');
+document.querySelectorAll('[data-scenario]').forEach(scenario=>scenario.addEventListener('click',()=>{document.getElementById('query').value=scenario.dataset.query;form.requestSubmit()}));
 function appendMessage(target,message){const pattern=/\[([^\]]+)\]\((https:\/\/[^\s)]+)\)/g;let position=0,match;while((match=pattern.exec(message))!==null){target.append(document.createTextNode(message.slice(position,match.index)));const link=document.createElement('a');link.href=match[2];link.target='_blank';link.rel='noopener noreferrer';link.textContent=match[1];target.append(link);position=pattern.lastIndex}target.append(document.createTextNode(message.slice(position)))}
 function showJob(card,job){const state=card.querySelector('[data-state]'),body=card.querySelector('[data-body]');
 state.textContent=job.status==='queued'?'В очереди':job.status==='running'?'Готовим ответ':job.status==='completed'?'Готово':'Ошибка';
