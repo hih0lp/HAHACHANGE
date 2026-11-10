@@ -2,5 +2,6 @@
 bin/
 .docker-images/
 coverage.out
+coverage-new.out
 .smbdelete*
 

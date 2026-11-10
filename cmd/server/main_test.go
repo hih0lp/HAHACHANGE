@@ -16,6 +16,10 @@ import (
 )
 
 func testHandler(t *testing.T, apiKey string) http.Handler {
+	return testHandlerWithConfig(t, config{APIKey: apiKey, RAG: rag.Config{CollectionName: "playbook"}})
+}
+
+func testHandlerWithConfig(t *testing.T, cfg config) http.Handler {
 	t.Helper()
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "rules.md"), []byte("# Правила\n\nКоманда проводит ревью."), 0o600); err != nil {
@@ -87,7 +91,7 @@ func testHandler(t *testing.T, apiKey string) http.Handler {
 	if _, err := service.Reindex(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	return newHandler(service, config{APIKey: apiKey, RAG: rag.Config{CollectionName: "playbook"}})
+	return newHandler(service, cfg)
 }
 
 func call(handler http.Handler, method, path, body, apiKey string) *httptest.ResponseRecorder {

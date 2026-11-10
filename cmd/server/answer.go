@@ -87,13 +87,13 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 	if jiraContext != "" {
 		var issue jiraIssue
 		if json.Unmarshal([]byte(jiraContext), &issue) == nil && issue.URL != "" && !strings.Contains(answerText, issue.URL) {
-			answerText += "\n\nИсточник Jira: [" + issue.Key + "](" + issue.URL + ")"
+			answerText += " (Источник Jira: [" + issue.Key + "](" + issue.URL + "))"
 		}
 		var listed jiraIssues
 		if json.Unmarshal([]byte(jiraContext), &listed) == nil {
 			for _, item := range listed.Issues {
 				if item.URL != "" && !strings.Contains(answerText, item.URL) {
-					answerText += "\n[" + item.Key + "](" + item.URL + ")"
+					answerText += " [" + item.Key + "](" + item.URL + ")"
 				}
 			}
 		}

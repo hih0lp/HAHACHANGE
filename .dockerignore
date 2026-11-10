@@ -1,0 +1,9 @@
+.git
+.env
+.env.*
+.docker-images
+bin
+app
+specs
+coverage.out
+coverage-new.out
