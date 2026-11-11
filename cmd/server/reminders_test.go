@@ -43,6 +43,19 @@ func TestRemindersOnlyForAssignedOpenTasksInsideWindow(t *testing.T) {
 	if err != nil || len(result.Reminders) != 0 {
 		t.Fatalf("after deadline: %+v %v", result, err)
 	}
+	cfg.HoursBefore = 48
+	result, err = loadReminders(context.Background(), jcfg, cfg, time.Date(2026, 11, 8, 23, 0, 0, 0, zone))
+	if err != nil || len(result.Reminders) != 0 {
+		t.Fatalf("before 48h: %+v %v", result, err)
+	}
+	result, err = loadReminders(context.Background(), jcfg, cfg, time.Date(2026, 11, 9, 1, 0, 0, 0, zone))
+	if err != nil || len(result.Reminders) != 1 {
+		t.Fatalf("inside 48h: %+v %v", result, err)
+	}
+	due := result.Reminders[0].DueAt
+	if mentorWindow(due.Add(-25*time.Hour), due) || !mentorWindow(due.Add(-24*time.Hour), due) || mentorWindow(due, due) {
+		t.Fatal("mentor 24h boundary")
+	}
 }
 
 func TestReminderRoutesAndDisabledAccessRoute(t *testing.T) {

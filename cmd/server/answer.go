@@ -13,6 +13,7 @@ import (
 
 	"github.com/hackchange/avito-rag/internal/distributed"
 	"github.com/hackchange/avito-rag/internal/rag"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type answerer struct {
@@ -27,6 +28,7 @@ type answerer struct {
 	rightsMCPURL   string
 	gitLabMCPURL   string
 	calendarMCPURL string
+	historyDB      *pgxpool.Pool
 }
 
 type completionToolCall struct {
@@ -94,7 +96,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 	}
 	if teamToken != "" && a.teamMCPURL != "" {
 		var err error
-		available, err := mcpTeamTools(ctx, a.teamMCPURL, a.mcpKey, teamToken)
+		available, err := mcpTeamTools(ctx, a.teamMCPURL, "", teamToken)
 		if err != nil {
 			return "", hits, fmt.Errorf("team-access MCP tools/list: %w", err)
 		}
@@ -146,9 +148,22 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 		}
 		systemPrompt += "\n\nПодключённый MCP-каталог инструментов:\n" + string(catalogue) + `
 
-Если для ответа нужен инструмент, выбери его сам. Если клиент модели не сформировал нативный вызов функции, верни строго JSON без markdown: {"tool_call":{"name":"имя из каталога","arguments":{}}}. После получения результата MCP дай обычный ответ пользователю. Вопросы о задачах Jira, команде, участниках, ролях, ресурсах, правах и доступных формах требуют вызова инструмента до ответа. Когда пользователь хочет оформить обращение, найди подходящую форму через инструменты сервиса прав и дай ссылку Markdown [Заполнить форму](form_url из результата). Эта ссылка показывает форму прямо в чате. Когда предлагаешь форму, ответь только её названием и ссылкой form_url; не добавляй поля, инструкции, примеры, вложения и порядок согласования. Если пользователь отдельно обсуждает поля, прочитай схему формы через инструмент и помоги их заполнить. Если речь о доступе к конкретному ресурсу, проверь каталог ресурсов и текущее право, прежде чем описывать их. Не выдумывай идентификаторы ресурсов, названия прав и их значения даже в качестве примеров: бери их из результатов инструментов или оставь выбор открытым в форме. Не утверждай, что форма отправлена: её отправляет только пользователь после проверки полей и подтверждения в чате.`
+Если для ответа нужен инструмент, выбери его сам. Если клиент модели не сформировал нативный вызов функции, верни строго JSON без markdown: {"tool_call":{"name":"имя из каталога","arguments":{}}}. После получения результата MCP дай обычный ответ пользователю. Учитывай предыдущие реплики этого чата: короткое согласие или выбор ресурса продолжает начатое обращение. Если ранее ты предложил выбрать ресурс для заявки и пользователь выбрал его, найди подходящую форму сейчас, не спрашивай выбор повторно. Вопросы о задачах Jira, команде, участниках, ролях, ресурсах, правах и доступных формах требуют вызова инструмента до ответа. Когда пользователь хочет оформить обращение, найди подходящую форму через инструменты сервиса прав и дай ссылку Markdown [Заполнить форму](form_url из результата). Эта ссылка показывает форму прямо в чате. Когда предлагаешь форму, ответь только её названием и ссылкой form_url; не добавляй поля, инструкции, примеры, вложения и порядок согласования. Если пользователь отдельно обсуждает поля, прочитай схему формы через инструмент и помоги их заполнить. Если речь о доступе к конкретному ресурсу, проверь каталог ресурсов и текущее право, прежде чем описывать их. Не выдумывай идентификаторы ресурсов, названия прав и их значения даже в качестве примеров: бери их из результатов инструментов или оставь выбор открытым в форме. Не утверждай, что форма отправлена: её отправляет только пользователь после проверки полей и подтверждения в чате.`
 	}
-	messages := []map[string]any{{"role": "system", "content": systemPrompt}, {"role": "user", "content": prompt}}
+	messages := []map[string]any{{"role": "system", "content": systemPrompt}}
+	if a.historyDB != nil {
+		owner, jobID := distributed.ChatJob(ctx)
+		if owner != "" && jobID != "" {
+			turns, err := recentChatTurns(ctx, a.historyDB, owner, jobID)
+			if err != nil {
+				return "", hits, fmt.Errorf("chat history: %w", err)
+			}
+			for _, turn := range turns {
+				messages = append(messages, map[string]any{"role": "user", "content": turn.Question}, map[string]any{"role": "assistant", "content": turn.Answer})
+			}
+		}
+	}
+	messages = append(messages, map[string]any{"role": "user", "content": prompt})
 	for step := 0; step < 5; step++ {
 		payload := map[string]any{"model": a.model, "stream": false, "messages": messages}
 		if len(teamTools) > 0 {
@@ -208,7 +223,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 					token = teamToken
 				}
 				key := a.mcpKey
-				if endpoint == a.rightsMCPURL || endpoint == a.gitLabMCPURL || endpoint == a.calendarMCPURL {
+				if endpoint == a.teamMCPURL || endpoint == a.rightsMCPURL || endpoint == a.gitLabMCPURL || endpoint == a.calendarMCPURL {
 					key = ""
 				}
 				result, toolErr := mcpTeamTool(ctx, endpoint, key, token, textCall.ToolCall.Name, textCall.ToolCall.Arguments)
@@ -249,7 +264,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 				token = teamToken
 			}
 			key := a.mcpKey
-			if endpoint == a.rightsMCPURL || endpoint == a.gitLabMCPURL || endpoint == a.calendarMCPURL {
+			if endpoint == a.teamMCPURL || endpoint == a.rightsMCPURL || endpoint == a.gitLabMCPURL || endpoint == a.calendarMCPURL {
 				key = ""
 			}
 			result, toolErr := mcpTeamTool(ctx, endpoint, key, token, call.Function.Name, args)

@@ -67,10 +67,12 @@ func newHandler(service *rag.Service, cfg config) http.Handler {
 	mux := http.NewServeMux()
 	answer := answerer{service: service, url: env("LLM_URL", "http://host.docker.internal:1234"), model: env("LLM_MODEL", "qwen3-8b"), mcpURL: env("MCP_URL", "http://127.0.0.1:8000/mcp"), mcpKey: cfg.APIKey, jiraMode: cfg.Jira.Mode}
 	if cfg.Distributed != nil {
+		registerDemoRoleRoute(mux)
 		registerDistributedJobRoutes(mux, cfg.Distributed, cfg.APIKey)
 		registerHistoryRoutes(mux, cfg.APIKey, cfg.Distributed)
 		if endpoint := os.Getenv("TEAM_ACCESS_URL"); endpoint != "" {
 			teamClient := scenario.Client{BaseURL: endpoint, RightsURL: os.Getenv("RIGHTS_URL")}
+			registerDeadlineNotifications(mux, cfg.Distributed.DB, cfg.APIKey, cfg.Jira, cfg.Reminder, teamClient)
 			registerTeamSessionRoute(mux, teamClient)
 			if os.Getenv("RIGHTS_URL") != "" {
 				registerFormRoutes(mux, cfg.APIKey, endpoint)
@@ -92,13 +94,13 @@ func newHandler(service *rag.Service, cfg config) http.Handler {
 	mux.Handle("POST /mcp", mcpHandler)
 	mux.Handle("GET /mcp", mcpHandler)
 	mux.Handle("DELETE /mcp", mcpHandler)
-	if endpoint := os.Getenv("TEAM_ACCESS_URL"); endpoint != "" {
-		teamMCPHandler := authorize(cfg.APIKey, newTeamMCP(endpoint))
-		mux.Handle("POST /team-mcp", teamMCPHandler)
-		mux.Handle("GET /team-mcp", teamMCPHandler)
-		mux.Handle("DELETE /team-mcp", teamMCPHandler)
-	}
-	mux.HandleFunc("GET /", webPage)
+	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		webPage(w, r)
+	})
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		count, err := service.Count(r.Context())
 		if err != nil {

@@ -31,8 +31,11 @@ func TestWebPageShowsOnlyAnswerWithInlineLinks(t *testing.T) {
 			t.Errorf("page unexpectedly contains %q", forbidden)
 		}
 	}
-	if !strings.Contains(page, "AI-buddy · напоминание") || !strings.Contains(page, "/v1/reminders/ws") {
-		t.Fatal("reminder message flow is missing")
+	if !strings.Contains(page, "/v1/deadline-notifications") || !strings.Contains(page, "Скоро дедлайн") {
+		t.Fatal("deadline notification flow is missing")
+	}
+	if strings.Contains(page, "/v1/reminders/ws") {
+		t.Fatal("legacy reminder subscription would duplicate deadline cards")
 	}
 }
 

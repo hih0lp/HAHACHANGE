@@ -70,8 +70,8 @@ func (s *Service) Routes() http.Handler {
 }
 func (s *Service) me(w http.ResponseWriter, r *http.Request) {
 	id := user(r)
-	var name string
-	if err := s.DB.QueryRow(r.Context(), `SELECT display_name FROM ta_users WHERE id=$1`, id).Scan(&name); err != nil {
+	var name, jiraID, jiraURL string
+	if err := s.DB.QueryRow(r.Context(), `SELECT display_name,COALESCE(jira_account_id,''),COALESCE(jira_profile_url,'') FROM ta_users WHERE id=$1`, id).Scan(&name, &jiraID, &jiraURL); err != nil {
 		fail(w, 503, "dependency_unavailable", "Profile unavailable")
 		return
 	}
@@ -100,7 +100,7 @@ func (s *Service) me(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "dependency_unavailable", "Teams unavailable")
 		return
 	}
-	respond(w, 200, map[string]any{"id": id, "display_name": name, "roles": roles, "teams": teams, "current_team_id": current})
+	respond(w, 200, map[string]any{"id": id, "display_name": name, "jira_account_id": jiraID, "jira_profile_url": jiraURL, "roles": roles, "teams": teams, "current_team_id": current})
 }
 
 // members returns only the directory of a team the caller belongs to. Possession
@@ -117,7 +117,8 @@ func (s *Service) members(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := s.DB.Query(r.Context(), `
-		SELECT u.id, u.display_name, m.role, t.mentor_id=u.id, t.lead_id=u.id
+		SELECT u.id, u.display_name, m.role, t.mentor_id=u.id, t.lead_id=u.id,
+		       COALESCE(u.jira_account_id,''),COALESCE(u.jira_profile_url,'')
 		FROM ta_memberships m
 		JOIN ta_users u ON u.id=m.user_id
 		JOIN ta_teams t ON t.id=m.team_id
@@ -130,13 +131,13 @@ func (s *Service) members(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 	members := []any{}
 	for rows.Next() {
-		var id, name, role string
+		var id, name, role, jiraID, jiraURL string
 		var mentor, lead bool
-		if err := rows.Scan(&id, &name, &role, &mentor, &lead); err != nil {
+		if err := rows.Scan(&id, &name, &role, &mentor, &lead, &jiraID, &jiraURL); err != nil {
 			fail(w, 503, "dependency_unavailable", "Team directory unavailable")
 			return
 		}
-		members = append(members, map[string]any{"id": id, "display_name": name, "role": role, "is_mentor": mentor, "is_lead": lead})
+		members = append(members, map[string]any{"id": id, "display_name": name, "role": role, "is_mentor": mentor, "is_lead": lead, "jira_account_id": jiraID, "jira_profile_url": jiraURL})
 	}
 	if err := rows.Err(); err != nil {
 		fail(w, 503, "dependency_unavailable", "Team directory unavailable")
