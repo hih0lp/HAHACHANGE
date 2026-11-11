@@ -161,6 +161,14 @@ type AnswerFunc func(context.Context, string) (string, any, error)
 
 type teamContextKey struct{}
 type teamTokenKey struct{}
+type chatJobKey struct{}
+
+// ChatJob identifies the owner and current turn for loading earlier completed
+// turns. It is set by the worker from the claimed job, not from model input.
+func ChatJob(ctx context.Context) (owner, jobID string) {
+	v, _ := ctx.Value(chatJobKey{}).([2]string)
+	return v[0], v[1]
+}
 
 func TeamContext(ctx context.Context) string {
 	v, _ := ctx.Value(teamContextKey{}).(string)
@@ -206,11 +214,11 @@ func (s *System) ProcessOne(ctx context.Context, id string, answer AnswerFunc, t
 	if err != nil {
 		return err
 	}
-	var query string
+	var query, owner string
 	var teamContext []byte
 	var tries int
 	err = s.DB.QueryRow(ctx, `UPDATE ai_jobs SET status='running', lease_token=$2, lease_until=now()+$3::interval,
-		attempt=attempt+1, updated_at=now() WHERE id=$1 AND status='queued' RETURNING query, COALESCE(team_context,'null'::jsonb), attempt`, id, lease, fmt.Sprintf("%d seconds", int(timeout.Seconds())+30)).Scan(&query, &teamContext, &tries)
+		attempt=attempt+1, updated_at=now() WHERE id=$1 AND status='queued' RETURNING query, owner_id, COALESCE(team_context,'null'::jsonb), attempt`, id, lease, fmt.Sprintf("%d seconds", int(timeout.Seconds())+30)).Scan(&query, &owner, &teamContext, &tries)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil // Already running or terminal; duplicate Kafka delivery.
 	}
@@ -221,6 +229,7 @@ func (s *System) ProcessOne(ctx context.Context, id string, answer AnswerFunc, t
 	workCtx, cancel := context.WithTimeout(ctx, timeout)
 	workCtx = context.WithValue(workCtx, teamContextKey{}, string(teamContext))
 	workCtx = context.WithValue(workCtx, teamTokenKey{}, s.teamToken(ctx, id))
+	workCtx = context.WithValue(workCtx, chatJobKey{}, [2]string{owner, id})
 	answerText, sources, workErr := answer(workCtx, query)
 	cancel()
 	if workErr != nil {
