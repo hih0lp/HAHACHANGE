@@ -43,6 +43,15 @@ func main() {
 		mux.Handle("/mcp/confirm", newRightsMCP(true))
 		mux.Handle("/", handler)
 		handler = mux
+	} else {
+		selfURL := os.Getenv("TEAM_SELF_URL")
+		if selfURL == "" {
+			selfURL = "http://127.0.0.1:8080"
+		}
+		mux := http.NewServeMux()
+		mux.Handle("/mcp", newTeamMCP(selfURL))
+		mux.Handle("/", handler)
+		handler = mux
 	}
 	server := &http.Server{Addr: addr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 	log.Printf("team-access listening on %s", addr)

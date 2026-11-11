@@ -23,10 +23,6 @@ type ownerKey struct{}
 
 func demoSession(secret string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// The worker calls the local MCP bridge on behalf of a browser job. It
-		// authenticates that call with the team's bearer token; it does not have
-		// the browser-only demo-session cookie.
-		internalTeamMCP := r.URL.Path == "/team-mcp" && strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ")
 		internalJiraMCP := r.URL.Path == "/mcp"
 		var owner string
 		if cookie, err := r.Cookie("ai_demo_session"); err == nil {
@@ -50,7 +46,7 @@ func demoSession(secret string, next http.Handler) http.Handler {
 			mac.Write([]byte(id))
 			http.SetCookie(w, &http.Cookie{Name: "ai_demo_session", Value: id + "." + hex.EncodeToString(mac.Sum(nil)), Path: "/", HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteLaxMode, MaxAge: 86400})
 		}
-		if owner == "" && !internalTeamMCP && !internalJiraMCP {
+		if owner == "" && !internalJiraMCP {
 			writeError(w, 401, errText("open the application to start a demo session"))
 			return
 		}

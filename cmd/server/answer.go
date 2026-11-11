@@ -92,7 +92,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 	}
 	if teamToken != "" && a.teamMCPURL != "" {
 		var err error
-		available, err := mcpTeamTools(ctx, a.teamMCPURL, a.mcpKey, teamToken)
+		available, err := mcpTeamTools(ctx, a.teamMCPURL, "", teamToken)
 		if err != nil {
 			return "", hits, fmt.Errorf("team-access MCP tools/list: %w", err)
 		}
@@ -195,7 +195,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 					token = teamToken
 				}
 				key := a.mcpKey
-				if endpoint == a.rightsMCPURL {
+				if endpoint == a.rightsMCPURL || endpoint == a.teamMCPURL {
 					key = ""
 				}
 				result, toolErr := mcpTeamTool(ctx, endpoint, key, token, textCall.ToolCall.Name, textCall.ToolCall.Arguments)
@@ -236,7 +236,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 				token = teamToken
 			}
 			key := a.mcpKey
-			if endpoint == a.rightsMCPURL {
+			if endpoint == a.rightsMCPURL || endpoint == a.teamMCPURL {
 				key = ""
 			}
 			result, toolErr := mcpTeamTool(ctx, endpoint, key, token, call.Function.Name, args)

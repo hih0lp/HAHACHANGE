@@ -16,9 +16,8 @@ type teamMCPTeamArg struct {
 	TeamID string `json:"team_id,omitempty" jsonschema:"team ID from team_profile; omit for the current team"`
 }
 
-// newTeamMCP exposes the team-access catalog as MCP tools. The bearer token is
-// accepted by the gateway, used only for the downstream call, and never reaches
-// the model or MCP result payload.
+// newTeamMCP exposes the directory's own MCP tools. The caller's bearer token
+// is forwarded to the directory HTTP API and never enters the model result.
 func newTeamMCP(endpoint string) http.Handler {
 	return mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
 		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")

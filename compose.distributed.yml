@@ -57,6 +57,7 @@ services:
       MCP_URL: http://api:8000/mcp
       RIGHTS_URL: http://access-rights:8080
       RIGHTS_MCP_URL: http://access-rights:8080/mcp
+      TEAM_MCP_URL: http://team-access:8080/mcp
       DATABASE_URL: postgres://${POSTGRES_USER:-aibuddy}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-aibuddy}?sslmode=disable
     depends_on:
       postgres:
