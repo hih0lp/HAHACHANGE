@@ -81,7 +81,13 @@ func teamToolResult(ctx context.Context, api scenario.Client, token, name, rawAr
 		}
 		forms := make([]map[string]any, 0, len(result))
 		for _, f := range result {
-			forms = append(forms, map[string]any{"form": f, "form_url": "/forms/" + url.PathEscape(f.ID)})
+			forms = append(forms, map[string]any{
+				"id":          f.ID,
+				"title":       f.Title,
+				"description": f.Description,
+				"kind":        f.Kind,
+				"form_url":    "/forms/" + url.PathEscape(f.ID),
+			})
 		}
 		return map[string]any{"forms": forms}
 	case "form_get":
