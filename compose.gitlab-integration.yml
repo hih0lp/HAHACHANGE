@@ -1,0 +1,19 @@
+services:
+  worker:
+    environment:
+      GITLAB_MCP_URL: http://gitlab-integration:8080/mcp
+  gitlab-integration:
+    build:
+      context: .
+      dockerfile: Dockerfile.gitlab-integration
+    environment:
+      GITLAB_API_ORIGIN: ${GITLAB_API_ORIGIN:?Set the local GitLab API origin}
+      GITLAB_DEMO_SUBJECT: ${GITLAB_DEMO_SUBJECT:?Set the dedicated demo subject}
+      GITLAB_DEMO_TOKEN_FILE: /run/secrets/gitlab_demo_token
+      TEAM_DIRECTORY_URL: http://team-access:8080
+    secrets:
+      - gitlab_demo_token
+
+secrets:
+  gitlab_demo_token:
+    file: ${GITLAB_DEMO_TOKEN_PATH:?Set the path to the demo token file}

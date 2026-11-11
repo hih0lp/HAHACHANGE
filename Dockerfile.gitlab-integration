@@ -1,0 +1,10 @@
+FROM golang:1.23-alpine AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+COPY cmd/gitlab-integration ./cmd/gitlab-integration
+RUN CGO_ENABLED=0 go build -trimpath -o /gitlab-integration ./cmd/gitlab-integration
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates
+COPY --from=build /gitlab-integration /usr/local/bin/gitlab-integration
+USER 10001
+ENTRYPOINT ["/usr/local/bin/gitlab-integration"]
