@@ -56,7 +56,10 @@ func demoSession(secret string, next http.Handler) http.Handler {
 
 func ownerFrom(r *http.Request) string {
 	owner, _ := r.Context().Value(ownerKey{}).(string)
-	return owner
+	if owner == "" {
+		return ""
+	}
+	return owner + ":" + demoRole(r)
 }
 
 func registerDistributedJobRoutes(mux *http.ServeMux, jobs *distributed.System, apiKey string) {

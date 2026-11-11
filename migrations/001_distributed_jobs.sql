@@ -29,6 +29,19 @@ CREATE TABLE IF NOT EXISTS ai_job_outbox (
 
 CREATE INDEX IF NOT EXISTS ai_job_outbox_pending_idx ON ai_job_outbox (id) WHERE published_at IS NULL;
 
+CREATE TABLE IF NOT EXISTS ai_deadline_notifications (
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    recipient_id text NOT NULL,
+    kind text NOT NULL CHECK (kind IN ('intern_48h', 'mentor_24h')),
+    issue_key text NOT NULL,
+    summary text NOT NULL,
+    due_at timestamptz NOT NULL,
+    issue_url text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (recipient_id, kind, issue_key, due_at)
+);
+CREATE INDEX IF NOT EXISTS ai_deadline_notifications_recipient_idx ON ai_deadline_notifications (recipient_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS ai_actions (
     id uuid PRIMARY KEY,
     owner_id text NOT NULL,
