@@ -94,24 +94,25 @@ services:
       PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       LEGACY_DB: ${POSTGRES_DB:-aibuddy}
     entrypoint: ["/bin/sh", "-ec"]
-    command: |
-      for db in aibuddy_teams aibuddy_rights; do
-        if [ "$$(psql -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='$$db'")" != 1 ]; then
-          createdb -O "$$PGUSER" "$$db"
+    command:
+      - |
+        for db in aibuddy_teams aibuddy_rights; do
+          if [ "$$(psql -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='$$db'")" != 1 ]; then
+            createdb -O "$$PGUSER" "$$db"
+          fi
+        done
+        psql -v ON_ERROR_STOP=1 -d aibuddy_teams -f /migrations/001_team.sql
+        psql -v ON_ERROR_STOP=1 -d aibuddy_rights -f /migrations/001_rights.sql
+        if [ "$$(psql -d "$$LEGACY_DB" -tAc "SELECT to_regclass('public.ta_users')")" = ta_users ]; then
+          for table in ta_users ta_teams ta_memberships; do
+            pg_dump -d "$$LEGACY_DB" --data-only --column-inserts --on-conflict-do-nothing -t "$$table" -f "/tmp/$$table.sql"
+            psql -v ON_ERROR_STOP=1 -d aibuddy_teams -f "/tmp/$$table.sql"
+          done
+          for table in ta_resources ta_grants ta_requests ta_audit ta_outbox; do
+            pg_dump -d "$$LEGACY_DB" --data-only --column-inserts --on-conflict-do-nothing -t "$$table" -f "/tmp/$$table.sql"
+            psql -v ON_ERROR_STOP=1 -d aibuddy_rights -f "/tmp/$$table.sql"
+          done
         fi
-      done
-      psql -v ON_ERROR_STOP=1 -d aibuddy_teams -f /migrations/001_team.sql
-      psql -v ON_ERROR_STOP=1 -d aibuddy_rights -f /migrations/001_rights.sql
-      if [ "$$(psql -d "$$LEGACY_DB" -tAc "SELECT to_regclass('public.ta_users')")" = ta_users ]; then
-        for table in ta_users ta_teams ta_memberships; do
-          pg_dump -d "$$LEGACY_DB" --data-only --column-inserts --on-conflict-do-nothing -t "$$table" -f "/tmp/$$table.sql"
-          psql -v ON_ERROR_STOP=1 -d aibuddy_teams -f "/tmp/$$table.sql"
-        done
-        for table in ta_resources ta_grants ta_requests ta_audit ta_outbox; do
-          pg_dump -d "$$LEGACY_DB" --data-only --column-inserts --on-conflict-do-nothing -t "$$table" -f "/tmp/$$table.sql"
-          psql -v ON_ERROR_STOP=1 -d aibuddy_rights -f "/tmp/$$table.sql"
-        done
-      fi
     volumes:
       - ./migrations/team_access/001_team.sql:/migrations/001_team.sql:ro
       - ./migrations/team_access/001_rights.sql:/migrations/001_rights.sql:ro

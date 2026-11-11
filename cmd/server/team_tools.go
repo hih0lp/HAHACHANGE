@@ -79,7 +79,11 @@ func teamToolResult(ctx context.Context, api scenario.Client, token, name, rawAr
 		if err != nil {
 			return map[string]string{"error": err.Error()}
 		}
-		return map[string]any{"forms": result}
+		forms := make([]map[string]any, 0, len(result))
+		for _, f := range result {
+			forms = append(forms, map[string]any{"form": f, "form_url": "/forms/" + url.PathEscape(f.ID)})
+		}
+		return map[string]any{"forms": forms}
 	case "form_get":
 		if args.FormID == "" {
 			return map[string]string{"error": "form_id is required"}
