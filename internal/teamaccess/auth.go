@@ -10,6 +10,8 @@ import (
 	"encoding/json"
 	"math/big"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,8 +31,16 @@ type claims struct {
 
 var enc = base64.RawURLEncoding
 
+func tokenLifetime() time.Duration {
+	hours, err := strconv.Atoi(os.Getenv("TEAM_ACCESS_TOKEN_TTL_HOURS"))
+	if err != nil || hours < 1 || hours > 8760 {
+		return time.Hour
+	}
+	return time.Duration(hours) * time.Hour
+}
+
 func (s *Service) sign(subject string) (string, error) {
-	c := claims{Issuer: s.issuer, Audience: []string{"ai-buddy", "team-access", "access-rights"}, Subject: subject, Issued: time.Now().Unix(), NotBefore: time.Now().Unix(), Expiry: time.Now().Add(time.Hour).Unix(), ID: newID()}
+	c := claims{Issuer: s.issuer, Audience: []string{"ai-buddy", "team-access", "access-rights"}, Subject: subject, Issued: time.Now().Unix(), NotBefore: time.Now().Unix(), Expiry: time.Now().Add(tokenLifetime()).Unix(), ID: newID()}
 	head, _ := json.Marshal(map[string]string{"alg": "RS256", "typ": "JWT", "kid": "team-access-1"})
 	body, _ := json.Marshal(c)
 	raw := enc.EncodeToString(head) + "." + enc.EncodeToString(body)
@@ -144,5 +154,5 @@ func (s *Service) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	respond(w, 200, map[string]any{"access_token": token, "token_type": "Bearer", "expires_in": 3600})
+	respond(w, 200, map[string]any{"access_token": token, "token_type": "Bearer", "expires_in": int(tokenLifetime().Seconds())})
 }

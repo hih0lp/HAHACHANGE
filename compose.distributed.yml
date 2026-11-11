@@ -178,6 +178,8 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-aibuddy}:${POSTGRES_PASSWORD}@postgres:5432/aibuddy_teams?sslmode=disable
       KAFKA_BROKERS: kafka:9092
       TEAM_ACCESS_ROLE: team
+
+      TEAM_ACCESS_TOKEN_TTL_HOURS: ${TEAM_ACCESS_TOKEN_TTL_HOURS:-8760}
       TEAM_ACCESS_MIGRATION: /app/migrations/001_team.sql
       TEAM_ACCESS_KEY_FILE: /data/keys/private.pem
     volumes:
