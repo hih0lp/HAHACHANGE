@@ -5,9 +5,11 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -154,7 +156,30 @@ func (s *Service) seed(ctx context.Context) error {
 			return err
 		}
 	}
-	return err
+	// The directory owns Jira identity metadata; credentials stay in the Jira adapter.
+	var realAccounts map[string]string
+	if raw := os.Getenv("TEAM_JIRA_ACCOUNTS_JSON"); raw != "" {
+		if err := json.Unmarshal([]byte(raw), &realAccounts); err != nil {
+			return fmt.Errorf("TEAM_JIRA_ACCOUNTS_JSON: %w", err)
+		}
+	}
+	base := strings.TrimRight(os.Getenv("JIRA_BASE_URL"), "/")
+	for _, id := range []string{"intern", "intern2", "approver", "catalog-lead", "catalog-mentor", "catalog-dev", "search-lead", "search-mentor", "search-analyst", "platform-lead", "platform-mentor", "platform-dev"} {
+		account, ok := realAccounts[id]
+		profile := "https://jira.example.invalid/jira/people/" + url.PathEscape(id)
+		if !ok {
+			account = "demo-" + id
+		} else {
+			if account == "" || base == "" || !strings.HasPrefix(base, "https://") {
+				return fmt.Errorf("real Jira account for %s requires an account ID and HTTPS JIRA_BASE_URL", id)
+			}
+			profile = base + "/jira/people/" + url.PathEscape(account)
+		}
+		if _, err = s.DB.Exec(ctx, `UPDATE ta_users SET jira_account_id=$2,jira_profile_url=$3 WHERE id=$1 AND (jira_account_id IS NULL OR $4)`, id, account, profile, ok); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func newID() string {

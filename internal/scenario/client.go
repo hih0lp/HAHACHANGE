@@ -24,11 +24,13 @@ type LoginResult struct {
 	ExpiresIn   int    `json:"expires_in"`
 }
 type Member struct {
-	ID          string `json:"id"`
-	DisplayName string `json:"display_name"`
-	Role        string `json:"role"`
-	IsMentor    bool   `json:"is_mentor"`
-	IsLead      bool   `json:"is_lead"`
+	ID             string `json:"id"`
+	JiraAccountID  string `json:"jira_account_id,omitempty"`
+	JiraProfileURL string `json:"jira_profile_url,omitempty"`
+	DisplayName    string `json:"display_name"`
+	Role           string `json:"role"`
+	IsMentor       bool   `json:"is_mentor"`
+	IsLead         bool   `json:"is_lead"`
 }
 type Form struct {
 	ID          string          `json:"id"`

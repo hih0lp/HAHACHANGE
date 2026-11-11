@@ -11,9 +11,11 @@ type Team struct {
 	Name string `json:"name"`
 }
 type Profile struct {
-	ID            string `json:"id"`
-	Teams         []Team `json:"teams"`
-	CurrentTeamID string `json:"current_team_id"`
+	ID             string `json:"id"`
+	JiraAccountID  string `json:"jira_account_id,omitempty"`
+	JiraProfileURL string `json:"jira_profile_url,omitempty"`
+	Teams          []Team `json:"teams"`
+	CurrentTeamID  string `json:"current_team_id"`
 }
 type Resource struct {
 	ID           string   `json:"id"`
