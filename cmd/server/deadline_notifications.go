@@ -75,6 +75,8 @@ func registerDeadlineNotifications(mux *http.ServeMux, db *pgxpool.Pool, apiKey 
 		recipient := "intern"
 		if demoRole(r) == "mentor" {
 			recipient = "approver"
+		} else if demoRole(r) == "intern2" {
+			recipient = "intern2"
 		}
 		rows, err := db.Query(r.Context(), `SELECT id,kind,issue_key,summary,due_at,issue_url,created_at FROM ai_deadline_notifications WHERE recipient_id=$1 ORDER BY created_at DESC,id DESC LIMIT 100`, recipient)
 		if err != nil {

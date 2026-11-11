@@ -25,7 +25,7 @@ button:disabled{opacity:.55;cursor:wait}.card{margin-top:16px}pre{white-space:pr
 .bubble time{display:block;margin-top:8px;font-size:12px;color:#586173}.bubble.deadline time{color:#442500}
 </style></head><body><main><h1>Бобби · AI-buddy</h1>
 <p id="team-state" class="meta">Подключаю сервис команды и доступов…</p>
-<label for="demo-role">Демо-роль <select id="demo-role"><option value="intern">Стажёр</option><option value="mentor">Наставник</option></select></label>
+<label for="demo-role">Демо-роль <select id="demo-role"><option value="intern">Стажёр</option><option value="intern2">Второй стажёр</option><option value="mentor">Наставник</option></select></label>
 <section id="results" aria-label="Сообщения чата" aria-live="polite"></section>
 <form id="form"><label for="query">Сообщение</label><input id="query" required minlength="2" placeholder="Спросите о задаче или онбординге">
 <label for="key">API-ключ (если задан на сервере)</label><input id="key" type="password" autocomplete="off" placeholder="Необязательно">
