@@ -20,6 +20,9 @@ func TestJWTSignatureAndAudience(t *testing.T) {
 	if id, ok := s.verify(token); !ok || id != "intern" {
 		t.Fatalf("valid token rejected: %q %v", id, ok)
 	}
+	if id, ok := (&Service{key: key, issuer: "team-access", role: "rights"}).verify(token); !ok || id != "intern" {
+		t.Fatalf("rights audience rejected: %q %v", id, ok)
+	}
 	parts := strings.Split(token, ".")
 	parts[1] = parts[1][:len(parts[1])-1] + "A"
 	if _, ok := s.verify(strings.Join(parts, ".")); ok {

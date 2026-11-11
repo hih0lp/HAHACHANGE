@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -105,7 +106,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 		}
 		systemPrompt += "\n\nПодключённый MCP-каталог инструментов:\n" + string(catalogue) + `
 
-Если для ответа нужен инструмент, выбери его сам. Если клиент модели не сформировал нативный вызов функции, верни строго JSON без markdown: {"tool_call":{"name":"имя из каталога","arguments":{}}}. После получения результата MCP дай обычный ответ пользователю. Вопросы о задачах Jira, команде, участниках, ролях, ресурсах и правах требуют вызова инструмента до ответа.`
+Если для ответа нужен инструмент, выбери его сам. Если клиент модели не сформировал нативный вызов функции, верни строго JSON без markdown: {"tool_call":{"name":"имя из каталога","arguments":{}}}. После получения результата MCP дай обычный ответ пользователю. Вопросы о задачах Jira, команде, участниках, ролях, ресурсах, правах и доступных формах требуют вызова инструмента до ответа. Когда пользователь хочет оформить обращение, найди подходящую форму через инструменты, предложи её и дай ссылку form_url из результата. Не утверждай, что форма отправлена: её отправляет только пользователь нажатием кнопки после проверки полей.`
 	}
 	messages := []map[string]any{{"role": "system", "content": systemPrompt}, {"role": "user", "content": prompt}}
 	for step := 0; step < 5; step++ {
@@ -123,6 +124,9 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 			return "", hits, err
 		}
 		req.Header.Set("Content-Type", "application/json")
+		if apiKey := os.Getenv("LLM_API_KEY"); apiKey != "" {
+			req.Header.Set("Authorization", "Bearer "+apiKey)
+		}
 		resp, err := client.Do(req)
 		if err != nil {
 			return "", hits, err
@@ -181,7 +185,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 				return "", hits, fmt.Errorf("LLM returned an empty answer")
 			}
 			answerText := message.Content
-			for _, name := range []string{"jira_get_issue", "jira_list_issues", "team_profile", "team_members", "team_resources", "access_check"} {
+			for name := range toolEndpoints {
 				answerText = strings.ReplaceAll(answerText, name, "подключённый сервис")
 			}
 			return answerText, hits, nil

@@ -30,7 +30,7 @@ type claims struct {
 var enc = base64.RawURLEncoding
 
 func (s *Service) sign(subject string) (string, error) {
-	c := claims{Issuer: s.issuer, Audience: []string{"ai-buddy", "team-access"}, Subject: subject, Issued: time.Now().Unix(), NotBefore: time.Now().Unix(), Expiry: time.Now().Add(time.Hour).Unix(), ID: newID()}
+	c := claims{Issuer: s.issuer, Audience: []string{"ai-buddy", "team-access", "access-rights"}, Subject: subject, Issued: time.Now().Unix(), NotBefore: time.Now().Unix(), Expiry: time.Now().Add(time.Hour).Unix(), ID: newID()}
 	head, _ := json.Marshal(map[string]string{"alg": "RS256", "typ": "JWT", "kid": "team-access-1"})
 	body, _ := json.Marshal(c)
 	raw := enc.EncodeToString(head) + "." + enc.EncodeToString(body)
@@ -77,9 +77,13 @@ func (s *Service) verify(token string) (string, bool) {
 	if c.Issuer != s.issuer || c.Subject == "" || c.ID == "" || c.Issued > t || c.NotBefore > t || c.Expiry <= t {
 		return "", false
 	}
+	neededAudience := "team-access"
+	if s.role == "rights" {
+		neededAudience = "access-rights"
+	}
 	found := false
 	for _, aud := range c.Audience {
-		if aud == "team-access" {
+		if aud == neededAudience {
 			found = true
 		}
 	}
@@ -95,6 +99,10 @@ func (s *Service) auth(next http.HandlerFunc) http.HandlerFunc {
 		id, ok := s.verify(strings.TrimPrefix(h, "Bearer "))
 		if !ok {
 			fail(w, 401, "unauthorized", "Invalid or expired token")
+			return
+		}
+		if s.role == "rights" {
+			next(w, r.WithContext(context.WithValue(r.Context(), identityKey{}, id)))
 			return
 		}
 		var exists bool

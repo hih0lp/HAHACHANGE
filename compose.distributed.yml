@@ -23,6 +23,7 @@ services:
       DOCUMENTS_PATH: /data/knowledge
       MCP_URL: http://api:8000/mcp
       TEAM_ACCESS_URL: http://team-access:8080
+      RIGHTS_URL: http://access-rights:8080
       DATABASE_URL: postgres://${POSTGRES_USER:-aibuddy}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-aibuddy}?sslmode=disable
     volumes:
       - ../playbook:/data/knowledge/playbook:ro
@@ -39,6 +40,8 @@ services:
         condition: service_completed_successfully
       team-access:
         condition: service_started
+      access-rights:
+        condition: service_started
 
   worker:
     build: .
@@ -51,6 +54,7 @@ services:
       QDRANT_URL: http://avito-rag-qdrant-1:6333
       EMBEDDINGS_URL: http://avito-rag-embeddings-1:80
       MCP_URL: http://api:8000/mcp
+      RIGHTS_URL: http://access-rights:8080
       DATABASE_URL: postgres://${POSTGRES_USER:-aibuddy}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-aibuddy}?sslmode=disable
     depends_on:
       postgres:
@@ -81,6 +85,39 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+
+  service-db-init:
+    image: postgres:17.5
+    environment:
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER:-aibuddy}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      LEGACY_DB: ${POSTGRES_DB:-aibuddy}
+    entrypoint: ["/bin/sh", "-ec"]
+    command: |
+      for db in aibuddy_teams aibuddy_rights; do
+        if [ "$$(psql -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='$$db'")" != 1 ]; then
+          createdb -O "$$PGUSER" "$$db"
+        fi
+      done
+      psql -v ON_ERROR_STOP=1 -d aibuddy_teams -f /migrations/001_team.sql
+      psql -v ON_ERROR_STOP=1 -d aibuddy_rights -f /migrations/001_rights.sql
+      if [ "$$(psql -d "$$LEGACY_DB" -tAc "SELECT to_regclass('public.ta_users')")" = ta_users ]; then
+        for table in ta_users ta_teams ta_memberships; do
+          pg_dump -d "$$LEGACY_DB" --data-only --column-inserts --on-conflict-do-nothing -t "$$table" -f "/tmp/$$table.sql"
+          psql -v ON_ERROR_STOP=1 -d aibuddy_teams -f "/tmp/$$table.sql"
+        done
+        for table in ta_resources ta_grants ta_requests ta_audit ta_outbox; do
+          pg_dump -d "$$LEGACY_DB" --data-only --column-inserts --on-conflict-do-nothing -t "$$table" -f "/tmp/$$table.sql"
+          psql -v ON_ERROR_STOP=1 -d aibuddy_rights -f "/tmp/$$table.sql"
+        done
+      fi
+    volumes:
+      - ./migrations/team_access/001_team.sql:/migrations/001_team.sql:ro
+      - ./migrations/team_access/001_rights.sql:/migrations/001_rights.sql:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   redis:
     image: redis:7.4-alpine
@@ -134,18 +171,45 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-aibuddy}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-aibuddy}?sslmode=disable
+      DATABASE_URL: postgres://${POSTGRES_USER:-aibuddy}:${POSTGRES_PASSWORD}@postgres:5432/aibuddy_teams?sslmode=disable
       KAFKA_BROKERS: kafka:9092
-      TEAM_ACCESS_MIGRATION: /app/migrations/001_schema.sql
+      TEAM_ACCESS_ROLE: team
+      TEAM_ACCESS_MIGRATION: /app/migrations/001_team.sql
       TEAM_ACCESS_KEY_FILE: /data/keys/private.pem
-      TEAM_ACCESS_SEED_JIRA_URL: ${TEAM_ACCESS_SEED_JIRA_URL:-}
     volumes:
       - team-access-keys:/data/keys
     ports:
       - "127.0.0.1:18080:8080"
     depends_on:
-      postgres:
-        condition: service_healthy
+      service-db-init:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
+
+  access-rights:
+    build:
+      context: .
+      dockerfile: Dockerfile.team-access
+    image: avito-rag-team-access:local
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-aibuddy}:${POSTGRES_PASSWORD}@postgres:5432/aibuddy_rights?sslmode=disable
+      TEAM_ACCESS_ROLE: rights
+      TEAM_DIRECTORY_URL: http://team-access:8080
+      TEAM_ACCESS_MIGRATION: /app/migrations/001_rights.sql
+      TEAM_ACCESS_KEY_FILE: /data/keys/private.pem
+      TEAM_ACCESS_SEED_JIRA_URL: ${TEAM_ACCESS_SEED_JIRA_URL:-}
+      KAFKA_BROKERS: kafka:9092
+    volumes:
+      - team-access-keys:/data/keys:ro
+    ports:
+      - "127.0.0.1:18081:8080"
+    depends_on:
+      service-db-init:
+        condition: service_completed_successfully
+      team-access:
+        condition: service_started
       kafka-init:
         condition: service_completed_successfully
 

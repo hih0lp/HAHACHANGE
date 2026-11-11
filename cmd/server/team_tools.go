@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/hackchange/avito-rag/internal/scenario"
@@ -15,6 +16,7 @@ func teamToolResult(ctx context.Context, api scenario.Client, token, name, rawAr
 	}
 	var args struct {
 		TeamID     string `json:"team_id"`
+		FormID     string `json:"form_id"`
 		ResourceID string `json:"resource_id"`
 		Capability string `json:"capability"`
 	}
@@ -72,6 +74,21 @@ func teamToolResult(ctx context.Context, api scenario.Client, token, name, rawAr
 			return map[string]string{"error": err.Error()}
 		}
 		return result
+	case "forms_list":
+		result, err := api.Forms(ctx, token)
+		if err != nil {
+			return map[string]string{"error": err.Error()}
+		}
+		return map[string]any{"forms": result}
+	case "form_get":
+		if args.FormID == "" {
+			return map[string]string{"error": "form_id is required"}
+		}
+		result, err := api.Form(ctx, token, args.FormID)
+		if err != nil {
+			return map[string]string{"error": err.Error()}
+		}
+		return map[string]any{"form": result, "form_url": "/forms/" + url.PathEscape(result.ID)}
 	default:
 		return map[string]string{"error": fmt.Sprintf("Неизвестный инструмент %q.", name)}
 	}

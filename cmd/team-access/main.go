@@ -29,7 +29,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	go s.PublishOutbox(ctx)
+	if os.Getenv("TEAM_ACCESS_ROLE") == "rights" { go s.PublishOutbox(ctx) }
 	addr := os.Getenv("TEAM_ACCESS_LISTEN")
 	if addr == "" {
 		addr = ":8080"

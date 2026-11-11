@@ -13,8 +13,9 @@ import (
 )
 
 type Client struct {
-	BaseURL string
-	HTTP    *http.Client
+	BaseURL   string
+	RightsURL string
+	HTTP      *http.Client
 }
 type RemoteError struct{ Status int }
 type LoginResult struct {
@@ -28,6 +29,15 @@ type Member struct {
 	Role        string `json:"role"`
 	IsMentor    bool   `json:"is_mentor"`
 	IsLead      bool   `json:"is_lead"`
+}
+type Form struct {
+	ID          string          `json:"id"`
+	Version     int             `json:"version"`
+	Title       string          `json:"title"`
+	Description string          `json:"description"`
+	Kind        string          `json:"kind"`
+	Schema      json.RawMessage `json:"schema"`
+	UISchema    json.RawMessage `json:"ui_schema"`
 }
 
 func (c Client) Login(ctx context.Context, username, password string) (LoginResult, error) {
@@ -84,6 +94,7 @@ func (c Client) Profile(ctx context.Context, t string) (Profile, error) {
 	return v, e
 }
 func (c Client) Resources(ctx context.Context, t, team string) ([]Resource, error) {
+	c = c.rights()
 	var v struct {
 		Resources []Resource `json:"resources"`
 	}
@@ -99,12 +110,38 @@ func (c Client) Members(ctx context.Context, t, team string) ([]Member, error) {
 	return v.Members, err
 }
 func (c Client) Check(ctx context.Context, t, id, capability string) (Check, error) {
+	c = c.rights()
 	var v Check
 	e := c.call(ctx, t, "POST", "/v1/access/check", "", map[string]string{"resource_id": id, "capability": capability}, &v)
 	return v, e
 }
 func (c Client) CreateRequest(ctx context.Context, t, idem string, input AccessInput) (Request, error) {
+	c = c.rights()
 	var v Request
 	e := c.call(ctx, t, "POST", "/v1/access-requests", idem, input, &v)
 	return v, e
+}
+
+func (c Client) rights() Client {
+	if c.RightsURL != "" {
+		c.BaseURL = c.RightsURL
+	}
+	return c
+}
+func (c Client) Forms(ctx context.Context, token string) ([]Form, error) {
+	var v struct {
+		Forms []Form `json:"forms"`
+	}
+	err := c.rights().call(ctx, token, "GET", "/v1/forms", "", nil, &v)
+	return v.Forms, err
+}
+func (c Client) Form(ctx context.Context, token, id string) (Form, error) {
+	var v Form
+	err := c.rights().call(ctx, token, "GET", "/v1/forms/"+url.PathEscape(id), "", nil, &v)
+	return v, err
+}
+func (c Client) SubmitForm(ctx context.Context, token, idem, id string, version int, values map[string]any) (map[string]any, error) {
+	var v map[string]any
+	err := c.rights().call(ctx, token, "POST", "/v1/forms/"+url.PathEscape(id)+"/submit", idem, map[string]any{"version": version, "values": values, "confirmed": true}, &v)
+	return v, err
 }

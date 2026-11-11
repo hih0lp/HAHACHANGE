@@ -46,17 +46,26 @@ func (s *Service) Routes() http.Handler {
 		}
 		respond(w, 200, map[string]string{"status": "ok"})
 	})
+	if s.role == "rights" {
+		mux.HandleFunc("GET /v1/teams/{team_id}/resources", s.auth(s.resources))
+		mux.HandleFunc("POST /v1/access/check", s.auth(s.check))
+		mux.HandleFunc("POST /v1/access-requests", s.auth(s.createRequest))
+		mux.HandleFunc("GET /v1/access-requests", s.auth(s.listRequests))
+		mux.HandleFunc("GET /v1/access-requests/{id}", s.auth(s.getRequest))
+		mux.HandleFunc("GET /v1/approvals", s.auth(s.approvals))
+		mux.HandleFunc("POST /v1/access-requests/{id}/decision", s.auth(s.decision))
+		mux.HandleFunc("GET /v1/forms", s.auth(s.listForms))
+		mux.HandleFunc("GET /v1/forms/{id}", s.auth(s.getForm))
+		mux.HandleFunc("POST /v1/forms/{id}/validate", s.auth(s.validateFormRequest))
+		mux.HandleFunc("POST /v1/forms/{id}/submit", s.auth(s.submitForm))
+		mux.HandleFunc("GET /v1/form-submissions/{id}", s.auth(s.getFormSubmission))
+		mux.HandleFunc("POST /v1/forms", s.auth(s.publishForm))
+		return mux
+	}
 	mux.HandleFunc("GET /.well-known/jwks.json", s.jwks)
 	mux.HandleFunc("POST /v1/auth/login", s.login)
 	mux.HandleFunc("GET /v1/me", s.auth(s.me))
 	mux.HandleFunc("GET /v1/teams/{team_id}/members", s.auth(s.members))
-	mux.HandleFunc("GET /v1/teams/{team_id}/resources", s.auth(s.resources))
-	mux.HandleFunc("POST /v1/access/check", s.auth(s.check))
-	mux.HandleFunc("POST /v1/access-requests", s.auth(s.createRequest))
-	mux.HandleFunc("GET /v1/access-requests", s.auth(s.listRequests))
-	mux.HandleFunc("GET /v1/access-requests/{id}", s.auth(s.getRequest))
-	mux.HandleFunc("GET /v1/approvals", s.auth(s.approvals))
-	mux.HandleFunc("POST /v1/access-requests/{id}/decision", s.auth(s.decision))
 	return mux
 }
 func (s *Service) me(w http.ResponseWriter, r *http.Request) {
@@ -138,8 +147,8 @@ func (s *Service) members(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) resources(w http.ResponseWriter, r *http.Request) {
 	team := r.PathValue("team_id")
-	var member bool
-	if s.DB.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM ta_memberships WHERE user_id=$1 AND team_id=$2)`, user(r), team).Scan(&member) != nil {
+	_, member, err := s.teamRole(r, team)
+	if err != nil {
 		fail(w, 503, "dependency_unavailable", "Catalog unavailable")
 		return
 	}
@@ -172,13 +181,20 @@ func (s *Service) resources(w http.ResponseWriter, r *http.Request) {
 func (s *Service) resource(w http.ResponseWriter, r *http.Request, id, cap string) (string, string, bool) {
 	var team, approver string
 	var caps []string
-	err := s.DB.QueryRow(r.Context(), `SELECT x.team_id,x.approver_id,x.capabilities FROM ta_resources x JOIN ta_memberships m ON m.team_id=x.team_id AND m.user_id=$1 WHERE x.id=$2`, user(r), id).Scan(&team, &approver, &caps)
+	err := s.DB.QueryRow(r.Context(), `SELECT team_id,approver_id,capabilities FROM ta_resources WHERE id=$1`, id).Scan(&team, &approver, &caps)
 	if errors.Is(err, pgx.ErrNoRows) {
 		fail(w, 404, "not_found", "Resource not found")
 		return "", "", false
 	}
 	if err != nil {
 		fail(w, 503, "dependency_unavailable", "Resource unavailable")
+		return "", "", false
+	}
+	if _, member, e := s.teamRole(r, team); e != nil {
+		fail(w, 503, "dependency_unavailable", "Team directory unavailable")
+		return "", "", false
+	} else if !member {
+		fail(w, 404, "not_found", "Resource not found")
 		return "", "", false
 	}
 	for _, v := range caps {
@@ -230,11 +246,13 @@ func (s *Service) check(w http.ResponseWriter, r *http.Request) {
 }
 
 type requestInput struct {
-	ResourceID string            `json:"resource_id"`
-	Capability string            `json:"capability"`
-	Reason     string            `json:"reason"`
-	FormValues map[string]string `json:"form_values"`
-	Confirmed  bool              `json:"confirmed"`
+	ResourceID  string            `json:"resource_id"`
+	Capability  string            `json:"capability"`
+	Reason      string            `json:"reason"`
+	FormValues  map[string]string `json:"form_values"`
+	Confirmed   bool              `json:"confirmed"`
+	FormID      string            `json:"form_id,omitempty"`
+	FormVersion int               `json:"form_version,omitempty"`
 }
 type requestRecord struct {
 	ID             string    `json:"id"`
@@ -303,7 +321,7 @@ func (s *Service) createRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	form, _ := json.Marshal(in.FormValues)
 	id := newID()
-	_, err = tx.Exec(r.Context(), `INSERT INTO ta_requests(id,user_id,resource_id,capability,approver_id,reason,form_values,status,idempotency_key,input_hash) VALUES($1,$2,$3,$4,$5,$6,$7,'pending',$8,$9)`, id, user(r), in.ResourceID, in.Capability, approver, in.Reason, form, idem, hash)
+	_, err = tx.Exec(r.Context(), `INSERT INTO ta_requests(id,user_id,resource_id,capability,approver_id,reason,form_values,status,idempotency_key,input_hash,form_id,form_version) VALUES($1,$2,$3,$4,$5,$6,$7,'pending',$8,$9,$10,$11)`, id, user(r), in.ResourceID, in.Capability, approver, in.Reason, form, idem, hash, in.FormID, in.FormVersion)
 	if err != nil {
 		var pe *pgconn.PgError
 		if errors.As(err, &pe) && pe.Code == "23505" {
@@ -436,13 +454,12 @@ func (s *Service) decision(w http.ResponseWriter, r *http.Request) {
 		fail(w, 403, "forbidden", "Cannot decide own request")
 		return
 	}
-	var member bool
-	err = tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM ta_memberships WHERE user_id=$1 AND team_id=$2 AND role='approver')`, user(r), team).Scan(&member)
+	role, member, err := s.teamRole(r, team)
 	if err != nil {
 		fail(w, 503, "dependency_unavailable", "Membership unavailable")
 		return
 	}
-	if !member {
+	if !member || role != "approver" {
 		fail(w, 403, "forbidden", "Approver role required")
 		return
 	}

@@ -21,14 +21,23 @@ type Service struct {
 	DB      *pgxpool.Pool
 	key     *rsa.PrivateKey
 	issuer  string
+	role    string
+	teamURL string
 	brokers []string
 	topic   string
 }
 
 func New(ctx context.Context, db *pgxpool.Pool) (*Service, error) {
+	role := os.Getenv("TEAM_ACCESS_ROLE")
+	if role == "" {
+		role = "team"
+	}
+	if role != "team" && role != "rights" {
+		return nil, fmt.Errorf("invalid TEAM_ACCESS_ROLE %q", role)
+	}
 	migration := os.Getenv("TEAM_ACCESS_MIGRATION")
 	if migration == "" {
-		migration = "migrations/team_access/001_schema.sql"
+		migration = "migrations/team_access/001_" + role + ".sql"
 	}
 	sql, err := os.ReadFile(migration)
 	if err != nil {
@@ -41,7 +50,7 @@ func New(ctx context.Context, db *pgxpool.Pool) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Service{DB: db, key: key, issuer: "team-access", brokers: strings.Split(os.Getenv("KAFKA_BROKERS"), ","), topic: "team-access-events"}
+	s := &Service{DB: db, key: key, issuer: "team-access", role: role, teamURL: os.Getenv("TEAM_DIRECTORY_URL"), brokers: strings.Split(os.Getenv("KAFKA_BROKERS"), ","), topic: "team-access-events"}
 	if v := os.Getenv("TEAM_ACCESS_ISSUER"); v != "" {
 		s.issuer = v
 	}
@@ -81,6 +90,15 @@ func loadKey(path string) (*rsa.PrivateKey, error) {
 }
 
 func (s *Service) seed(ctx context.Context) error {
+	if s.role == "rights" {
+		jiraURL := os.Getenv("TEAM_ACCESS_SEED_JIRA_URL")
+		if jiraURL == "" {
+			return nil
+		}
+		_, err := s.DB.Exec(ctx, `INSERT INTO ta_resources(id,team_id,kind,name,external_ref,url,capabilities,approver_id)
+ VALUES('demo-jira','demo-team','jira_project','Учебный Jira-проект',$1,$2,ARRAY['browse_issues'],'approver') ON CONFLICT(id) DO NOTHING`, os.Getenv("JIRA_PROJECT_KEY"), jiraURL)
+		return err
+	}
 	// Demo identities are explicit. Passwords are supplied by the operator, never committed.
 	seeds := []struct{ id, username, name, role, passwordEnv string }{
 		{"intern", "intern", "Стажёр", "intern", "TEAM_ACCESS_INTERN_PASSWORD"},
@@ -135,11 +153,6 @@ func (s *Service) seed(ctx context.Context) error {
 		if _, err = s.DB.Exec(ctx, `INSERT INTO ta_memberships(user_id,team_id,role) VALUES($1,$2,$3) ON CONFLICT DO NOTHING`, membership.user, membership.team, membership.role); err != nil {
 			return err
 		}
-	}
-	jiraURL := os.Getenv("TEAM_ACCESS_SEED_JIRA_URL")
-	if jiraURL != "" {
-		_, err = s.DB.Exec(ctx, `INSERT INTO ta_resources(id,team_id,kind,name,external_ref,url,capabilities,approver_id)
-   VALUES('demo-jira','demo-team','jira_project','Учебный Jira-проект',$1,$2,ARRAY['browse_issues'],'approver') ON CONFLICT(id) DO NOTHING`, os.Getenv("JIRA_PROJECT_KEY"), jiraURL)
 	}
 	return err
 }
