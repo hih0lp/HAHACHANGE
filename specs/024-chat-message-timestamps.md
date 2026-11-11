@@ -1,0 +1,3 @@
+# SDD-024: Message timestamps
+
+The chat shows a date and time in Moscow timezone beneath every Bobby answer and notification. Completed answers use the persisted `ai_jobs.completed_at`; failed answers use the same completion timestamp. Chat history returns that timestamp, so reopening the page keeps the original answer time. Jira deadline notices use their persisted `created_at`. GitLab and Calendar cards are ephemeral poll results, so they show when the card was displayed, not the MR creation time or calendar event start. The event start remains in the calendar card body. Times are rendered as `DD.MM.YYYY HH:MM МСК` with a semantic `<time datetime>` element. No new database migration is needed.

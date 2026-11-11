@@ -16,13 +16,15 @@ import (
 )
 
 type Job struct {
-	ID       string          `json:"id"`
-	Query    string          `json:"query"`
-	Scenario string          `json:"scenario"`
-	Status   string          `json:"status"`
-	Answer   string          `json:"answer,omitempty"`
-	Sources  json.RawMessage `json:"sources,omitempty"`
-	Error    string          `json:"error,omitempty"`
+	ID          string          `json:"id"`
+	Query       string          `json:"query"`
+	Scenario    string          `json:"scenario"`
+	Status      string          `json:"status"`
+	Answer      string          `json:"answer,omitempty"`
+	Sources     json.RawMessage `json:"sources,omitempty"`
+	Error       string          `json:"error,omitempty"`
+	CreatedAt   time.Time       `json:"created_at"`
+	CompletedAt *time.Time      `json:"completed_at,omitempty"`
 }
 
 type System struct {
@@ -58,7 +60,8 @@ func (s *System) SubmitWithContext(ctx context.Context, owner, scenario, query s
 		return Job{}, err
 	}
 	defer tx.Rollback(ctx)
-	_, err = tx.Exec(ctx, `INSERT INTO ai_jobs(id,owner_id,scenario,query,status,team_context) VALUES($1,$2,$3,$4,'queued',$5)`, id, owner, scenario, query, teamContext)
+	var createdAt time.Time
+	err = tx.QueryRow(ctx, `INSERT INTO ai_jobs(id,owner_id,scenario,query,status,team_context) VALUES($1,$2,$3,$4,'queued',$5) RETURNING created_at`, id, owner, scenario, query, teamContext).Scan(&createdAt)
 	if err != nil {
 		return Job{}, err
 	}
@@ -69,7 +72,7 @@ func (s *System) SubmitWithContext(ctx context.Context, owner, scenario, query s
 	if err := tx.Commit(ctx); err != nil {
 		return Job{}, err
 	}
-	job := Job{ID: id, Query: query, Scenario: scenario, Status: "queued"}
+	job := Job{ID: id, Query: query, Scenario: scenario, Status: "queued", CreatedAt: createdAt}
 	s.cache(ctx, job)
 	return job, nil
 }
@@ -77,8 +80,8 @@ func (s *System) SubmitWithContext(ctx context.Context, owner, scenario, query s
 func (s *System) Get(ctx context.Context, owner, id string) (Job, error) {
 	var job Job
 	var sources []byte
-	err := s.DB.QueryRow(ctx, `SELECT id::text, query, scenario, status, COALESCE(answer,''), sources, COALESCE(error,'') FROM ai_jobs WHERE id=$1 AND owner_id=$2`, id, owner).
-		Scan(&job.ID, &job.Query, &job.Scenario, &job.Status, &job.Answer, &sources, &job.Error)
+	err := s.DB.QueryRow(ctx, `SELECT id::text, query, scenario, status, COALESCE(answer,''), sources, COALESCE(error,''), created_at, completed_at FROM ai_jobs WHERE id=$1 AND owner_id=$2`, id, owner).
+		Scan(&job.ID, &job.Query, &job.Scenario, &job.Status, &job.Answer, &sources, &job.Error, &job.CreatedAt, &job.CompletedAt)
 	if err != nil {
 		return Job{}, err
 	}

@@ -37,6 +37,11 @@ func TestWebPageShowsOnlyAnswerWithInlineLinks(t *testing.T) {
 	if strings.Contains(page, "/v1/reminders/ws") {
 		t.Fatal("legacy reminder subscription would duplicate deadline cards")
 	}
+	for _, expected := range []string{"function messageTime(", "job.completed_at||job.created_at", "item.created_at", "timeZone:'Europe/Moscow'"} {
+		if !strings.Contains(page, expected) {
+			t.Errorf("timestamp UI missing %q", expected)
+		}
+	}
 }
 
 func TestWebPageIsChatOnly(t *testing.T) {

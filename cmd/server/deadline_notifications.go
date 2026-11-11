@@ -11,12 +11,13 @@ import (
 )
 
 type deadlineNotification struct {
-	ID      int64     `json:"id"`
-	Kind    string    `json:"kind"`
-	Key     string    `json:"key"`
-	Summary string    `json:"summary"`
-	DueAt   time.Time `json:"due_at"`
-	URL     string    `json:"url"`
+	ID        int64     `json:"id"`
+	Kind      string    `json:"kind"`
+	Key       string    `json:"key"`
+	Summary   string    `json:"summary"`
+	DueAt     time.Time `json:"due_at"`
+	URL       string    `json:"url"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 func mentorWindow(now, due time.Time) bool {
@@ -75,7 +76,7 @@ func registerDeadlineNotifications(mux *http.ServeMux, db *pgxpool.Pool, apiKey 
 		if demoRole(r) == "mentor" {
 			recipient = "approver"
 		}
-		rows, err := db.Query(r.Context(), `SELECT id,kind,issue_key,summary,due_at,issue_url FROM ai_deadline_notifications WHERE recipient_id=$1 ORDER BY created_at DESC,id DESC LIMIT 100`, recipient)
+		rows, err := db.Query(r.Context(), `SELECT id,kind,issue_key,summary,due_at,issue_url,created_at FROM ai_deadline_notifications WHERE recipient_id=$1 ORDER BY created_at DESC,id DESC LIMIT 100`, recipient)
 		if err != nil {
 			writeError(w, 503, errText("notifications unavailable"))
 			return
@@ -84,7 +85,7 @@ func registerDeadlineNotifications(mux *http.ServeMux, db *pgxpool.Pool, apiKey 
 		items := []deadlineNotification{}
 		for rows.Next() {
 			var item deadlineNotification
-			if rows.Scan(&item.ID, &item.Kind, &item.Key, &item.Summary, &item.DueAt, &item.URL) != nil {
+			if rows.Scan(&item.ID, &item.Kind, &item.Key, &item.Summary, &item.DueAt, &item.URL, &item.CreatedAt) != nil {
 				writeError(w, 503, errText("notifications unavailable"))
 				return
 			}
