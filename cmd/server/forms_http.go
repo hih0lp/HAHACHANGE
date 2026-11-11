@@ -57,12 +57,15 @@ func registerFormRoutes(mux *http.ServeMux, key string, teamURL string) {
 			writeError(w, 400, errText("confirmation required"))
 			return
 		}
-		v, err := client.SubmitForm(r.Context(), token, r.Header.Get("Idempotency-Key"), r.PathValue("id"), in.Version, in.Values)
-		if err != nil {
+		v, err := mcpTeamTool(r.Context(), strings.TrimRight(os.Getenv("RIGHTS_URL"), "/")+"/mcp/confirm", "", token, "rights_form_submit", map[string]any{
+			"form_id": r.PathValue("id"), "version": in.Version, "values": in.Values, "idempotency_key": r.Header.Get("Idempotency-Key"),
+		})
+		result, ok := v.(map[string]any)
+		if err != nil || !ok || result["id"] == nil {
 			writeError(w, 400, errText("form could not be submitted: verify fields and access"))
 			return
 		}
-		writeJSON(w, 201, v)
+		writeJSON(w, 201, result)
 	})))
 	mux.HandleFunc("GET /forms/{id}", formPage)
 }

@@ -16,14 +16,15 @@ import (
 )
 
 type answerer struct {
-	service    *rag.Service
-	url        string
-	model      string
-	client     *http.Client
-	mcpURL     string
-	mcpKey     string
-	jiraMode   string
-	teamMCPURL string
+	service      *rag.Service
+	url          string
+	model        string
+	client       *http.Client
+	mcpURL       string
+	mcpKey       string
+	jiraMode     string
+	teamMCPURL   string
+	rightsMCPURL string
 }
 
 type completionToolCall struct {
@@ -99,6 +100,17 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 		}
 		teamTools = append(teamTools, available...)
 	}
+	if teamToken != "" && a.rightsMCPURL != "" {
+		available, err := mcpTeamTools(ctx, a.rightsMCPURL, "", teamToken)
+		if err != nil {
+			return "", hits, fmt.Errorf("access-rights MCP tools/list: %w", err)
+		}
+		for _, tool := range available {
+			name := tool["function"].(map[string]any)["name"].(string)
+			toolEndpoints[name] = a.rightsMCPURL
+		}
+		teamTools = append(teamTools, available...)
+	}
 	if len(teamTools) > 0 {
 		catalogue, err := json.Marshal(teamTools)
 		if err != nil {
@@ -106,7 +118,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 		}
 		systemPrompt += "\n\nПодключённый MCP-каталог инструментов:\n" + string(catalogue) + `
 
-Если для ответа нужен инструмент, выбери его сам. Если клиент модели не сформировал нативный вызов функции, верни строго JSON без markdown: {"tool_call":{"name":"имя из каталога","arguments":{}}}. После получения результата MCP дай обычный ответ пользователю. Вопросы о задачах Jira, команде, участниках, ролях, ресурсах, правах и доступных формах требуют вызова инструмента до ответа. Когда пользователь хочет оформить обращение, найди подходящую форму через инструменты и сразу дай ссылку Markdown [Открыть форму](form_url из результата). Если пользователь спрашивает, есть ли форма, ответь только её названием и ссылкой form_url; не добавляй полей, инструкций или примеров. Параметры можно заполнить после открытия формы; не требуй их для выдачи ссылки. Если речь о доступе к конкретному ресурсу, проверь каталог ресурсов и текущее право, прежде чем описывать их. Не выдумывай идентификаторы ресурсов, названия прав и их значения даже в качестве примеров: бери их из результатов инструментов или оставь выбор открытым в форме. Не утверждай, что форма отправлена: её отправляет только пользователь нажатием кнопки после проверки полей.`
+Если для ответа нужен инструмент, выбери его сам. Если клиент модели не сформировал нативный вызов функции, верни строго JSON без markdown: {"tool_call":{"name":"имя из каталога","arguments":{}}}. После получения результата MCP дай обычный ответ пользователю. Вопросы о задачах Jira, команде, участниках, ролях, ресурсах, правах и доступных формах требуют вызова инструмента до ответа. Когда пользователь хочет оформить обращение, найди подходящую форму через инструменты сервиса прав и дай ссылку Markdown [Заполнить форму](form_url из результата). Эта ссылка показывает форму прямо в чате. Если пользователь спрашивает, есть ли форма, ответь только её названием и ссылкой form_url; не добавляй полей, инструкций или примеров. Если пользователь обсуждает поля, прочитай схему формы через инструмент и помоги их заполнить. Если речь о доступе к конкретному ресурсу, проверь каталог ресурсов и текущее право, прежде чем описывать их. Не выдумывай идентификаторы ресурсов, названия прав и их значения даже в качестве примеров: бери их из результатов инструментов или оставь выбор открытым в форме. Не утверждай, что форма отправлена: её отправляет только пользователь после проверки полей и подтверждения в чате.`
 	}
 	messages := []map[string]any{{"role": "system", "content": systemPrompt}, {"role": "user", "content": prompt}}
 	for step := 0; step < 5; step++ {
@@ -164,10 +176,14 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 					return "", hits, fmt.Errorf("unknown MCP tool")
 				}
 				token := ""
-				if endpoint == a.teamMCPURL {
+				if endpoint == a.teamMCPURL || endpoint == a.rightsMCPURL {
 					token = teamToken
 				}
-				result, toolErr := mcpTeamTool(ctx, endpoint, a.mcpKey, token, textCall.ToolCall.Name, textCall.ToolCall.Arguments)
+				key := a.mcpKey
+				if endpoint == a.rightsMCPURL {
+					key = ""
+				}
+				result, toolErr := mcpTeamTool(ctx, endpoint, key, token, textCall.ToolCall.Name, textCall.ToolCall.Arguments)
 				if toolErr != nil {
 					result = map[string]string{"error": toolErr.Error()}
 				}
@@ -201,10 +217,14 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 				return "", hits, fmt.Errorf("unknown MCP tool")
 			}
 			token := ""
-			if endpoint == a.teamMCPURL {
+			if endpoint == a.teamMCPURL || endpoint == a.rightsMCPURL {
 				token = teamToken
 			}
-			result, toolErr := mcpTeamTool(ctx, endpoint, a.mcpKey, token, call.Function.Name, args)
+			key := a.mcpKey
+			if endpoint == a.rightsMCPURL {
+				key = ""
+			}
+			result, toolErr := mcpTeamTool(ctx, endpoint, key, token, call.Function.Name, args)
 			if toolErr != nil {
 				result = map[string]string{"error": toolErr.Error()}
 			}

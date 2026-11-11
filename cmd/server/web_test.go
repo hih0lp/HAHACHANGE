@@ -45,9 +45,24 @@ func TestWebPageIsChatOnly(t *testing.T) {
 			t.Errorf("page missing %q", expected)
 		}
 	}
+	for _, expected := range []string{`openInlineForm`, `Подтвердить отправку`, `Idempotency-Key`, `teamSessionReady`} {
+		if !strings.Contains(page, expected) {
+			t.Errorf("chat form missing %q", expected)
+		}
+	}
 	for _, forbidden := range []string{`data-scenario=`, `Учебное пространство команды`, `Тестовая заявка на доступ`} {
 		if strings.Contains(page, forbidden) {
 			t.Errorf("page unexpectedly contains %q", forbidden)
 		}
+	}
+}
+
+func TestOldFormLinkReturnsToChat(t *testing.T) {
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/forms/access-request", nil)
+	request.SetPathValue("id", "access-request")
+	formPage(response, request)
+	if response.Code != http.StatusSeeOther || response.Header().Get("Location") != "/?form=access-request" {
+		t.Fatalf("status %d, location %q", response.Code, response.Header().Get("Location"))
 	}
 }

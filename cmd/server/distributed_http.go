@@ -39,7 +39,7 @@ func demoSession(secret string, next http.Handler) http.Handler {
 				}
 			}
 		}
-		if owner == "" && r.Method == http.MethodGet && r.URL.Path == "/" {
+		if owner == "" && r.Method == http.MethodGet && (r.URL.Path == "/" || strings.HasPrefix(r.URL.Path, "/forms/")) {
 			id, err := distributed.NewID()
 			if err != nil {
 				writeError(w, 500, err)

@@ -29,12 +29,22 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if os.Getenv("TEAM_ACCESS_ROLE") == "rights" { go s.PublishOutbox(ctx) }
+	if os.Getenv("TEAM_ACCESS_ROLE") == "rights" {
+		go s.PublishOutbox(ctx)
+	}
 	addr := os.Getenv("TEAM_ACCESS_LISTEN")
 	if addr == "" {
 		addr = ":8080"
 	}
-	server := &http.Server{Addr: addr, Handler: s.Routes(), ReadHeaderTimeout: 5 * time.Second}
+	handler := s.Routes()
+	if os.Getenv("TEAM_ACCESS_ROLE") == "rights" {
+		mux := http.NewServeMux()
+		mux.Handle("/mcp", newRightsMCP(false))
+		mux.Handle("/mcp/confirm", newRightsMCP(true))
+		mux.Handle("/", handler)
+		handler = mux
+	}
+	server := &http.Server{Addr: addr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 	log.Printf("team-access listening on %s", addr)
 	log.Fatal(server.ListenAndServe())
 }

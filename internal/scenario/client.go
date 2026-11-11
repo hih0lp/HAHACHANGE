@@ -140,6 +140,11 @@ func (c Client) Form(ctx context.Context, token, id string) (Form, error) {
 	err := c.rights().call(ctx, token, "GET", "/v1/forms/"+url.PathEscape(id), "", nil, &v)
 	return v, err
 }
+func (c Client) ValidateForm(ctx context.Context, token, id string, values map[string]any) (map[string]any, error) {
+	var v map[string]any
+	err := c.rights().call(ctx, token, "POST", "/v1/forms/"+url.PathEscape(id)+"/validate", "", map[string]any{"values": values}, &v)
+	return v, err
+}
 func (c Client) SubmitForm(ctx context.Context, token, idem, id string, version int, values map[string]any) (map[string]any, error) {
 	var v map[string]any
 	err := c.rights().call(ctx, token, "POST", "/v1/forms/"+url.PathEscape(id)+"/submit", idem, map[string]any{"version": version, "values": values, "confirmed": true}, &v)

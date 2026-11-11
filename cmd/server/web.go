@@ -1,10 +1,13 @@
 package main
 
-import "net/http"
+import (
+	"net/http"
+	"strings"
+)
 
 func webPage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write([]byte(pageHTML))
+	_, _ = w.Write([]byte(strings.Replace(pageHTML, "</script>", chatFormsJS+"</script>", 1)))
 }
 
 const pageHTML = `<!doctype html>
@@ -28,7 +31,7 @@ button:disabled{opacity:.55;cursor:wait}.card{margin-top:16px}pre{white-space:pr
 const form=document.getElementById('form'),results=document.getElementById('results'),status=document.getElementById('status'),button=document.getElementById('submit'),teamState=document.getElementById('team-state');
 async function connectTeamAccess(){try{const response=await fetch('/v1/team-access/session',{method:'POST'});const data=await response.json();if(!response.ok)throw Error(data.error||'Сервис команды и доступов недоступен');sessionStorage.setItem('team-access-token',data.access_token);teamState.textContent='Сервис команды и доступов подключён.';return data.access_token}catch(error){sessionStorage.removeItem('team-access-token');teamState.textContent=error.message;teamState.className='error';return ''}}
 const teamSessionReady=connectTeamAccess();
-function appendMessage(target,message){const pattern=/\[([^\]]+)\]\((https:\/\/[^\s)]+|\/forms\/[a-zA-Z0-9_-]+)\)/g;let position=0,match;while((match=pattern.exec(message))!==null){target.append(document.createTextNode(message.slice(position,match.index)));const link=document.createElement('a');link.href=match[2];link.target='_blank';link.rel='noopener noreferrer';link.textContent=match[1];target.append(link);position=pattern.lastIndex}target.append(document.createTextNode(message.slice(position)))}
+function appendMessage(target,message){const pattern=/\[([^\]]+)\]\((https:\/\/[^\s)]+|\/forms\/[a-zA-Z0-9_-]+)\)/g;let position=0,match;while((match=pattern.exec(message))!==null){target.append(document.createTextNode(message.slice(position,match.index)));if(match[2].startsWith('/forms/')){const button=document.createElement('button');button.type='button';button.textContent=match[1];button.onclick=()=>openInlineForm(target.parentElement,match[2].slice(7));target.append(button)}else{const link=document.createElement('a');link.href=match[2];link.target='_blank';link.rel='noopener noreferrer';link.textContent=match[1];target.append(link)}position=pattern.lastIndex}target.append(document.createTextNode(message.slice(position)))}
 function showJob(card,job){const state=card.querySelector('[data-state]'),body=card.querySelector('[data-body]');
 state.textContent=job.status==='queued'?'В очереди':job.status==='running'?'Готовим ответ':job.status==='completed'?'Готово':'Ошибка';
 if(job.status==='completed'){body.replaceChildren();const answer=document.createElement('pre');appendMessage(answer,job.answer);body.append(answer)}
