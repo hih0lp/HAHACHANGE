@@ -11,6 +11,7 @@ unless File.exist?(path)
   tokens = {}
   map.each do |directory_id, username|
     user = User.find_by_username(username) or raise "missing #{username}"
+    user.personal_access_tokens.where(name: 'bobby-demo-mcp').each(&:revoke!)
     pat = user.personal_access_tokens.create!(name: 'bobby-demo-mcp', scopes: [:api], expires_at: Date.today + 30)
     tokens[directory_id] = pat.token
   end
