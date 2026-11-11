@@ -19,12 +19,15 @@ button{background:#005bff;color:white;border:0;border-radius:8px;padding:12px 22
 button:disabled{opacity:.55;cursor:wait}.card{margin-top:16px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;line-height:1.5}
 .meta{color:#586173;font-size:14px}.error{color:#b42318}#results{display:flex;flex-direction:column;gap:12px;min-height:42vh;margin:18px 0}.bubble{max-width:82%;padding:14px 18px;border-radius:16px;background:white;border:1px solid #e1e5ed;overflow-wrap:anywhere}.bubble.user{align-self:flex-end;background:#e9f0ff}.bubble.assistant{align-self:flex-start}.bubble pre{margin:8px 0 0}.bubble h2{font-size:14px;margin:0 0 6px}
 </style></head><body><main><h1>Бобби · AI-buddy</h1>
+<p id="team-state" class="meta">Подключаю сервис команды и доступов…</p>
 <section id="results" aria-label="Сообщения чата" aria-live="polite"></section>
 <form id="form"><label for="query">Сообщение</label><input id="query" required minlength="2" placeholder="Спросите о задаче или онбординге">
 <label for="key">API-ключ (если задан на сервере)</label><input id="key" type="password" autocomplete="off" placeholder="Необязательно">
 <button id="submit" type="submit" value="ask">Отправить</button></form><p id="status" role="status"></p></main>
 <script>
-const form=document.getElementById('form'),results=document.getElementById('results'),status=document.getElementById('status'),button=document.getElementById('submit');
+const form=document.getElementById('form'),results=document.getElementById('results'),status=document.getElementById('status'),button=document.getElementById('submit'),teamState=document.getElementById('team-state');
+async function connectTeamAccess(){try{const response=await fetch('/v1/team-access/session',{method:'POST'});const data=await response.json();if(!response.ok)throw Error(data.error||'Сервис команды и доступов недоступен');sessionStorage.setItem('team-access-token',data.access_token);teamState.textContent='Сервис команды и доступов подключён.';return data.access_token}catch(error){sessionStorage.removeItem('team-access-token');teamState.textContent=error.message;teamState.className='error';return ''}}
+const teamSessionReady=connectTeamAccess();
 function appendMessage(target,message){const pattern=/\[([^\]]+)\]\((https:\/\/[^\s)]+)\)/g;let position=0,match;while((match=pattern.exec(message))!==null){target.append(document.createTextNode(message.slice(position,match.index)));const link=document.createElement('a');link.href=match[2];link.target='_blank';link.rel='noopener noreferrer';link.textContent=match[1];target.append(link);position=pattern.lastIndex}target.append(document.createTextNode(message.slice(position)))}
 function showJob(card,job){const state=card.querySelector('[data-state]'),body=card.querySelector('[data-body]');
 state.textContent=job.status==='queued'?'В очереди':job.status==='running'?'Готовим ответ':job.status==='completed'?'Готово':'Ошибка';
@@ -37,7 +40,7 @@ socket.onclose=()=>{if(!finished)pollJob(job.id,card,key)};socket.onerror=()=>so
 async function pollJob(id,card,key){for(;;){await new Promise(resolve=>setTimeout(resolve,2000));try{const headers={};if(key)headers['X-API-Key']=key;const response=await fetch('/v1/jobs/'+id,{headers});if(!response.ok)throw Error('HTTP '+response.status);const job=await response.json();showJob(card,job);if(job.status==='completed'||job.status==='failed')return}catch(error){card.querySelector('[data-state]').textContent='Переподключение…'}}}
 form.addEventListener('submit',async event=>{event.preventDefault();const query=document.getElementById('query').value,key=document.getElementById('key').value;
 button.disabled=true;status.textContent='Отправляю…';status.className='';
-try{const headers={'Content-Type':'application/json'};if(key)headers['X-API-Key']=key;const teamToken=sessionStorage.getItem('team-access-token');if(teamToken)headers.Authorization='Bearer '+teamToken;
+try{const teamToken=await teamSessionReady;if(!teamToken)throw Error('Сервис команды и доступов не подключён. Обновите страницу.');const headers={'Content-Type':'application/json'};if(key)headers['X-API-Key']=key;headers.Authorization='Bearer '+teamToken;
 const response=await fetch('/v1/jobs',{method:'POST',headers,body:JSON.stringify({query,scenario:'general'})});
 const data=await response.json();if(!response.ok)throw Error(data.error||'HTTP '+response.status);
 const user=document.createElement('div');user.className='bubble user';user.textContent=query;results.append(user);const card=document.createElement('article');card.className='bubble assistant';const title=document.createElement('h2');title.textContent='AI-buddy';const state=document.createElement('div');state.className='meta';state.dataset.state='';const body=document.createElement('div');body.dataset.body='';card.append(title,state,body);results.append(card);showJob(card,data);watchJob(data,card,key);document.getElementById('query').value='';status.textContent='Запрос принят: '+data.id

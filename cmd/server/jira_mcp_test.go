@@ -4,71 +4,26 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
-
-	"github.com/hackchange/avito-rag/internal/rag"
 )
 
-func TestAgentReadsJiraThroughMCP(t *testing.T) {
+func TestJiraCatalogueAndCallThroughMCP(t *testing.T) {
 	jira := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		user, pass, ok := r.BasicAuth()
-		if !ok || user != "user@example.test" || pass != "test-token" {
-			t.Error("Jira credentials missing")
-		}
-		switch r.URL.Path {
-		case "/rest/api/3/issue/SCRUM-5":
-			w.Write([]byte(`{"key":"SCRUM-5","fields":{"summary":"Тестовая заявка","status":{"name":"К выполнению"},"description":{"content":[{"content":[{"type":"text","text":"Учебный запрос"}]}]}}}`))
-		case "/rest/api/3/search/jql":
-			w.Write([]byte(`{"issues":[{"key":"SCRUM-5","fields":{"summary":"Тестовая заявка","status":{"name":"К выполнению"}}}]}`))
-		default:
+		if r.URL.Path != "/rest/api/3/search/jql" {
 			http.NotFound(w, r)
+			return
 		}
+		_, _ = w.Write([]byte(`{"issues":[{"key":"SCRUM-5","fields":{"summary":"Тестовая задача","status":{"name":"To Do"}}}]}`))
 	}))
 	defer jira.Close()
-	cfg := jiraConfig{Mode: "live", BaseURL: jira.URL, ProjectKey: "SCRUM", Email: "user@example.test", APIToken: "test-token"}
-	mcpServer := httptest.NewServer(newJiraMCP(cfg))
-	defer mcpServer.Close()
-	issue, used, err := mcpJiraContext(context.Background(), mcpServer.URL, "", "Какой статус SCRUM-5?")
-	if err != nil || !used || !strings.Contains(issue, "Учебный запрос") || !strings.Contains(issue, "К выполнению") {
-		t.Fatalf("issue: used=%v err=%v data=%s", used, err, issue)
+	server := httptest.NewServer(newJiraMCP(jiraConfig{Mode: "live", BaseURL: jira.URL, ProjectKey: "SCRUM", Email: "test@example.org", APIToken: "token"}))
+	defer server.Close()
+	tools, err := mcpTeamTools(context.Background(), server.URL, "", "")
+	if err != nil || len(tools) != 2 {
+		t.Fatalf("MCP catalogue: count=%d err=%v", len(tools), err)
 	}
-	list, used, err := mcpJiraContext(context.Background(), mcpServer.URL, "", "Покажи задачи Jira")
-	if err != nil || !used || !strings.Contains(list, "SCRUM-5") {
-		t.Fatalf("list: used=%v err=%v data=%s", used, err, list)
-	}
-	for _, question := range []string{"Как пройти онбординг?", "Помоги решить задачу по математике", "Что такое Jira?"} {
-		if _, used, err := mcpJiraContext(context.Background(), mcpServer.URL, "", question); used || err != nil {
-			t.Fatalf("unrelated query %q: used=%v err=%v", question, used, err)
-		}
-	}
-}
-
-func TestAskAddsJiraLinksInsideMessage(t *testing.T) {
-	jira := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/rest/api/3/issue/SCRUM-5":
-			_, _ = w.Write([]byte(`{"key":"SCRUM-5","fields":{"summary":"Тестовая задача","status":{"name":"To Do"}}}`))
-		case "/rest/api/3/search/jql":
-			_, _ = w.Write([]byte(`{"issues":[{"key":"SCRUM-5","fields":{"summary":"Тестовая задача","status":{"name":"To Do"}}}]}`))
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer jira.Close()
-	mcp := httptest.NewServer(newJiraMCP(jiraConfig{Mode: "live", BaseURL: jira.URL, ProjectKey: "SCRUM", Email: "test@example.org", APIToken: "token"}))
-	defer mcp.Close()
-	llm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"Это тестовая задача."}}]}`))
-	}))
-	defer llm.Close()
-	t.Setenv("MCP_URL", mcp.URL)
-	t.Setenv("LLM_URL", llm.URL)
-	handler := testHandlerWithConfig(t, config{Jira: jiraConfig{Mode: "live"}, RAG: rag.Config{CollectionName: "playbook"}})
-	for _, query := range []string{"Какой статус SCRUM-5?", "Покажи задачи Jira"} {
-		response := call(handler, http.MethodPost, "/v1/ask", `{"query":"`+query+`"}`, "")
-		if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "SCRUM-5") || !strings.Contains(response.Body.String(), jira.URL+"/browse/SCRUM-5") {
-			t.Fatalf("query %q: %d %s", query, response.Code, response.Body.String())
-		}
+	result, err := mcpTeamTool(context.Background(), server.URL, "", "", "jira_list_issues", map[string]any{})
+	if err != nil || result == nil {
+		t.Fatalf("MCP tool call: result=%v err=%v", result, err)
 	}
 }

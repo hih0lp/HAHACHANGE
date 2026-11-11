@@ -49,6 +49,7 @@ func (s *Service) Routes() http.Handler {
 	mux.HandleFunc("GET /.well-known/jwks.json", s.jwks)
 	mux.HandleFunc("POST /v1/auth/login", s.login)
 	mux.HandleFunc("GET /v1/me", s.auth(s.me))
+	mux.HandleFunc("GET /v1/teams/{team_id}/members", s.auth(s.members))
 	mux.HandleFunc("GET /v1/teams/{team_id}/resources", s.auth(s.resources))
 	mux.HandleFunc("POST /v1/access/check", s.auth(s.check))
 	mux.HandleFunc("POST /v1/access-requests", s.auth(s.createRequest))
@@ -92,6 +93,49 @@ func (s *Service) me(w http.ResponseWriter, r *http.Request) {
 	}
 	respond(w, 200, map[string]any{"id": id, "display_name": name, "roles": roles, "teams": teams, "current_team_id": current})
 }
+
+// members returns only the directory of a team the caller belongs to. Possession
+// of an arbitrary team ID does not grant access to another team's people.
+func (s *Service) members(w http.ResponseWriter, r *http.Request) {
+	team := r.PathValue("team_id")
+	var allowed bool
+	if err := s.DB.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM ta_memberships WHERE user_id=$1 AND team_id=$2)`, user(r), team).Scan(&allowed); err != nil {
+		fail(w, 503, "dependency_unavailable", "Team directory unavailable")
+		return
+	}
+	if !allowed {
+		fail(w, 404, "not_found", "Team not found")
+		return
+	}
+	rows, err := s.DB.Query(r.Context(), `
+		SELECT u.id, u.display_name, m.role, t.mentor_id=u.id, t.lead_id=u.id
+		FROM ta_memberships m
+		JOIN ta_users u ON u.id=m.user_id
+		JOIN ta_teams t ON t.id=m.team_id
+		WHERE m.team_id=$1
+		ORDER BY (t.lead_id=u.id) DESC, (t.mentor_id=u.id) DESC, u.display_name, u.id`, team)
+	if err != nil {
+		fail(w, 503, "dependency_unavailable", "Team directory unavailable")
+		return
+	}
+	defer rows.Close()
+	members := []any{}
+	for rows.Next() {
+		var id, name, role string
+		var mentor, lead bool
+		if err := rows.Scan(&id, &name, &role, &mentor, &lead); err != nil {
+			fail(w, 503, "dependency_unavailable", "Team directory unavailable")
+			return
+		}
+		members = append(members, map[string]any{"id": id, "display_name": name, "role": role, "is_mentor": mentor, "is_lead": lead})
+	}
+	if err := rows.Err(); err != nil {
+		fail(w, 503, "dependency_unavailable", "Team directory unavailable")
+		return
+	}
+	respond(w, 200, map[string]any{"team_id": team, "members": members})
+}
+
 func (s *Service) resources(w http.ResponseWriter, r *http.Request) {
 	team := r.PathValue("team_id")
 	var member bool

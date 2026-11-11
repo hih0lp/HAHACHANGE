@@ -22,6 +22,13 @@ type LoginResult struct {
 	TokenType   string `json:"token_type"`
 	ExpiresIn   int    `json:"expires_in"`
 }
+type Member struct {
+	ID          string `json:"id"`
+	DisplayName string `json:"display_name"`
+	Role        string `json:"role"`
+	IsMentor    bool   `json:"is_mentor"`
+	IsLead      bool   `json:"is_lead"`
+}
 
 func (c Client) Login(ctx context.Context, username, password string) (LoginResult, error) {
 	var v LoginResult
@@ -82,6 +89,14 @@ func (c Client) Resources(ctx context.Context, t, team string) ([]Resource, erro
 	}
 	e := c.call(ctx, t, "GET", "/v1/teams/"+url.PathEscape(team)+"/resources", "", nil, &v)
 	return v.Resources, e
+}
+
+func (c Client) Members(ctx context.Context, t, team string) ([]Member, error) {
+	var v struct {
+		Members []Member `json:"members"`
+	}
+	err := c.call(ctx, t, "GET", "/v1/teams/"+url.PathEscape(team)+"/members", "", nil, &v)
+	return v.Members, err
 }
 func (c Client) Check(ctx context.Context, t, id, capability string) (Check, error) {
 	var v Check

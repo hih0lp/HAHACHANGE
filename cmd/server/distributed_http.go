@@ -23,6 +23,11 @@ type ownerKey struct{}
 
 func demoSession(secret string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The worker calls the local MCP bridge on behalf of a browser job. It
+		// authenticates that call with the team's bearer token; it does not have
+		// the browser-only demo-session cookie.
+		internalTeamMCP := r.URL.Path == "/team-mcp" && strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ")
+		internalJiraMCP := r.URL.Path == "/mcp"
 		var owner string
 		if cookie, err := r.Cookie("ai_demo_session"); err == nil {
 			parts := strings.Split(cookie.Value, ".")
@@ -45,7 +50,7 @@ func demoSession(secret string, next http.Handler) http.Handler {
 			mac.Write([]byte(id))
 			http.SetCookie(w, &http.Cookie{Name: "ai_demo_session", Value: id + "." + hex.EncodeToString(mac.Sum(nil)), Path: "/", HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteLaxMode, MaxAge: 86400})
 		}
-		if owner == "" {
+		if owner == "" && !internalTeamMCP && !internalJiraMCP {
 			writeError(w, 401, errText("open the application to start a demo session"))
 			return
 		}
@@ -79,20 +84,25 @@ func registerDistributedJobRoutes(mux *http.ServeMux, jobs *distributed.System, 
 			writeError(w, 400, errText("unknown scenario"))
 			return
 		}
-		var contextJSON json.RawMessage
+		teamToken := ""
 		if endpoint := os.Getenv("TEAM_ACCESS_URL"); endpoint != "" {
 			if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
-				var contextErr error
-				contextJSON, contextErr = teamAccessContext(r.Context(), scenario.Client{BaseURL: endpoint}, strings.TrimPrefix(auth, "Bearer "))
-				if contextErr != nil {
+				teamToken = strings.TrimPrefix(auth, "Bearer ")
+				// Validate the credential here, but do not prefetch team data. The
+				// model chooses read-only tools later in the worker.
+				if _, err := (scenario.Client{BaseURL: endpoint}).Profile(r.Context(), teamToken); err != nil {
 					writeError(w, 503, errText("team access verification failed"))
 					return
 				}
 			}
 		}
-		job, err := jobs.SubmitWithContext(r.Context(), ownerFrom(r), input.Scenario, input.Query, contextJSON)
+		job, err := jobs.Submit(r.Context(), ownerFrom(r), input.Scenario, input.Query)
 		if err != nil {
 			writeError(w, 503, errText("request storage is unavailable"))
+			return
+		}
+		if err = jobs.StoreTeamToken(r.Context(), job.ID, teamToken); err != nil {
+			writeError(w, 503, errText("team access tools are temporarily unavailable"))
 			return
 		}
 		w.Header().Set("Location", "/v1/jobs/"+job.ID)

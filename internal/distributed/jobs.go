@@ -160,10 +160,45 @@ func (s *System) RequeueExpired(ctx context.Context) error {
 type AnswerFunc func(context.Context, string) (string, any, error)
 
 type teamContextKey struct{}
+type teamTokenKey struct{}
 
 func TeamContext(ctx context.Context) string {
 	v, _ := ctx.Value(teamContextKey{}).(string)
 	return v
+}
+
+// TeamToken is kept only in Redis for the lifetime of a queued job. It is
+// deliberately never written to PostgreSQL, Kafka or an LLM prompt.
+func TeamToken(ctx context.Context) string {
+	v, _ := ctx.Value(teamTokenKey{}).(string)
+	return v
+}
+
+func (s *System) StoreTeamToken(ctx context.Context, jobID, token string) error {
+	if token == "" {
+		return nil
+	}
+	if s.Redis == nil {
+		return errors.New("redis is required for team-access tools")
+	}
+	return s.Redis.Set(ctx, "ai-job-team-token:"+jobID, token, 15*time.Minute).Err()
+}
+
+func (s *System) teamToken(ctx context.Context, jobID string) string {
+	if s.Redis == nil {
+		return ""
+	}
+	token, err := s.Redis.Get(ctx, "ai-job-team-token:"+jobID).Result()
+	if err != nil {
+		return ""
+	}
+	return token
+}
+
+func (s *System) clearTeamToken(ctx context.Context, jobID string) {
+	if s.Redis != nil {
+		_ = s.Redis.Del(ctx, "ai-job-team-token:"+jobID).Err()
+	}
 }
 
 func (s *System) ProcessOne(ctx context.Context, id string, answer AnswerFunc, timeout time.Duration) error {
@@ -185,6 +220,7 @@ func (s *System) ProcessOne(ctx context.Context, id string, answer AnswerFunc, t
 	s.cache(ctx, Job{ID: id, Status: "running"})
 	workCtx, cancel := context.WithTimeout(ctx, timeout)
 	workCtx = context.WithValue(workCtx, teamContextKey{}, string(teamContext))
+	workCtx = context.WithValue(workCtx, teamTokenKey{}, s.teamToken(ctx, id))
 	answerText, sources, workErr := answer(workCtx, query)
 	cancel()
 	if workErr != nil {
@@ -210,6 +246,7 @@ func (s *System) ProcessOne(ctx context.Context, id string, answer AnswerFunc, t
 		WHERE id=$1 AND lease_token=$2 AND status='running'`, id, lease, answerText, encoded)
 	if err == nil {
 		s.cache(ctx, Job{ID: id, Status: "completed"})
+		s.clearTeamToken(ctx, id)
 	}
 	return err
 }

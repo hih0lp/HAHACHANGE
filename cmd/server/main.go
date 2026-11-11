@@ -70,7 +70,9 @@ func newHandler(service *rag.Service, cfg config) http.Handler {
 		registerDistributedJobRoutes(mux, cfg.Distributed, cfg.APIKey)
 		registerHistoryRoutes(mux, cfg.APIKey, cfg.Distributed)
 		if endpoint := os.Getenv("TEAM_ACCESS_URL"); endpoint != "" {
-			registerScenarioRoutes(mux, scenario.Store{DB: cfg.Distributed.DB}, scenario.Client{BaseURL: endpoint})
+			teamClient := scenario.Client{BaseURL: endpoint}
+			registerTeamSessionRoute(mux, teamClient)
+			registerScenarioRoutes(mux, scenario.Store{DB: cfg.Distributed.DB}, teamClient)
 		}
 	} else {
 		jobs := newJobManager(envInt("JOB_WORKERS", 2), envInt("JOB_QUEUE_SIZE", 32), time.Duration(envInt("JOB_TIMEOUT_SECONDS", 180))*time.Second, answer.Ask)
@@ -85,6 +87,12 @@ func newHandler(service *rag.Service, cfg config) http.Handler {
 	mux.Handle("POST /mcp", mcpHandler)
 	mux.Handle("GET /mcp", mcpHandler)
 	mux.Handle("DELETE /mcp", mcpHandler)
+	if endpoint := os.Getenv("TEAM_ACCESS_URL"); endpoint != "" {
+		teamMCPHandler := authorize(cfg.APIKey, newTeamMCP(endpoint))
+		mux.Handle("POST /team-mcp", teamMCPHandler)
+		mux.Handle("GET /team-mcp", teamMCPHandler)
+		mux.Handle("DELETE /team-mcp", teamMCPHandler)
+	}
 	mux.HandleFunc("GET /", webPage)
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		count, err := service.Count(r.Context())

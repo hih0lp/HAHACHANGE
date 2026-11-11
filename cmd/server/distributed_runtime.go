@@ -71,9 +71,12 @@ func runDistributed(cfg config) error {
 		reader := kafka.NewReader(kafka.ReaderConfig{Brokers: brokers, Topic: topic, GroupID: env("KAFKA_GROUP", "ai-buddy-workers"), StartOffset: kafka.FirstOffset, MinBytes: 1, MaxBytes: 10e6})
 		defer reader.Close()
 		system.Reader = reader
-		answer := answerer{service: service, url: env("LLM_URL", "http://host.docker.internal:1234"), model: env("LLM_MODEL", "qwen3-8b"), mcpURL: env("MCP_URL", "http://api:8000/mcp"), mcpKey: cfg.APIKey, jiraMode: cfg.Jira.Mode}
+		answer := answerer{service: service, url: env("LLM_URL", "http://host.docker.internal:1234"), model: env("LLM_MODEL", "qwen3-8b"), mcpURL: env("MCP_URL", "http://api:8000/mcp"), mcpKey: cfg.APIKey, jiraMode: cfg.Jira.Mode, teamMCPURL: "http://api:8000/team-mcp"}
 		return system.Work(ctx, func(ctx context.Context, question string) (string, any, error) {
 			text, sources, err := answer.Ask(ctx, question)
+			if err != nil {
+				log.Printf("agent answer failed: %v", err)
+			}
 			return text, sources, err
 		}, time.Duration(envInt("JOB_TIMEOUT_SECONDS", 180))*time.Second)
 	}

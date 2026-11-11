@@ -102,12 +102,37 @@ func (s *Service) seed(ctx context.Context) error {
 			return err
 		}
 	}
-	_, err := s.DB.Exec(ctx, `INSERT INTO ta_teams(id,name,mentor_id,lead_id) VALUES('demo-team','Учебная команда','approver','approver') ON CONFLICT(id) DO NOTHING`)
-	if err != nil {
-		return err
+	var err error
+	directory := []struct{ id, username, name string }{
+		{"catalog-lead", "catalog.lead", "Алексей Морозов"}, {"catalog-mentor", "catalog.mentor", "Вера Соколова"}, {"catalog-dev", "catalog.dev", "Ирина Белова"},
+		{"search-lead", "search.lead", "Павел Орлов"}, {"search-mentor", "search.mentor", "Мария Котова"}, {"search-analyst", "search.analyst", "Денис Романов"},
+		{"platform-lead", "platform.lead", "Ольга Крылова"}, {"platform-mentor", "platform.mentor", "Сергей Лебедев"}, {"platform-dev", "platform.dev", "Наталья Волкова"},
 	}
-	for _, u := range seeds {
-		if _, err = s.DB.Exec(ctx, `INSERT INTO ta_memberships(user_id,team_id,role) VALUES($1,'demo-team',$2) ON CONFLICT DO NOTHING`, u.id, u.role); err != nil {
+	for _, u := range directory {
+		// These are directory records, not provisioned login accounts.
+		if _, err = s.DB.Exec(ctx, `INSERT INTO ta_users(id,username,display_name,password_hash) VALUES($1,$2,$3,'!') ON CONFLICT(id) DO NOTHING`, u.id, u.username, u.name); err != nil {
+			return err
+		}
+	}
+	teams := []struct{ id, name, mentor, lead string }{
+		{"demo-team", "Учебная команда", "approver", "approver"},
+		{"catalog-team", "Каталог и продавец", "catalog-mentor", "catalog-lead"},
+		{"search-team", "Поиск и рекомендации", "search-mentor", "search-lead"},
+		{"platform-team", "Платформа разработки", "platform-mentor", "platform-lead"},
+	}
+	for _, team := range teams {
+		if _, err = s.DB.Exec(ctx, `INSERT INTO ta_teams(id,name,mentor_id,lead_id) VALUES($1,$2,$3,$4) ON CONFLICT(id) DO NOTHING`, team.id, team.name, team.mentor, team.lead); err != nil {
+			return err
+		}
+	}
+	memberships := []struct{ user, team, role string }{
+		{"intern", "demo-team", "intern"}, {"intern2", "demo-team", "intern"}, {"approver", "demo-team", "approver"},
+		{"catalog-lead", "catalog-team", "lead"}, {"catalog-mentor", "catalog-team", "mentor"}, {"catalog-dev", "catalog-team", "developer"}, {"approver", "catalog-team", "approver"},
+		{"search-lead", "search-team", "lead"}, {"search-mentor", "search-team", "mentor"}, {"search-analyst", "search-team", "analyst"}, {"intern2", "search-team", "intern"}, {"approver", "search-team", "approver"},
+		{"platform-lead", "platform-team", "lead"}, {"platform-mentor", "platform-team", "mentor"}, {"platform-dev", "platform-team", "developer"}, {"approver", "platform-team", "approver"},
+	}
+	for _, membership := range memberships {
+		if _, err = s.DB.Exec(ctx, `INSERT INTO ta_memberships(user_id,team_id,role) VALUES($1,$2,$3) ON CONFLICT DO NOTHING`, membership.user, membership.team, membership.role); err != nil {
 			return err
 		}
 	}
