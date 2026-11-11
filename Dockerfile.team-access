@@ -3,6 +3,7 @@ WORKDIR /src
 COPY go.mod go.sum ./
 COPY cmd/team-access ./cmd/team-access
 COPY internal/teamaccess ./internal/teamaccess
+COPY internal/scenario ./internal/scenario
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/team-access ./cmd/team-access
 
 FROM golang:1.23-alpine
