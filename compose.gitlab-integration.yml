@@ -1,4 +1,8 @@
 services:
+  api:
+    environment:
+      GITLAB_MCP_URL: http://gitlab-integration:8080/mcp
+      GITLAB_REMINDER_PROJECT: ${GITLAB_REMINDER_PROJECT:-2}
   worker:
     environment:
       GITLAB_MCP_URL: http://gitlab-integration:8080/mcp

@@ -1,4 +1,7 @@
 services:
+  api:
+    environment:
+      CALENDAR_MCP_URL: http://calendar-integration:8080/mcp
   worker:
     environment:
       CALENDAR_MCP_URL: http://calendar-integration:8080/mcp

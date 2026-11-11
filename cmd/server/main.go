@@ -86,6 +86,8 @@ func newHandler(service *rag.Service, cfg config) http.Handler {
 	// registerAccessRoutes(mux, cfg.APIKey, cfg.Jira)
 	// registerDistributedAccessRoutes(mux, cfg.APIKey, cfg.Jira, cfg.Distributed)
 	registerReminderRoutes(mux, cfg.APIKey, cfg.Jira, cfg.Reminder)
+	registerGitLabReminderRoute(mux, os.Getenv("GITLAB_MCP_URL"), os.Getenv("GITLAB_REMINDER_PROJECT"))
+	registerCalendarReminderRoute(mux, os.Getenv("CALENDAR_MCP_URL"))
 	mcpHandler := authorize(cfg.APIKey, newJiraMCP(cfg.Jira))
 	mux.Handle("POST /mcp", mcpHandler)
 	mux.Handle("GET /mcp", mcpHandler)
