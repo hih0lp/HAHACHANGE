@@ -16,16 +16,17 @@ import (
 )
 
 type answerer struct {
-	service      *rag.Service
-	url          string
-	model        string
-	client       *http.Client
-	mcpURL       string
-	mcpKey       string
-	jiraMode     string
-	teamMCPURL   string
-	rightsMCPURL string
-	gitLabMCPURL string
+	service        *rag.Service
+	url            string
+	model          string
+	client         *http.Client
+	mcpURL         string
+	mcpKey         string
+	jiraMode       string
+	teamMCPURL     string
+	rightsMCPURL   string
+	gitLabMCPURL   string
+	calendarMCPURL string
 }
 
 type completionToolCall struct {
@@ -126,6 +127,18 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 			}
 		}
 	}
+	if teamToken != "" && a.calendarMCPURL != "" {
+		available, err := mcpTeamTools(ctx, a.calendarMCPURL, "", teamToken)
+		if err == nil {
+			for _, tool := range available {
+				name := tool["function"].(map[string]any)["name"].(string)
+				if _, exists := toolEndpoints[name]; !exists {
+					toolEndpoints[name] = a.calendarMCPURL
+					teamTools = append(teamTools, tool)
+				}
+			}
+		}
+	}
 	if len(teamTools) > 0 {
 		catalogue, err := json.Marshal(teamTools)
 		if err != nil {
@@ -138,18 +151,6 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 	messages := []map[string]any{{"role": "system", "content": systemPrompt}, {"role": "user", "content": prompt}}
 	for step := 0; step < 5; step++ {
 		payload := map[string]any{"model": a.model, "stream": false, "messages": messages}
-		if teamToken != "" && a.gitLabMCPURL != "" {
-			available, err := mcpTeamTools(ctx, a.gitLabMCPURL, "", teamToken)
-			if err == nil {
-				for _, tool := range available {
-					name := tool["function"].(map[string]any)["name"].(string)
-					if _, exists := toolEndpoints[name]; !exists {
-						toolEndpoints[name] = a.gitLabMCPURL
-						teamTools = append(teamTools, tool)
-					}
-				}
-			}
-		}
 		if len(teamTools) > 0 {
 			payload["tools"] = teamTools
 			payload["tool_choice"] = "auto"
@@ -203,11 +204,11 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 					return "", hits, fmt.Errorf("unknown MCP tool")
 				}
 				token := ""
-				if endpoint == a.teamMCPURL || endpoint == a.rightsMCPURL || endpoint == a.gitLabMCPURL {
+				if endpoint == a.teamMCPURL || endpoint == a.rightsMCPURL || endpoint == a.gitLabMCPURL || endpoint == a.calendarMCPURL {
 					token = teamToken
 				}
 				key := a.mcpKey
-				if endpoint == a.rightsMCPURL || endpoint == a.gitLabMCPURL {
+				if endpoint == a.rightsMCPURL || endpoint == a.gitLabMCPURL || endpoint == a.calendarMCPURL {
 					key = ""
 				}
 				result, toolErr := mcpTeamTool(ctx, endpoint, key, token, textCall.ToolCall.Name, textCall.ToolCall.Arguments)
@@ -244,11 +245,11 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 				return "", hits, fmt.Errorf("unknown MCP tool")
 			}
 			token := ""
-			if endpoint == a.teamMCPURL || endpoint == a.rightsMCPURL || endpoint == a.gitLabMCPURL {
+			if endpoint == a.teamMCPURL || endpoint == a.rightsMCPURL || endpoint == a.gitLabMCPURL || endpoint == a.calendarMCPURL {
 				token = teamToken
 			}
 			key := a.mcpKey
-			if endpoint == a.rightsMCPURL || endpoint == a.gitLabMCPURL {
+			if endpoint == a.rightsMCPURL || endpoint == a.gitLabMCPURL || endpoint == a.calendarMCPURL {
 				key = ""
 			}
 			result, toolErr := mcpTeamTool(ctx, endpoint, key, token, call.Function.Name, args)

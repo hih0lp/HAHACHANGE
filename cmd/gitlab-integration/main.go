@@ -29,11 +29,17 @@ type operation struct {
 }
 
 var operations = []operation{
+	{"gitlab_projects", "List up to 25 projects visible to the connected GitLab account.", "", false, false},
 	{"gitlab_tree", "List repository files and directories at a branch, tag or commit. Returns the first 25 entries.", "/repository/tree", false, false},
+	{"gitlab_branches", "List up to 25 repository branches.", "/repository/branches", false, false},
+	{"gitlab_tags", "List up to 25 repository tags.", "/repository/tags", false, false},
 	{"gitlab_file", "Read a repository file as text at a specified branch, tag or commit.", "/repository/files", false, true},
 	{"gitlab_commits", "List the latest 25 commits at a branch, tag or commit, optionally filtered by file path.", "/repository/commits", false, false},
 	{"gitlab_commit_diff", "Read changes in a commit. Provide its SHA as id.", "/repository/commits", true, false},
 	{"gitlab_merge_requests", "List up to 25 open merge requests and their review status metadata.", "/merge_requests", false, false},
+	{"gitlab_review_reminders", "List up to 25 open non-draft merge requests to follow up. The result does not claim required approvals unless GitLab confirms them.", "/merge_requests", false, false},
+	{"gitlab_merge_request", "Read a merge request and its current metadata. Provide the project-local MR number as id.", "/merge_requests", true, false},
+	{"gitlab_merge_request_notes", "Read up to 25 comments on a merge request. Provide the project-local MR number as id.", "/merge_requests", true, false},
 	{"gitlab_merge_request_diff", "Read changes in a merge request. Provide the project-local MR number as id.", "/merge_requests", true, false},
 	{"gitlab_approval_state", "Read GitLab approval rules and status for a merge request. Provide the project-local MR number as id.", "/merge_requests", true, false},
 	{"gitlab_pipelines", "List up to 25 recent pipelines, optionally filtered by ref.", "/pipelines", false, false},
@@ -66,12 +72,18 @@ func (b bridge) authorize(r *http.Request) bool {
 }
 
 func (b bridge) call(ctx context.Context, op operation, in query) (map[string]any, error) {
-	if in.Project == "" || in.Project == "." || in.Project == ".." || in.ID == "." || in.ID == ".." || in.Path == "." || in.Path == ".." || (op.requiresID && in.ID == "") || (op.requiresFile && (in.Path == "" || in.Ref == "")) {
+	if (op.name != "gitlab_projects" && in.Project == "") || in.Project == "." || in.Project == ".." || in.ID == "." || in.ID == ".." || in.Path == "." || in.Path == ".." || (op.requiresID && in.ID == "") || (op.requiresFile && (in.Path == "" || in.Ref == "")) {
 		return nil, errors.New("project and the required tool arguments must be supplied")
+	}
+	if op.name == "gitlab_review_reminders" {
+		return b.reviewReminders(ctx, in.Project)
 	}
 	path := "/api/v4/projects/" + url.PathEscape(in.Project) + op.suffix
 	values := url.Values{"per_page": {"25"}}
 	switch op.name {
+	case "gitlab_projects":
+		path = "/api/v4/projects"
+		values.Set("membership", "true")
 	case "gitlab_file":
 		path += "/" + url.PathEscape(in.Path) + "/raw"
 		values.Set("ref", in.Ref)
@@ -99,6 +111,10 @@ func (b bridge) call(ctx context.Context, op operation, in query) (map[string]an
 		path += "/" + url.PathEscape(in.ID) + "/diff"
 	case "gitlab_merge_request_diff":
 		path += "/" + url.PathEscape(in.ID) + "/diffs"
+	case "gitlab_merge_request":
+		path += "/" + url.PathEscape(in.ID)
+	case "gitlab_merge_request_notes":
+		path += "/" + url.PathEscape(in.ID) + "/notes"
 	case "gitlab_approval_state":
 		path += "/" + url.PathEscape(in.ID) + "/approval_state"
 	}
@@ -112,6 +128,19 @@ func (b bridge) call(ctx context.Context, op operation, in query) (map[string]an
 		return nil, errors.New("GitLab is unavailable")
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound && op.name == "gitlab_approval_state" {
+		fallback, err := http.NewRequestWithContext(ctx, http.MethodGet, b.gitlab+"/api/v4/projects/"+url.PathEscape(in.Project)+"/merge_requests/"+url.PathEscape(in.ID)+"/approvals", nil)
+		if err != nil {
+			return nil, errors.New("invalid GitLab approval request")
+		}
+		fallback.Header.Set("PRIVATE-TOKEN", b.token)
+		resp.Body.Close()
+		resp, err = b.client.Do(fallback)
+		if err != nil {
+			return nil, errors.New("GitLab approval status is unavailable")
+		}
+		defer resp.Body.Close()
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GitLab returned HTTP %d", resp.StatusCode)
 	}
@@ -127,6 +156,38 @@ func (b bridge) call(ctx context.Context, op operation, in query) (map[string]an
 		return nil, errors.New("GitLab returned invalid JSON")
 	}
 	return map[string]any{"data": json.RawMessage(body), "next_page": resp.Header.Get("X-Next-Page")}, nil
+}
+
+func (b bridge) reviewReminders(ctx context.Context, project string) (map[string]any, error) {
+	list, err := b.call(ctx, operation{name: "gitlab_merge_requests", suffix: "/merge_requests"}, query{Project: project})
+	if err != nil {
+		return nil, err
+	}
+	var items []struct {
+		IID       int    `json:"iid"`
+		Title     string `json:"title"`
+		Draft     bool   `json:"draft"`
+		WebURL    string `json:"web_url"`
+		UpdatedAt string `json:"updated_at"`
+		Reviewers []struct {
+			Username string `json:"username"`
+		} `json:"reviewers"`
+	}
+	if err := json.Unmarshal(list["data"].(json.RawMessage), &items); err != nil {
+		return nil, errors.New("GitLab MR list is invalid")
+	}
+	reminders := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		if item.Draft || strings.HasPrefix(strings.ToLower(item.Title), "draft:") {
+			continue
+		}
+		reviewers := make([]string, 0, len(item.Reviewers))
+		for _, reviewer := range item.Reviewers {
+			reviewers = append(reviewers, reviewer.Username)
+		}
+		reminders = append(reminders, map[string]any{"id": fmt.Sprintf("gitlab:%s:%d:%s", project, item.IID, item.UpdatedAt), "project": project, "iid": item.IID, "title": item.Title, "url": item.WebURL, "updated_at": item.UpdatedAt, "reviewers": reviewers, "status": "open_non_draft", "approval_requirement": "unknown"})
+	}
+	return map[string]any{"reminders": reminders, "next_page": list["next_page"]}, nil
 }
 
 func (b bridge) handler() http.Handler {

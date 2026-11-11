@@ -1,5 +1,6 @@
 param(
     [Parameter(Mandatory)][string]$TokenFile,
+    [int]$ProjectID = 0,
     [uri]$Origin = 'http://127.0.0.1:18929'
 )
 
@@ -23,12 +24,16 @@ $actions = foreach ($file in $files) {
     if ($LASTEXITCODE -ne 0) { throw "Cannot read tracked demo source: $file" }
     @{ action = 'create'; file_path = $file; content = ($source -join [Environment]::NewLine) }
 }
-$project = Send-GitLab '/projects' @{
-    name = 'Bobby Team Directory Demo'
-    path = 'bobby-team-directory-demo'
-    visibility = 'private'
-    initialize_with_readme = $true
-    description = 'Training fixture based on the Bobby team directory service.'
+$project = if ($ProjectID -gt 0) {
+    Invoke-RestMethod -Method Get -Uri "$api/projects/$ProjectID" -Headers $headers -MaximumRedirection 0
+} else {
+    Send-GitLab '/projects' @{
+        name = 'Bobby Team Directory Demo'
+        path = 'bobby-team-directory-demo'
+        visibility = 'private'
+        initialize_with_readme = $true
+        description = 'Training fixture based on the Bobby team directory service.'
+    }
 }
 $base = "/projects/$($project.id)"
 $branch = $project.default_branch

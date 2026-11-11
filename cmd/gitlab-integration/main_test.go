@@ -62,6 +62,25 @@ func TestGitLabToolsRespectSubjectAndReadCommitFile(t *testing.T) {
 	}
 }
 
+func TestReviewRemindersSkipDraftsAndDoNotAssumeApprovals(t *testing.T) {
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v4/projects/2/merge_requests" || r.URL.Query().Get("state") != "opened" {
+			t.Errorf("unexpected request: %s", r.URL)
+		}
+		fmt.Fprint(w, `[{"iid":1,"title":"Ready for review","draft":false,"web_url":"https://gitlab.example/1","updated_at":"2026-11-11T10:00:00Z"},{"iid":2,"title":"Draft: WIP","draft":true}]`)
+	}))
+	defer provider.Close()
+	b := bridge{gitlab: provider.URL, token: "fixture-only", client: provider.Client()}
+	result, err := b.reviewReminders(context.Background(), "2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := result["reminders"].([]map[string]any)
+	if len(items) != 1 || items[0]["iid"] != 1 || items[0]["approval_requirement"] != "unknown" {
+		t.Fatalf("unexpected reminders: %#v", items)
+	}
+}
+
 type bearerTransport struct{ token string }
 
 func (b bearerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
