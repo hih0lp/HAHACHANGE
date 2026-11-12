@@ -19,7 +19,7 @@ type jiraIssue struct {
 	Key         string `json:"key"`
 	Summary     string `json:"summary"`
 	Status      string `json:"status"`
-	Description string `json:"description,omitempty"`
+	Description string `json:"description"`
 	DueDate     string `json:"due_date,omitempty"`
 	StartDate   string `json:"start_date,omitempty"`
 	URL         string `json:"url"`

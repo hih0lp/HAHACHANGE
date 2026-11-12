@@ -13,3 +13,5 @@ Calendar routing is model-driven for every question. A planning call returns whe
 The planner classifies the requested period semantically. For the ongoing or following week, the server computes Monday boundaries in Europe/Moscow; for a current or future schedule it clips elapsed time unless the user explicitly requested history. The answer may only use events in the verified interval. This prevents past mentor windows from appearing as upcoming events.
 
 After an empty verified calendar result, the answer states the checked interval and absence of events without suggesting that the user check the same calendar again or substituting documentary mentions of possible events.
+
+The short Jira issue result always includes `description`, even when it is empty. An empty description is stated as empty; the title is never reinterpreted as description or an encoding failure.
