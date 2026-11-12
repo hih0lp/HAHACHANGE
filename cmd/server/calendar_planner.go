@@ -24,7 +24,13 @@ type calendarPlan struct {
 // The model chooses whether calendar evidence is needed and resolves the
 // requested interval. The server validates its plan before calling MCP.
 func (a answerer) planCalendar(ctx context.Context, question string, now time.Time) (calendarPlan, error) {
-	instruction := "Classify whether answering the user's question requires scheduled calendar events or mentor availability. Return only JSON with booleans needs_events, needs_availability, historical; a period_kind of current_week, next_week, explicit, or upcoming; and RFC3339 strings time_min and time_max. Use the current Europe/Moscow time supplied below. Choose current_week for the ongoing calendar week and next_week for the following week; the server computes their exact Monday boundaries. Set historical true only when the user explicitly asks about past events. Resolve explicit dates from the current year and timezone. For an unspecified future schedule use the next 30 days. If no calendar evidence is needed, set both needs booleans false and leave times empty. Do not answer the user's question."
+	instruction := "Classify whether answering the user's question requires scheduled calendar events or mentor availability. " +
+		"Published or announced meeting windows are calendar events: set needs_events=true and needs_availability=false for them. " +
+		"Set needs_availability=true only when the user asks to calculate free time or busy intervals from the mentor calendar. " +
+		"Return only JSON with booleans needs_events, needs_availability, historical; a period_kind of current_week, next_week, explicit, or upcoming; and RFC3339 strings time_min and time_max. " +
+		"Use the current Europe/Moscow time supplied below. Choose current_week for the ongoing calendar week and next_week for the following week; the server computes their exact Monday boundaries. " +
+		"Set historical true only when the user explicitly asks about past events. Resolve explicit dates from the current year and timezone. " +
+		"For an unspecified future schedule use the next 30 days. If no calendar evidence is needed, set both needs booleans false and leave times empty. Do not answer the user's question."
 	request := map[string]any{"model": a.model, "stream": false, "messages": []map[string]string{{"role": "system", "content": instruction}, {"role": "user", "content": "Current time: " + now.Format(time.RFC3339) + "\nQuestion: " + question}}}
 	body, err := json.Marshal(request)
 	if err != nil {

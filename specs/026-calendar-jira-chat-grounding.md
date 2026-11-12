@@ -10,6 +10,8 @@ Tool descriptions explain the evidence each tool actually returns. The Jira list
 
 Calendar routing is model-driven for every question. A planning call returns whether event and/or availability evidence is needed and a Moscow RFC3339 interval. The server rejects malformed or greater-than-31-day intervals before MCP calls. This replaces the earlier keyword and Russian month parser, so wording variants are not enumerated in code. If planning or calendar access fails, the answer prompt says schedule facts are unverified.
 
+Published meeting windows belong to the mentor calendar's events. The planner requests event evidence for those windows and requests free/busy only when the user asks to calculate free time or inspect busy intervals. This distinction is stated in the planning instruction to reduce the risk of treating a published window as an inferred available slot.
+
 The planner classifies the requested period semantically. For the ongoing or following week, the server computes Monday boundaries in Europe/Moscow; for a current or future schedule it clips elapsed time unless the user explicitly requested history. The answer may only use events in the verified interval. This prevents past mentor windows from appearing as upcoming events.
 
 After an empty verified calendar result, the answer states the checked interval and absence of events without suggesting that the user check the same calendar again or substituting documentary mentions of possible events.
