@@ -1,6 +1,7 @@
 services:
   gitlab:
     image: ${GITLAB_IMAGE:-gitlab/gitlab-ce:latest}
+    restart: unless-stopped
     hostname: gitlab.local
     environment:
       GITLAB_OMNIBUS_CONFIG: |
