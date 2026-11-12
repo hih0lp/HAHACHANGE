@@ -18,7 +18,7 @@ func TestCalendarToolsUseSelectedCalendarsAndBoundedRange(t *testing.T) {
 				t.Error("wrong grant")
 			}
 			fmt.Fprint(w, `{"access_token":"test-access"}`)
-		case "/calendars/onboarding/events":
+		case "/calendars/mentor/events":
 			seenEvents = true
 			if r.Method != http.MethodGet || r.Header.Get("Authorization") != "Bearer test-access" || r.URL.Query().Get("singleEvents") != "true" {
 				t.Error("invalid events request")

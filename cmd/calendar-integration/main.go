@@ -91,7 +91,7 @@ func (b bridge) call(ctx context.Context, name string, in query) (map[string]any
 	switch name {
 	case "calendar_onboarding_events":
 		v := url.Values{"timeMin": {in.TimeMin}, "timeMax": {in.TimeMax}, "singleEvents": {"true"}, "maxResults": {"100"}, "orderBy": {"startTime"}}
-		req, err = http.NewRequestWithContext(ctx, http.MethodGet, b.apiURL+"/calendars/"+url.PathEscape(b.eventsID)+"/events?"+v.Encode(), nil)
+		req, err = http.NewRequestWithContext(ctx, http.MethodGet, b.apiURL+"/calendars/"+url.PathEscape(b.mentorID)+"/events?"+v.Encode(), nil)
 	case "calendar_mentor_freebusy":
 		payload, _ := json.Marshal(map[string]any{"timeMin": in.TimeMin, "timeMax": in.TimeMax, "items": []map[string]string{{"id": b.mentorID}}})
 		req, err = http.NewRequestWithContext(ctx, http.MethodPost, b.apiURL+"/freeBusy", bytes.NewReader(payload))
@@ -167,7 +167,7 @@ func readSecret(name string) string {
 func main() {
 	b := bridge{
 		directory: strings.TrimRight(os.Getenv("TEAM_DIRECTORY_URL"), "/"), subject: os.Getenv("CALENDAR_DEMO_SUBJECT"),
-		eventsID: os.Getenv("CALENDAR_ONBOARDING_ID"), mentorID: os.Getenv("CALENDAR_MENTOR_ID"),
+		eventsID: os.Getenv("CALENDAR_MENTOR_ID"), mentorID: os.Getenv("CALENDAR_MENTOR_ID"),
 		clientID: readSecret("GOOGLE_CLIENT_ID_FILE"), clientSecret: readSecret("GOOGLE_CLIENT_SECRET_FILE"), refreshToken: readSecret("GOOGLE_REFRESH_TOKEN_FILE"),
 		tokenURL: "https://oauth2.googleapis.com/token", apiURL: "https://www.googleapis.com/calendar/v3",
 		client: &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},

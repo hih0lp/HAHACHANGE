@@ -27,3 +27,17 @@ func TestJiraCatalogueAndCallThroughMCP(t *testing.T) {
 		t.Fatalf("MCP tool call: result=%v err=%v", result, err)
 	}
 }
+
+func TestJiraIssueIncludesDates(t *testing.T) {
+	jira := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("fields") != "summary,status,description,duedate,customfield_10015" {
+			t.Errorf("fields=%s", r.URL.Query().Get("fields"))
+		}
+		_, _ = w.Write([]byte(`{"key":"SCRUM-7","fields":{"summary":"Task","status":{"name":"К выполнению"},"duedate":"2026-11-13","customfield_10015":"2026-11-10"}}`))
+	}))
+	defer jira.Close()
+	issue, err := jiraGetIssue(context.Background(), jiraConfig{BaseURL: jira.URL, ProjectKey: "SCRUM"}, "SCRUM-7")
+	if err != nil || issue.DueDate != "2026-11-13" || issue.StartDate != "2026-11-10" {
+		t.Fatalf("issue=%+v err=%v", issue, err)
+	}
+}

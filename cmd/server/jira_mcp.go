@@ -20,6 +20,8 @@ type jiraIssue struct {
 	Summary     string `json:"summary"`
 	Status      string `json:"status"`
 	Description string `json:"description,omitempty"`
+	DueDate     string `json:"due_date,omitempty"`
+	StartDate   string `json:"start_date,omitempty"`
 	URL         string `json:"url"`
 }
 type jiraIssues struct {
@@ -85,14 +87,16 @@ func jiraGetIssue(ctx context.Context, cfg jiraConfig, key string) (jiraIssue, e
 			Status  struct {
 				Name string `json:"name"`
 			} `json:"status"`
-			Description any `json:"description"`
+			Description any    `json:"description"`
+			DueDate     string `json:"duedate"`
+			StartDate   string `json:"customfield_10015"`
 		} `json:"fields"`
 	}
-	err := jiraGET(ctx, cfg, "/rest/api/3/issue/"+url.PathEscape(key)+"?fields=summary,status,description", &raw)
+	err := jiraGET(ctx, cfg, "/rest/api/3/issue/"+url.PathEscape(key)+"?fields=summary,status,description,duedate,customfield_10015", &raw)
 	if err != nil {
 		return jiraIssue{}, err
 	}
-	return jiraIssue{Key: raw.Key, Summary: raw.Fields.Summary, Status: raw.Fields.Status.Name, Description: adfText(raw.Fields.Description), URL: cfg.BaseURL + "/browse/" + url.PathEscape(raw.Key)}, nil
+	return jiraIssue{Key: raw.Key, Summary: raw.Fields.Summary, Status: raw.Fields.Status.Name, Description: adfText(raw.Fields.Description), DueDate: raw.Fields.DueDate, StartDate: raw.Fields.StartDate, URL: cfg.BaseURL + "/browse/" + url.PathEscape(raw.Key)}, nil
 }
 func jiraListIssues(ctx context.Context, cfg jiraConfig) (jiraIssues, error) {
 	params := url.Values{"jql": {"project = " + cfg.ProjectKey + " ORDER BY updated DESC"}, "maxResults": {"10"}, "fields": {"summary,status"}}
