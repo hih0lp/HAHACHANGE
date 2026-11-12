@@ -17,4 +17,8 @@ func TestCalendarQuestionRangeMoscow(t *testing.T) {
 			t.Fatalf("%q: %v %v %v", question, start, end, ok)
 		}
 	}
+	start, _, ok := calendarQuestionRange("Какие события в календаре наставника?", now)
+	if !ok || !start.Equal(now) {
+		t.Fatalf("general range starts at %v, want %v", start, now)
+	}
 }

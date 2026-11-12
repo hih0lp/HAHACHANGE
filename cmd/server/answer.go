@@ -392,5 +392,5 @@ func calendarQuestionRange(question string, now time.Time) (time.Time, time.Time
 	if calendarDatePattern.MatchString(q) || strings.Contains(q, "завтра") || strings.Contains(q, "сегодня") {
 		return start, start.AddDate(0, 0, 1), true
 	}
-	return start, start.AddDate(0, 0, 30), true
+	return now, now.AddDate(0, 0, 30), true
 }
