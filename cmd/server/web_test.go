@@ -18,6 +18,9 @@ func TestWebPageShowsOnlyAnswerWithInlineLinks(t *testing.T) {
 		"fetch('/v1/jobs'",
 		"appendMessage(answer,job.answer)",
 		"link.textContent=match[1]",
+		"link.className='form-link'",
+		"link.href=match[2]",
+		"event.preventDefault();openInlineForm",
 		"link.rel='noopener noreferrer'",
 	} {
 		if !strings.Contains(page, expected) {
