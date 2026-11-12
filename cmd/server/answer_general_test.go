@@ -19,7 +19,15 @@ func TestGeneralQuestionWorksWithoutDocumentSearch(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 			t.Fatal(err)
 		}
-		if len(input.Messages) != 2 || input.Messages[0].Role != "system" || !strings.Contains(input.Messages[0].Content, "общие вопросы") || !strings.Contains(input.Messages[1].Content, "Поиск документов временно недоступен") {
+		if strings.Contains(input.Messages[0].Content, "Ты фильтр запросов") {
+			_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"{\"cleaned_question\":\"Как тебя зовут?\",\"categories\":[]}"}}]}`))
+			return
+		}
+		if strings.Contains(input.Messages[0].Content, "Classify the user's requested evidence") {
+			_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"{\"needs_events\":false}"}}]}`))
+			return
+		}
+		if len(input.Messages) != 2 || input.Messages[0].Role != "system" || !strings.Contains(input.Messages[0].Content, "общие вопросы") || !strings.Contains(input.Messages[1].Content, "Очищенный запрос") {
 			t.Errorf("unexpected prompt: %+v", input)
 		}
 		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"Я Бобби, ваш ИИ-помощник."}}]}`))

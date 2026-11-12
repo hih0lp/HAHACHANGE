@@ -105,9 +105,23 @@ func TestPerUserTokenBinding(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer session.Close()
-	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "gitlab_projects", Arguments: map[string]any{"project": "2"}})
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "gitlab_projects", Arguments: map[string]any{}})
 	if err != nil || result.IsError {
 		t.Fatalf("personal token call: %v", err)
+	}
+}
+
+func TestGitLabIdentityUsesBoundToken(t *testing.T) {
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("PRIVATE-TOKEN") != "bound-token" {
+			t.Error("wrong token")
+		}
+		fmt.Fprint(w, `{"id":42,"username":"intern","name":"Test Intern","email":"private@example.test"}`)
+	}))
+	defer provider.Close()
+	result, err := (bridge{gitlab: provider.URL, token: "bound-token", client: provider.Client()}).call(context.Background(), operation{name: "gitlab_identity"}, query{})
+	if err != nil || result["username"] != "intern" || result["email"] != nil {
+		t.Fatalf("identity=%v err=%v", result, err)
 	}
 }
 

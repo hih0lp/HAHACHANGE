@@ -17,7 +17,7 @@ import (
 )
 
 type query struct {
-	Project string `json:"project" jsonschema:"GitLab numeric project ID or full namespace/project"`
+	Project string `json:"project,omitempty" jsonschema:"GitLab numeric project ID or full namespace/project; omit only for gitlab_projects"`
 	Ref     string `json:"ref,omitempty" jsonschema:"branch, tag or commit SHA"`
 	Path    string `json:"path,omitempty" jsonschema:"repository-relative file or directory"`
 	ID      string `json:"id,omitempty" jsonschema:"commit SHA or merge request IID as required by this tool"`
@@ -29,6 +29,7 @@ type operation struct {
 }
 
 var operations = []operation{
+	{"gitlab_identity", "Read the authenticated GitLab account ID, username and display name for attribution. Use it before claiming that a merge request belongs to the current employee.", "", false, false},
 	{"gitlab_projects", "List up to 25 projects visible to the connected GitLab account.", "", false, false},
 	{"gitlab_tree", "List repository files and directories at a branch, tag or commit. Returns the first 25 entries.", "/repository/tree", false, false},
 	{"gitlab_branches", "List up to 25 repository branches.", "/repository/branches", false, false},
@@ -80,8 +81,22 @@ func (b bridge) authorize(r *http.Request) (string, bool) {
 }
 
 func (b bridge) call(ctx context.Context, op operation, in query) (map[string]any, error) {
-	if (op.name != "gitlab_projects" && in.Project == "") || in.Project == "." || in.Project == ".." || in.ID == "." || in.ID == ".." || in.Path == "." || in.Path == ".." || (op.requiresID && in.ID == "") || (op.requiresFile && (in.Path == "" || in.Ref == "")) {
+	if (op.name != "gitlab_projects" && op.name != "gitlab_identity" && in.Project == "") || in.Project == "." || in.Project == ".." || in.ID == "." || in.ID == ".." || in.Path == "." || in.Path == ".." || (op.requiresID && in.ID == "") || (op.requiresFile && (in.Path == "" || in.Ref == "")) {
 		return nil, errors.New("project and the required tool arguments must be supplied")
+	}
+	if op.name == "gitlab_identity" {
+		var current struct {
+			ID       int64  `json:"id"`
+			Username string `json:"username"`
+			Name     string `json:"name"`
+		}
+		if err := b.getJSON(ctx, "/api/v4/user", &current); err != nil {
+			return nil, err
+		}
+		if current.ID <= 0 || current.Username == "" {
+			return nil, errors.New("GitLab identity is incomplete")
+		}
+		return map[string]any{"id": current.ID, "username": current.Username, "name": current.Name}, nil
 	}
 	if op.name == "gitlab_review_reminders" {
 		return b.reviewReminders(ctx, in.Project)

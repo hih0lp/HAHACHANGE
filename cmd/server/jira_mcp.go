@@ -19,6 +19,7 @@ type jiraIssue struct {
 	Key               string `json:"key"`
 	Summary           string `json:"summary"`
 	Status            string `json:"status"`
+	StatusCategory    string `json:"status_category,omitempty"`
 	Description       string `json:"description"`
 	DueDate           string `json:"due_date,omitempty"`
 	StartDate         string `json:"start_date,omitempty"`
@@ -35,6 +36,7 @@ type jiraIssueSummary struct {
 	Key               string `json:"key"`
 	Summary           string `json:"summary"`
 	Status            string `json:"status"`
+	StatusCategory    string `json:"status_category,omitempty"`
 	DueDate           string `json:"due_date,omitempty"`
 	AssigneeAccountID string `json:"assignee_account_id,omitempty"`
 	AssigneeName      string `json:"assignee_name,omitempty"`
@@ -103,7 +105,10 @@ func jiraGetIssue(ctx context.Context, cfg jiraConfig, key string) (jiraIssue, e
 		Fields struct {
 			Summary string `json:"summary"`
 			Status  struct {
-				Name string `json:"name"`
+				Name           string `json:"name"`
+				StatusCategory struct {
+					Name string `json:"name"`
+				} `json:"statusCategory"`
 			} `json:"status"`
 			Description any    `json:"description"`
 			DueDate     string `json:"duedate"`
@@ -118,7 +123,7 @@ func jiraGetIssue(ctx context.Context, cfg jiraConfig, key string) (jiraIssue, e
 	if err != nil {
 		return jiraIssue{}, err
 	}
-	return jiraIssue{Key: raw.Key, Summary: raw.Fields.Summary, Status: raw.Fields.Status.Name, Description: adfText(raw.Fields.Description), DueDate: raw.Fields.DueDate, StartDate: raw.Fields.StartDate, AssigneeAccountID: raw.Fields.Assignee.AccountID, AssigneeName: raw.Fields.Assignee.DisplayName, URL: cfg.BaseURL + "/browse/" + url.PathEscape(raw.Key)}, nil
+	return jiraIssue{Key: raw.Key, Summary: raw.Fields.Summary, Status: raw.Fields.Status.Name, StatusCategory: raw.Fields.Status.StatusCategory.Name, Description: adfText(raw.Fields.Description), DueDate: raw.Fields.DueDate, StartDate: raw.Fields.StartDate, AssigneeAccountID: raw.Fields.Assignee.AccountID, AssigneeName: raw.Fields.Assignee.DisplayName, URL: cfg.BaseURL + "/browse/" + url.PathEscape(raw.Key)}, nil
 }
 func jiraListIssues(ctx context.Context, cfg jiraConfig) (jiraIssues, error) {
 	return jiraSearchIssues(ctx, cfg, "")
@@ -145,7 +150,10 @@ func jiraSearchIssues(ctx context.Context, cfg jiraConfig, accountID string) (ji
 			Fields struct {
 				Summary string `json:"summary"`
 				Status  struct {
-					Name string `json:"name"`
+					Name           string `json:"name"`
+					StatusCategory struct {
+						Name string `json:"name"`
+					} `json:"statusCategory"`
 				} `json:"status"`
 				DueDate  string `json:"duedate"`
 				Assignee struct {
@@ -163,7 +171,7 @@ func jiraSearchIssues(ctx context.Context, cfg jiraConfig, accountID string) (ji
 		if accountID != "" && item.Fields.Assignee.AccountID != accountID {
 			continue
 		}
-		result.Issues = append(result.Issues, jiraIssueSummary{Key: item.Key, Summary: item.Fields.Summary, Status: item.Fields.Status.Name, DueDate: item.Fields.DueDate, AssigneeAccountID: item.Fields.Assignee.AccountID, AssigneeName: item.Fields.Assignee.DisplayName, URL: cfg.BaseURL + "/browse/" + url.PathEscape(item.Key)})
+		result.Issues = append(result.Issues, jiraIssueSummary{Key: item.Key, Summary: item.Fields.Summary, Status: item.Fields.Status.Name, StatusCategory: item.Fields.Status.StatusCategory.Name, DueDate: item.Fields.DueDate, AssigneeAccountID: item.Fields.Assignee.AccountID, AssigneeName: item.Fields.Assignee.DisplayName, URL: cfg.BaseURL + "/browse/" + url.PathEscape(item.Key)})
 	}
 	result.Truncated = raw.NextPageToken != ""
 	return result, nil

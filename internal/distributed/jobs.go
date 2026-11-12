@@ -185,6 +185,12 @@ func TeamToken(ctx context.Context) string {
 	return v
 }
 
+// WithVerifiedTeamToken attaches a token already verified by the team service.
+// It is used by the worker and isolated integration tests, never from model text.
+func WithVerifiedTeamToken(ctx context.Context, token string) context.Context {
+	return context.WithValue(ctx, teamTokenKey{}, token)
+}
+
 func (s *System) StoreTeamToken(ctx context.Context, jobID, token string) error {
 	if token == "" {
 		return nil
@@ -231,7 +237,7 @@ func (s *System) ProcessOne(ctx context.Context, id string, answer AnswerFunc, t
 	s.cache(ctx, Job{ID: id, Status: "running"})
 	workCtx, cancel := context.WithTimeout(ctx, timeout)
 	workCtx = context.WithValue(workCtx, teamContextKey{}, string(teamContext))
-	workCtx = context.WithValue(workCtx, teamTokenKey{}, s.teamToken(ctx, id))
+	workCtx = WithVerifiedTeamToken(workCtx, s.teamToken(ctx, id))
 	workCtx = context.WithValue(workCtx, chatJobKey{}, [2]string{owner, id})
 	answerText, sources, workErr := answer(workCtx, query)
 	cancel()

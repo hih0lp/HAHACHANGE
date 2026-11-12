@@ -65,7 +65,7 @@ func run() error {
 
 func newHandler(service *rag.Service, cfg config) http.Handler {
 	mux := http.NewServeMux()
-	answer := answerer{service: service, url: env("LLM_URL", "http://host.docker.internal:1234"), model: env("LLM_MODEL", "qwen3-8b"), mcpURL: env("MCP_URL", "http://127.0.0.1:8000/mcp"), mcpKey: cfg.APIKey, jiraMode: cfg.Jira.Mode}
+	answer := answerer{service: service, url: env("LLM_URL", "http://host.docker.internal:1234"), model: env("LLM_MODEL", "qwen3-8b"), routerModel: env("ROUTER_MODEL", "qwen3-1.7b"), mcpURL: env("MCP_URL", "http://127.0.0.1:8000/mcp"), mcpKey: cfg.APIKey, jiraMode: cfg.Jira.Mode}
 	if cfg.Distributed != nil {
 		registerDemoRoleRoute(mux)
 		registerDistributedJobRoutes(mux, cfg.Distributed, cfg.APIKey)
