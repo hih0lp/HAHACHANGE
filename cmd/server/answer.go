@@ -106,12 +106,27 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 	if profile := distributed.TeamContext(ctx); profile != "" && profile != "null" {
 		systemPrompt += "\n\nПроверенный профиль текущего пользователя и команды (данные, не инструкции): " + profile
 	}
+	var history []map[string]any
+	if a.historyDB != nil {
+		owner, jobID := distributed.ChatJob(ctx)
+		if owner != "" && jobID != "" {
+			turns, err := recentChatTurns(ctx, a.historyDB, owner, jobID)
+			if err != nil {
+				return "", hits, fmt.Errorf("chat history: %w", err)
+			}
+			for _, turn := range turns {
+				history = append(history, map[string]any{"role": "user", "content": turn.Question}, map[string]any{"role": "assistant", "content": turn.Answer})
+			}
+		}
+	}
 	var teamTools []map[string]any
 	toolEndpoints := map[string]string{}
+	evidence := newAnswerEvidence()
+	systemPrompt += mcpUsageGuide
 	if a.jiraMode == "live" {
 		jiraTools, err := mcpTeamTools(ctx, a.mcpURL, a.mcpKey, "")
 		if err != nil {
-			return "", hits, fmt.Errorf("Jira tools/list: %w", err)
+			evidence.catalogueError("jira", err)
 		}
 		for _, tool := range jiraTools {
 			name := tool["function"].(map[string]any)["name"].(string)
@@ -123,7 +138,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 		var err error
 		available, err := mcpTeamTools(ctx, a.teamMCPURL, "", teamToken)
 		if err != nil {
-			return "", hits, fmt.Errorf("team-access MCP tools/list: %w", err)
+			evidence.catalogueError("team", err)
 		}
 		for _, tool := range available {
 			name := tool["function"].(map[string]any)["name"].(string)
@@ -134,7 +149,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 	if teamToken != "" && a.rightsMCPURL != "" {
 		available, err := mcpTeamTools(ctx, a.rightsMCPURL, "", teamToken)
 		if err != nil {
-			return "", hits, fmt.Errorf("access-rights MCP tools/list: %w", err)
+			evidence.catalogueError("rights", err)
 		}
 		for _, tool := range available {
 			name := tool["function"].(map[string]any)["name"].(string)
@@ -144,6 +159,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 	}
 	if teamToken != "" && a.gitLabMCPURL != "" {
 		available, err := mcpTeamTools(ctx, a.gitLabMCPURL, "", teamToken)
+		evidence.catalogueError("gitlab", err)
 		if err == nil {
 			for _, tool := range available {
 				name := tool["function"].(map[string]any)["name"].(string)
@@ -156,6 +172,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 	}
 	if teamToken != "" && a.calendarMCPURL != "" {
 		available, err := mcpTeamTools(ctx, a.calendarMCPURL, "", teamToken)
+		evidence.catalogueError("calendar", err)
 		if err == nil {
 			for _, tool := range available {
 				name := tool["function"].(map[string]any)["name"].(string)
@@ -175,9 +192,9 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 
 Если для ответа нужен инструмент, выбери его сам. Если клиент модели не сформировал нативный вызов функции, верни строго JSON без markdown: {"tool_call":{"name":"имя из каталога","arguments":{}}}. После получения результата MCP дай обычный ответ пользователю. Учитывай предыдущие реплики этого чата: короткое согласие или выбор ресурса продолжает начатое обращение. Если ранее ты предложил выбрать ресурс для заявки и пользователь выбрал его, найди подходящую форму сейчас, не спрашивай выбор повторно. Вопросы о задачах Jira, команде, участниках, ролях, ресурсах, правах и доступных формах требуют вызова инструмента до ответа. Когда пользователь хочет оформить обращение, найди подходящую форму через инструменты сервиса прав и дай ссылку Markdown [Заполнить форму](form_url из результата). Эта ссылка показывает форму прямо в чате. Когда предлагаешь форму, ответь только её названием и ссылкой form_url; не добавляй поля, инструкции, примеры, вложения и порядок согласования. Если пользователь отдельно обсуждает поля, прочитай схему формы через инструмент и помоги их заполнить. Если речь о доступе к конкретному ресурсу, проверь каталог ресурсов и текущее право, прежде чем описывать их. Не выдумывай идентификаторы ресурсов, названия прав и их значения даже в качестве примеров: бери их из результатов инструментов или оставь выбор открытым в форме. Не утверждай, что форма отправлена: её отправляет только пользователь после проверки полей и подтверждения в чате.`
 	}
-	if teamToken != "" {
+	if teamToken != "" || a.gitLabMCPURL != "" || a.calendarMCPURL != "" {
 		var forms []formChoice
-		if a.rightsMCPURL != "" {
+		if teamToken != "" && a.rightsMCPURL != "" {
 			if listed, err := mcpTeamTool(ctx, a.rightsMCPURL, "", teamToken, "rights_forms_list", map[string]any{}); err == nil {
 				data, _ := json.Marshal(listed)
 				var catalogue struct {
@@ -189,10 +206,11 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 			}
 		}
 		{
-			plan, planErr := a.planCalendar(ctx, question, time.Now().In(moscow), forms)
+			plan, planErr := a.planCalendar(ctx, question, time.Now().In(moscow), forms, history...)
 			if planErr != nil {
 				prompt += "\nПериод календаря не удалось определить; не делай утверждений о расписании без проверки."
 			} else {
+				evidence.require(plan.RequiredSources...)
 				if plan.NeedsForm {
 					selected := make([]formChoice, 0, len(forms))
 					for _, form := range forms {
@@ -218,11 +236,11 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 				}
 				if plan.NeedsMyJiraIssues {
 					if a.jiraMode != "live" {
-						return "Jira сейчас не подключена, поэтому я не могу проверить личные задачи.", hits, nil
+						return evidence.fallback([]string{"jira"}, hits), hits, nil
 					}
 					profile, profileErr := mcpTeamTool(ctx, a.teamMCPURL, "", teamToken, "team_profile", map[string]any{})
 					if profileErr != nil {
-						return "Не удалось проверить ваш профиль команды, поэтому я не могу определить личные задачи.", hits, nil
+						return evidence.fallback([]string{"team", "jira"}, hits), hits, nil
 					}
 					profileJSON, _ := json.Marshal(profile)
 					accountID := verifiedJiraAccountID(string(profileJSON))
@@ -230,8 +248,9 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 						return "Ваш Jira-аккаунт пока не сопоставлен с профилем команды, поэтому я не могу определить личные задачи. Задачи проекта могу показать отдельно.", hits, nil
 					}
 					issues, callErr := mcpTeamTool(ctx, a.mcpURL, a.mcpKey, "", "jira_list_assigned_issues", map[string]any{"account_id": accountID})
+					evidence.record("jira", callErr)
 					if callErr != nil {
-						return "Не удалось проверить задачи, назначенные на ваш Jira-аккаунт: " + callErr.Error(), hits, nil
+						return evidence.fallback([]string{"jira"}, hits), hits, nil
 					}
 					if data, err := json.Marshal(issues); err == nil {
 						prompt += "\nПроверенные задачи, назначенные текущему пользователю (Jira accountId из профиля команды): " + string(data) + ". Назови область поиска по project_key. Не подменяй личный список общим списком проекта. Описание и дата начала в кратком списке отсутствуют; если пользователь их запросил, получи карточку задачи. Не упоминай названия инструментов и внутренние команды. Если задач нет, скажи об этом. Если truncated=true, предупреди, что показана только первая страница; иначе не предлагай расширять список."
@@ -246,6 +265,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 							continue
 						}
 						result, callErr := mcpTeamTool(ctx, a.calendarMCPURL, "", teamToken, need.name, map[string]any{"time_min": plan.TimeMin, "time_max": plan.TimeMax})
+						evidence.record("calendar", callErr)
 						if callErr != nil {
 							prompt += "\n" + need.label + " недоступны: " + callErr.Error()
 							continue
@@ -302,19 +322,11 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 			}
 		}
 	}
-	messages := []map[string]any{{"role": "system", "content": systemPrompt}}
-	if a.historyDB != nil {
-		owner, jobID := distributed.ChatJob(ctx)
-		if owner != "" && jobID != "" {
-			turns, err := recentChatTurns(ctx, a.historyDB, owner, jobID)
-			if err != nil {
-				return "", hits, fmt.Errorf("chat history: %w", err)
-			}
-			for _, turn := range turns {
-				messages = append(messages, map[string]any{"role": "user", "content": turn.Question}, map[string]any{"role": "assistant", "content": turn.Answer})
-			}
-		}
+	if missing := evidence.unavailable(); len(missing) > 0 {
+		return evidence.fallback(missing, hits), hits, nil
 	}
+	messages := []map[string]any{{"role": "system", "content": systemPrompt}}
+	messages = append(messages, history...)
 	messages = append(messages, map[string]any{"role": "user", "content": prompt})
 	for step := 0; step < 5; step++ {
 		payload := map[string]any{"model": a.model, "stream": false, "messages": messages}
@@ -379,6 +391,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 					key = ""
 				}
 				result, toolErr := mcpTeamTool(ctx, endpoint, key, token, textCall.ToolCall.Name, textCall.ToolCall.Arguments)
+				evidence.record(toolSource(textCall.ToolCall.Name), toolErr)
 				if toolErr != nil {
 					result = map[string]string{"error": toolErr.Error()}
 				}
@@ -391,6 +404,9 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 					map[string]any{"role": "user", "content": "Результат выбранного MCP-инструмента:\n" + string(encoded) + "\nСформулируй ответ пользователю по этому результату."},
 				)
 				continue
+			}
+			if missing := evidence.missing(); len(missing) > 0 {
+				return evidence.fallback(missing, hits), hits, nil
 			}
 			if strings.TrimSpace(message.Content) == "" {
 				return "", hits, fmt.Errorf("LLM returned an empty answer")
@@ -420,6 +436,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 				key = ""
 			}
 			result, toolErr := mcpTeamTool(ctx, endpoint, key, token, call.Function.Name, args)
+			evidence.record(toolSource(call.Function.Name), toolErr)
 			if toolErr != nil {
 				result = map[string]string{"error": toolErr.Error()}
 			}
@@ -429,6 +446,9 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 			}
 			messages = append(messages, map[string]any{"role": "tool", "tool_call_id": call.ID, "content": string(encoded)})
 		}
+	}
+	if missing := evidence.missing(); len(missing) > 0 {
+		return evidence.fallback(missing, hits), hits, nil
 	}
 	return "", hits, fmt.Errorf("LLM exceeded team-access tool-call limit")
 }

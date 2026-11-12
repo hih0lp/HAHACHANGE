@@ -23,6 +23,10 @@ type query struct {
 	ID      string `json:"id,omitempty" jsonschema:"commit SHA or merge request IID as required by this tool"`
 }
 
+type projectsQuery struct {
+	Project string `json:"project,omitempty" jsonschema:"Optional legacy argument, ignored for project discovery"`
+}
+
 type operation struct {
 	name, description, suffix string
 	requiresID, requiresFile  bool
@@ -231,6 +235,13 @@ func (b bridge) getJSON(ctx context.Context, path string, out any) error {
 func (b bridge) server() *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{Name: "bobby-gitlab", Version: "0.1.0"}, nil)
 	for _, op := range operations {
+		if op.name == "gitlab_projects" {
+			mcp.AddTool(server, &mcp.Tool{Name: op.name, Description: op.description}, func(ctx context.Context, _ *mcp.CallToolRequest, _ projectsQuery) (*mcp.CallToolResult, map[string]any, error) {
+				result, err := b.call(ctx, op, query{})
+				return nil, result, err
+			})
+			continue
+		}
 		mcp.AddTool(server, &mcp.Tool{Name: op.name, Description: op.description}, func(ctx context.Context, _ *mcp.CallToolRequest, in query) (*mcp.CallToolResult, map[string]any, error) {
 			result, err := b.call(ctx, op, in)
 			if err != nil {

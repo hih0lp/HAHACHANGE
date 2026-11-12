@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -43,6 +44,10 @@ func mcpTeamTool(ctx context.Context, endpoint, key, token, name string, argumen
 	if result.IsError {
 		return nil, errors.New("team-access MCP tool returned an error")
 	}
+	if result.StructuredContent == nil {
+		return nil, fmt.Errorf("MCP tool %s returned no structured content", name)
+	}
+	log.Printf("MCP tools/call succeeded: tool=%s", name)
 	return result.StructuredContent, nil
 }
 
