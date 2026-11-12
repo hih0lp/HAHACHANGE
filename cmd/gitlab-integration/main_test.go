@@ -64,10 +64,14 @@ func TestGitLabToolsRespectSubjectAndReadCommitFile(t *testing.T) {
 
 func TestReviewRemindersSkipDraftsAndDoNotAssumeApprovals(t *testing.T) {
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v4/user" {
+			fmt.Fprint(w, `{"username":"mentor"}`)
+			return
+		}
 		if r.URL.Path != "/api/v4/projects/2/merge_requests" || r.URL.Query().Get("state") != "opened" {
 			t.Errorf("unexpected request: %s", r.URL)
 		}
-		fmt.Fprint(w, `[{"iid":1,"title":"Ready for review","draft":false,"web_url":"https://gitlab.example/1","updated_at":"2026-11-11T10:00:00Z"},{"iid":2,"title":"Draft: WIP","draft":true}]`)
+		fmt.Fprint(w, `[{"iid":1,"title":"Ready for review","draft":false,"web_url":"https://gitlab.example/1","updated_at":"2026-11-11T10:00:00Z","reviewers":[{"username":"mentor"}]},{"iid":2,"title":"Draft: WIP","draft":true},{"iid":3,"title":"Someone else's review","draft":false,"reviewers":[{"username":"intern"}]}]`)
 	}))
 	defer provider.Close()
 	b := bridge{gitlab: provider.URL, token: "fixture-only", client: provider.Client()}
@@ -78,6 +82,32 @@ func TestReviewRemindersSkipDraftsAndDoNotAssumeApprovals(t *testing.T) {
 	items := result["reminders"].([]map[string]any)
 	if len(items) != 1 || items[0]["iid"] != 1 || items[0]["approval_requirement"] != "unknown" {
 		t.Fatalf("unexpected reminders: %#v", items)
+	}
+}
+
+func TestPerUserTokenBinding(t *testing.T) {
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/me" {
+			fmt.Fprint(w, `{"id":"intern2"}`)
+			return
+		}
+		if r.Header.Get("PRIVATE-TOKEN") != "intern2-token" {
+			t.Errorf("wrong GitLab token for intern2")
+		}
+		fmt.Fprint(w, `[]`)
+	}))
+	defer provider.Close()
+	app := httptest.NewServer(bridge{gitlab: provider.URL, directory: provider.URL, tokens: map[string]string{"intern2": "intern2-token"}, client: provider.Client()}.handler())
+	defer app.Close()
+	client := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "1"}, nil)
+	session, err := client.Connect(context.Background(), &mcp.StreamableClientTransport{Endpoint: app.URL, HTTPClient: &http.Client{Transport: bearerTransport{"allowed"}}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "gitlab_projects", Arguments: map[string]any{"project": "2"}})
+	if err != nil || result.IsError {
+		t.Fatalf("personal token call: %v", err)
 	}
 }
 

@@ -18,7 +18,7 @@ type calendarReminderArgs struct {
 
 func TestCalendarReminderRouteUsesBearerAndNextDay(t *testing.T) {
 	server := mcp.NewServer(&mcp.Implementation{Name: "fixture", Version: "1"}, nil)
-	mcp.AddTool(server, &mcp.Tool{Name: "calendar_onboarding_events"}, func(_ context.Context, _ *mcp.CallToolRequest, in calendarReminderArgs) (*mcp.CallToolResult, map[string]any, error) {
+	mcp.AddTool(server, &mcp.Tool{Name: "calendar_mentor_events"}, func(_ context.Context, _ *mcp.CallToolRequest, in calendarReminderArgs) (*mcp.CallToolResult, map[string]any, error) {
 		start, e1 := time.Parse(time.RFC3339, in.TimeMin)
 		end, e2 := time.Parse(time.RFC3339, in.TimeMax)
 		if e1 != nil || e2 != nil || end.Sub(start) != 24*time.Hour {

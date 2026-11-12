@@ -1,0 +1,22 @@
+services:
+  gitlab-mcp:
+    image: bobby-gitlab-integration:people
+    container_name: bobby-gitlab-mcp-people
+    restart: unless-stopped
+    environment:
+      GITLAB_API_ORIGIN: http://host.docker.internal:18929
+      TEAM_DIRECTORY_URL: http://host.docker.internal:18080
+      GITLAB_DEMO_TOKENS_FILE: /run/secrets/gitlab_demo_tokens.json
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    volumes:
+      - D:/HackChange/private/bobby-gitlab-demo/tokens.json:/run/secrets/gitlab_demo_tokens.json:ro
+    ports:
+      - 127.0.0.1:18931:8080
+    networks:
+      - distributed
+
+networks:
+  distributed:
+    external: true
+    name: avito-rag-distributed_default

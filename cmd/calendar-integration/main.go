@@ -13,20 +13,57 @@ import (
 	"os"
 	"strings"
 	"time"
+	_ "time/tzdata"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type query struct {
-	TimeMin string `json:"time_min" jsonschema:"RFC3339 start of range"`
-	TimeMax string `json:"time_max" jsonschema:"RFC3339 end of range"`
+	Day     string `json:"day,omitempty" jsonschema:"Single Moscow calendar day: today, tomorrow, or YYYY-MM-DD. Omit time_min and time_max when using day."`
+	TimeMin string `json:"time_min,omitempty" jsonschema:"RFC3339 start of range. Use with time_max when day is omitted."`
+	TimeMax string `json:"time_max,omitempty" jsonschema:"RFC3339 end of range. Use with time_min when day is omitted."`
+}
+
+func resolveRange(in query, now time.Time) (time.Time, time.Time, error) {
+	if in.Day != "" {
+		if in.TimeMin != "" || in.TimeMax != "" {
+			return time.Time{}, time.Time{}, errors.New("day cannot be combined with time_min or time_max")
+		}
+		moscow, err := time.LoadLocation("Europe/Moscow")
+		if err != nil {
+			return time.Time{}, time.Time{}, errors.New("Moscow timezone unavailable")
+		}
+		var day time.Time
+		switch strings.ToLower(in.Day) {
+		case "today":
+			day = now.In(moscow)
+		case "tomorrow":
+			day = now.In(moscow).AddDate(0, 0, 1)
+		default:
+			day, err = time.ParseInLocation("2006-01-02", in.Day, moscow)
+			if err != nil {
+				return time.Time{}, time.Time{}, errors.New("day must be today, tomorrow, or YYYY-MM-DD")
+			}
+		}
+		start := time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, moscow)
+		return start, start.AddDate(0, 0, 1), nil
+	}
+	start, err := time.Parse(time.RFC3339, in.TimeMin)
+	if err != nil {
+		return time.Time{}, time.Time{}, errors.New("time_min must be RFC3339")
+	}
+	end, err := time.Parse(time.RFC3339, in.TimeMax)
+	if err != nil || !end.After(start) || end.Sub(start) > 31*24*time.Hour {
+		return time.Time{}, time.Time{}, errors.New("range must be positive and at most 31 days")
+	}
+	return start, end, nil
 }
 
 type bridge struct {
-	directory, subject, eventsID, mentorID string
-	clientID, clientSecret, refreshToken   string
-	tokenURL, apiURL                       string
-	client                                 *http.Client
+	directory, subject, mentorID         string
+	clientID, clientSecret, refreshToken string
+	tokenURL, apiURL                     string
+	client                               *http.Client
 }
 
 func (b bridge) authorize(r *http.Request) bool {
@@ -75,25 +112,25 @@ func (b bridge) accessToken(ctx context.Context) (string, error) {
 }
 
 func (b bridge) call(ctx context.Context, name string, in query) (map[string]any, error) {
-	start, err := time.Parse(time.RFC3339, in.TimeMin)
+	start, end, err := resolveRange(in, time.Now())
 	if err != nil {
-		return nil, errors.New("time_min must be RFC3339")
+		return nil, err
 	}
-	end, err := time.Parse(time.RFC3339, in.TimeMax)
-	if err != nil || !end.After(start) || end.Sub(start) > 31*24*time.Hour {
-		return nil, errors.New("range must be positive and at most 31 days")
-	}
+	timeMin, timeMax := start.Format(time.RFC3339), end.Format(time.RFC3339)
 	token, err := b.accessToken(ctx)
 	if err != nil {
 		return nil, err
 	}
 	var req *http.Request
+	calendar := ""
 	switch name {
-	case "calendar_onboarding_events":
-		v := url.Values{"timeMin": {in.TimeMin}, "timeMax": {in.TimeMax}, "singleEvents": {"true"}, "maxResults": {"100"}, "orderBy": {"startTime"}}
-		req, err = http.NewRequestWithContext(ctx, http.MethodGet, b.apiURL+"/calendars/"+url.PathEscape(b.eventsID)+"/events?"+v.Encode(), nil)
+	case "calendar_mentor_events":
+		calendar = "mentor"
+		v := url.Values{"timeMin": {timeMin}, "timeMax": {timeMax}, "singleEvents": {"true"}, "maxResults": {"100"}, "orderBy": {"startTime"}}
+		req, err = http.NewRequestWithContext(ctx, http.MethodGet, b.apiURL+"/calendars/"+url.PathEscape(b.mentorID)+"/events?"+v.Encode(), nil)
 	case "calendar_mentor_freebusy":
-		payload, _ := json.Marshal(map[string]any{"timeMin": in.TimeMin, "timeMax": in.TimeMax, "items": []map[string]string{{"id": b.mentorID}}})
+		calendar = "mentor"
+		payload, _ := json.Marshal(map[string]any{"timeMin": timeMin, "timeMax": timeMax, "items": []map[string]string{{"id": b.mentorID}}})
 		req, err = http.NewRequestWithContext(ctx, http.MethodPost, b.apiURL+"/freeBusy", bytes.NewReader(payload))
 		if err == nil {
 			req.Header.Set("Content-Type", "application/json")
@@ -132,14 +169,14 @@ func (b bridge) call(ctx context.Context, name string, in query) (map[string]any
 			return nil, errors.New("mentor availability is unknown")
 		}
 	}
-	return map[string]any{"data": json.RawMessage(data), "source": "Google Calendar demo", "time_min": in.TimeMin, "time_max": in.TimeMax}, nil
+	return map[string]any{"data": json.RawMessage(data), "source": "Google Calendar demo", "calendar": calendar, "time_min": timeMin, "time_max": timeMax}, nil
 }
 
 func (b bridge) handler() http.Handler {
 	server := mcp.NewServer(&mcp.Implementation{Name: "bobby-calendar", Version: "0.1.0"}, nil)
 	for _, tool := range []struct{ name, description string }{
-		{"calendar_onboarding_events", "Read events from the selected onboarding calendar in a bounded date range."},
-		{"calendar_mentor_freebusy", "Read only busy intervals from the selected mentor demo calendar; never reveals event titles."},
+		{"calendar_mentor_events", "Read titles, times, and details from the mentor's shared demo calendar. For one Moscow day pass day=today, tomorrow, or YYYY-MM-DD; for a longer range pass time_min and time_max in RFC3339."},
+		{"calendar_mentor_freebusy", "Read busy intervals from the mentor's shared demo calendar. For one Moscow day pass day=today, tomorrow, or YYYY-MM-DD; for a longer range pass time_min and time_max in RFC3339."},
 	} {
 		mcp.AddTool(server, &mcp.Tool{Name: tool.name, Description: tool.description}, func(ctx context.Context, _ *mcp.CallToolRequest, in query) (*mcp.CallToolResult, map[string]any, error) {
 			result, err := b.call(ctx, tool.name, in)
@@ -167,12 +204,12 @@ func readSecret(name string) string {
 func main() {
 	b := bridge{
 		directory: strings.TrimRight(os.Getenv("TEAM_DIRECTORY_URL"), "/"), subject: os.Getenv("CALENDAR_DEMO_SUBJECT"),
-		eventsID: os.Getenv("CALENDAR_ONBOARDING_ID"), mentorID: os.Getenv("CALENDAR_MENTOR_ID"),
+		mentorID: os.Getenv("CALENDAR_MENTOR_ID"),
 		clientID: readSecret("GOOGLE_CLIENT_ID_FILE"), clientSecret: readSecret("GOOGLE_CLIENT_SECRET_FILE"), refreshToken: readSecret("GOOGLE_REFRESH_TOKEN_FILE"),
 		tokenURL: "https://oauth2.googleapis.com/token", apiURL: "https://www.googleapis.com/calendar/v3",
 		client: &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
 	}
-	if b.subject == "" || b.eventsID == "" || b.mentorID == "" || b.clientID == "" || b.clientSecret == "" || b.refreshToken == "" {
+	if b.subject == "" || b.mentorID == "" || b.clientID == "" || b.clientSecret == "" || b.refreshToken == "" {
 		log.Fatal("calendar demo configuration is incomplete")
 	}
 	u, err := url.Parse(b.directory)

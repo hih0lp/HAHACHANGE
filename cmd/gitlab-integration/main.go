@@ -47,28 +47,36 @@ var operations = []operation{
 
 type bridge struct {
 	gitlab, directory, subject, token string
+	tokens                            map[string]string
 	client                            *http.Client
 }
 
-func (b bridge) authorize(r *http.Request) bool {
+func (b bridge) authorize(r *http.Request) (string, bool) {
 	bearer, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
 	if !ok || bearer == "" {
-		return false
+		return "", false
 	}
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, b.directory+"/v1/me", nil)
 	if err != nil {
-		return false
+		return "", false
 	}
 	req.Header.Set("Authorization", "Bearer "+bearer)
 	resp, err := b.client.Do(req)
 	if err != nil {
-		return false
+		return "", false
 	}
 	defer resp.Body.Close()
 	var profile struct {
 		ID string `json:"id"`
 	}
-	return resp.StatusCode == http.StatusOK && json.NewDecoder(io.LimitReader(resp.Body, 65536)).Decode(&profile) == nil && profile.ID == b.subject
+	if resp.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(resp.Body, 65536)).Decode(&profile) != nil {
+		return "", false
+	}
+	if len(b.tokens) != 0 {
+		token := b.tokens[profile.ID]
+		return token, token != ""
+	}
+	return b.token, profile.ID == b.subject && b.token != ""
 }
 
 func (b bridge) call(ctx context.Context, op operation, in query) (map[string]any, error) {
@@ -159,6 +167,12 @@ func (b bridge) call(ctx context.Context, op operation, in query) (map[string]an
 }
 
 func (b bridge) reviewReminders(ctx context.Context, project string) (map[string]any, error) {
+	var current struct {
+		Username string `json:"username"`
+	}
+	if err := b.getJSON(ctx, "/api/v4/user", &current); err != nil {
+		return nil, err
+	}
 	list, err := b.call(ctx, operation{name: "gitlab_merge_requests", suffix: "/merge_requests"}, query{Project: project})
 	if err != nil {
 		return nil, err
@@ -182,15 +196,39 @@ func (b bridge) reviewReminders(ctx context.Context, project string) (map[string
 			continue
 		}
 		reviewers := make([]string, 0, len(item.Reviewers))
+		assigned := false
 		for _, reviewer := range item.Reviewers {
 			reviewers = append(reviewers, reviewer.Username)
+			if reviewer.Username == current.Username {
+				assigned = true
+			}
+		}
+		if !assigned {
+			continue
 		}
 		reminders = append(reminders, map[string]any{"id": fmt.Sprintf("gitlab:%s:%d:%s", project, item.IID, item.UpdatedAt), "project": project, "iid": item.IID, "title": item.Title, "url": item.WebURL, "updated_at": item.UpdatedAt, "reviewers": reviewers, "status": "open_non_draft", "approval_requirement": "unknown"})
 	}
 	return map[string]any{"reminders": reminders, "next_page": list["next_page"]}, nil
 }
 
-func (b bridge) handler() http.Handler {
+func (b bridge) getJSON(ctx context.Context, path string, out any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, b.gitlab+path, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("PRIVATE-TOKEN", b.token)
+	resp, err := b.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("GitLab returned HTTP %d", resp.StatusCode)
+	}
+	return json.NewDecoder(io.LimitReader(resp.Body, 65536)).Decode(out)
+}
+
+func (b bridge) server() *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{Name: "bobby-gitlab", Version: "0.1.0"}, nil)
 	for _, op := range operations {
 		mcp.AddTool(server, &mcp.Tool{Name: op.name, Description: op.description}, func(ctx context.Context, _ *mcp.CallToolRequest, in query) (*mcp.CallToolResult, map[string]any, error) {
@@ -201,9 +239,17 @@ func (b bridge) handler() http.Handler {
 			return nil, result, nil
 		})
 	}
-	stream := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
+	return server
+}
+func (b bridge) handler() http.Handler {
+	stream := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
+		token, _ := b.authorize(r)
+		scoped := b
+		scoped.token = token
+		return scoped.server()
+	}, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !b.authorize(r) {
+		if _, ok := b.authorize(r); !ok {
 			http.Error(w, "GitLab binding unavailable", http.StatusForbidden)
 			return
 		}
@@ -212,14 +258,25 @@ func (b bridge) handler() http.Handler {
 }
 
 func main() {
-	secret, err := os.ReadFile(os.Getenv("GITLAB_DEMO_TOKEN_FILE"))
-	if err != nil {
-		log.Fatal("GitLab demo token file is required")
+	var tokens map[string]string
+	if path := os.Getenv("GITLAB_DEMO_TOKENS_FILE"); path != "" {
+		data, err := os.ReadFile(path)
+		if err != nil || json.Unmarshal(data, &tokens) != nil {
+			log.Fatal("GitLab demo token map is invalid")
+		}
+	}
+	secret := []byte{}
+	if len(tokens) == 0 {
+		var err error
+		secret, err = os.ReadFile(os.Getenv("GITLAB_DEMO_TOKEN_FILE"))
+		if err != nil {
+			log.Fatal("GitLab demo token file is required")
+		}
 	}
 	b := bridge{
 		gitlab:    strings.TrimRight(os.Getenv("GITLAB_API_ORIGIN"), "/"),
 		directory: strings.TrimRight(os.Getenv("TEAM_DIRECTORY_URL"), "/"),
-		subject:   os.Getenv("GITLAB_DEMO_SUBJECT"), token: strings.TrimSpace(string(secret)),
+		subject:   os.Getenv("GITLAB_DEMO_SUBJECT"), token: strings.TrimSpace(string(secret)), tokens: tokens,
 		client: &http.Client{Timeout: 8 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
 	}
 	for _, origin := range []string{b.gitlab, b.directory} {
@@ -228,7 +285,7 @@ func main() {
 			log.Fatal("provider origin must be an HTTP or HTTPS origin")
 		}
 	}
-	if b.subject == "" || b.token == "" {
+	if len(tokens) == 0 && (b.subject == "" || b.token == "") {
 		log.Fatal("a demo subject and token are required")
 	}
 	mux := http.NewServeMux()

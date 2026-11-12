@@ -17,6 +17,8 @@ func registerTeamSessionRoute(mux *http.ServeMux, api scenario.Client) {
 		username, password := "intern", os.Getenv("TEAM_ACCESS_INTERN_PASSWORD")
 		if role == "mentor" {
 			username, password = "approver", os.Getenv("TEAM_ACCESS_APPROVER_PASSWORD")
+		} else if role == "intern2" {
+			username, password = "intern2", os.Getenv("TEAM_ACCESS_INTERN2_PASSWORD")
 		}
 		if password == "" {
 			writeError(w, http.StatusServiceUnavailable, errText("team access demo identity is unavailable"))
@@ -33,8 +35,8 @@ func registerTeamSessionRoute(mux *http.ServeMux, api scenario.Client) {
 }
 
 func demoRole(r *http.Request) string {
-	if c, err := r.Cookie("buddy_demo_role"); err == nil && c.Value == "mentor" {
-		return "mentor"
+	if c, err := r.Cookie("buddy_demo_role"); err == nil && (c.Value == "mentor" || c.Value == "intern2") {
+		return c.Value
 	}
 	return "intern"
 }
@@ -44,7 +46,7 @@ func registerDemoRoleRoute(mux *http.ServeMux) {
 		var in struct {
 			Role string `json:"role"`
 		}
-		if json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024)).Decode(&in) != nil || (in.Role != "intern" && in.Role != "mentor") {
+		if json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024)).Decode(&in) != nil || (in.Role != "intern" && in.Role != "mentor" && in.Role != "intern2") {
 			writeError(w, 400, errText("invalid demo role"))
 			return
 		}

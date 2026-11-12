@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// registerCalendarReminderRoute reads only the selected onboarding calendar
+// registerCalendarReminderRoute reads only the selected mentor calendar
 // through the caller's team session. The calendar integration owns the Google
 // credential and enforces the subject binding.
 func registerCalendarReminderRoute(mux *http.ServeMux, endpoint string) {
@@ -19,8 +19,13 @@ func registerCalendarReminderRoute(mux *http.ServeMux, endpoint string) {
 			writeError(w, http.StatusUnauthorized, errText("team session required"))
 			return
 		}
-		now := time.Now().UTC()
-		result, err := mcpTeamTool(r.Context(), endpoint, "", bearer, "calendar_onboarding_events", map[string]any{"time_min": now.Format(time.RFC3339), "time_max": now.Add(24 * time.Hour).Format(time.RFC3339)})
+		moscow, err := time.LoadLocation("Europe/Moscow")
+		if err != nil {
+			writeError(w, http.StatusServiceUnavailable, errText("calendar timezone unavailable"))
+			return
+		}
+		now := time.Now().In(moscow)
+		result, err := mcpTeamTool(r.Context(), endpoint, "", bearer, "calendar_mentor_events", map[string]any{"time_min": now.Format(time.RFC3339), "time_max": now.Add(24 * time.Hour).Format(time.RFC3339)})
 		if err != nil {
 			writeError(w, http.StatusServiceUnavailable, errText("calendar reminders unavailable"))
 			return

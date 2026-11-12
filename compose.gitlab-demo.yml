@@ -5,10 +5,10 @@ services:
     hostname: gitlab.local
     environment:
       GITLAB_OMNIBUS_CONFIG: |
-        external_url 'http://gitlab.local:18929'
+        external_url 'http://100.105.236.12:18929'
         gitlab_rails['gitlab_signup_enabled'] = false
     ports:
-      - '127.0.0.1:18929:18929'
+      - '100.105.236.12:18929:18929'
     volumes:
       - config:/etc/gitlab
       - logs:/var/log/gitlab

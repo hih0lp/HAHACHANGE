@@ -12,7 +12,6 @@ services:
     environment:
       TEAM_DIRECTORY_URL: http://team-access:8080
       CALENDAR_DEMO_SUBJECT: ${CALENDAR_DEMO_SUBJECT:?Set the demo team subject}
-      CALENDAR_ONBOARDING_ID: ${CALENDAR_ONBOARDING_ID:?Set the onboarding calendar ID}
       CALENDAR_MENTOR_ID: ${CALENDAR_MENTOR_ID:?Set the mentor calendar ID}
       GOOGLE_CLIENT_ID_FILE: /run/secrets/google_client_id
       GOOGLE_CLIENT_SECRET_FILE: /run/secrets/google_client_secret
