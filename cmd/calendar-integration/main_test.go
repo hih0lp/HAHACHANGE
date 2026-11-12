@@ -24,7 +24,7 @@ func TestCalendarToolsUseSelectedCalendarsAndBoundedRange(t *testing.T) {
 			if r.Method != http.MethodGet || r.Header.Get("Authorization") != "Bearer test-access" || r.URL.Query().Get("singleEvents") != "true" {
 				t.Error("invalid mentor request")
 			}
-			fmt.Fprint(w, `{"items":[{"summary":"mentor"}]}`)
+			fmt.Fprint(w, `{"items":[{"id":"event-1","summary":"mentor","start":{"dateTime":"2026-11-10T15:30:00+03:00"},"end":{"dateTime":"2026-11-10T16:00:00+03:00"},"irrelevant":"omit"}]}`)
 		case "/freeBusy":
 			seenFreeBusy = true
 			if r.Method != http.MethodPost || r.Header.Get("Authorization") != "Bearer test-access" {
@@ -43,8 +43,16 @@ func TestCalendarToolsUseSelectedCalendarsAndBoundedRange(t *testing.T) {
 	defer provider.Close()
 	b := bridge{mentorID: "mentor", clientID: "id", clientSecret: "secret", refreshToken: "refresh", tokenURL: provider.URL + "/token", apiURL: provider.URL, client: provider.Client()}
 	in := query{TimeMin: "2026-11-10T09:00:00+03:00", TimeMax: "2026-11-11T18:00:00+03:00"}
-	if _, err := b.call(context.Background(), "calendar_mentor_events", in); err != nil {
+	events, err := b.call(context.Background(), "calendar_mentor_events", in)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if events["period_start_date"] != "2026-11-10" || events["period_end_date_inclusive"] != "2026-11-11" {
+		t.Fatalf("unexpected event period: %v", events)
+	}
+	items := events["data"].(map[string]any)["items"].([]map[string]any)
+	if len(items) != 1 || items[0]["summary"] != "mentor" || items[0]["irrelevant"] != nil {
+		t.Fatalf("unexpected normalized events: %v", items)
 	}
 	if _, err := b.call(context.Background(), "calendar_mentor_freebusy", in); err != nil {
 		t.Fatal(err)
@@ -78,5 +86,20 @@ func TestRelativeDayUsesMoscowCalendarDate(t *testing.T) {
 	}
 	if _, _, err := resolveRange(query{Day: "tomorrow", TimeMin: now.Format(time.RFC3339)}, now); err == nil {
 		t.Fatal("ambiguous day and range accepted")
+	}
+}
+
+func TestRelativeWeekUsesMoscowMonday(t *testing.T) {
+	moscow, err := time.LoadLocation("Europe/Moscow")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 11, 12, 21, 0, 0, 0, moscow)
+	start, end, err := resolveRange(query{Period: "next_week"}, now)
+	if err != nil || start.Format(time.RFC3339) != "2026-11-16T00:00:00+03:00" || end.Format(time.RFC3339) != "2026-11-23T00:00:00+03:00" {
+		t.Fatalf("next week range: %v to %v, %v", start, end, err)
+	}
+	if _, _, err := resolveRange(query{Period: "next_week", Day: "tomorrow"}, now); err == nil {
+		t.Fatal("ambiguous period and day accepted")
 	}
 }

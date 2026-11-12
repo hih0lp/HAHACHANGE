@@ -20,11 +20,32 @@ import (
 
 type query struct {
 	Day     string `json:"day,omitempty" jsonschema:"Single Moscow calendar day: today, tomorrow, or YYYY-MM-DD. Omit time_min and time_max when using day."`
+	Period  string `json:"period,omitempty" jsonschema:"Moscow calendar week: this_week or next_week. Use this for relative week requests; do not combine with day or time_min/time_max."`
 	TimeMin string `json:"time_min,omitempty" jsonschema:"RFC3339 start of range. Use with time_max when day is omitted."`
 	TimeMax string `json:"time_max,omitempty" jsonschema:"RFC3339 end of range. Use with time_min when day is omitted."`
 }
 
 func resolveRange(in query, now time.Time) (time.Time, time.Time, error) {
+	if in.Period != "" {
+		if in.Day != "" || in.TimeMin != "" || in.TimeMax != "" {
+			return time.Time{}, time.Time{}, errors.New("period cannot be combined with day or time range")
+		}
+		moscow, err := time.LoadLocation("Europe/Moscow")
+		if err != nil {
+			return time.Time{}, time.Time{}, errors.New("Moscow timezone unavailable")
+		}
+		local := now.In(moscow)
+		monday := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, moscow).AddDate(0, 0, -((int(local.Weekday()) + 6) % 7))
+		switch in.Period {
+		case "this_week":
+			return monday, monday.AddDate(0, 0, 7), nil
+		case "next_week":
+			start := monday.AddDate(0, 0, 7)
+			return start, start.AddDate(0, 0, 7), nil
+		default:
+			return time.Time{}, time.Time{}, errors.New("period must be this_week or next_week")
+		}
+	}
 	if in.Day != "" {
 		if in.TimeMin != "" || in.TimeMax != "" {
 			return time.Time{}, time.Time{}, errors.New("day cannot be combined with time_min or time_max")
@@ -168,6 +189,46 @@ func (b bridge) call(ctx context.Context, name string, in query) (map[string]any
 		if !present || len(entry.Errors) > 0 {
 			return nil, errors.New("mentor availability is unknown")
 		}
+	} else {
+		var response struct {
+			Items []struct {
+				ID          string `json:"id"`
+				Summary     string `json:"summary"`
+				Description string `json:"description"`
+				HTMLLink    string `json:"htmlLink"`
+				Start       struct {
+					DateTime string `json:"dateTime"`
+					Date     string `json:"date"`
+				} `json:"start"`
+				End struct {
+					DateTime string `json:"dateTime"`
+					Date     string `json:"date"`
+				} `json:"end"`
+			} `json:"items"`
+		}
+		if json.Unmarshal(data, &response) != nil {
+			return nil, errors.New("mentor events response is invalid")
+		}
+		items := make([]map[string]any, 0, len(response.Items))
+		for _, event := range response.Items {
+			item := map[string]any{
+				"id": event.ID, "summary": event.Summary,
+				"start": map[string]string{"dateTime": event.Start.DateTime, "date": event.Start.Date},
+				"end":   map[string]string{"dateTime": event.End.DateTime, "date": event.End.Date},
+			}
+			if event.Description != "" {
+				item["description"] = event.Description
+			}
+			if event.HTMLLink != "" {
+				item["htmlLink"] = event.HTMLLink
+			}
+			items = append(items, item)
+		}
+		return map[string]any{
+			"data": map[string]any{"items": items}, "source": "Google Calendar demo", "calendar": calendar,
+			"period_start_date": start.In(start.Location()).Format("2006-01-02"), "period_end_date_inclusive": end.Add(-time.Nanosecond).In(start.Location()).Format("2006-01-02"),
+			"time_min": timeMin, "time_max": timeMax,
+		}, nil
 	}
 	return map[string]any{"data": json.RawMessage(data), "source": "Google Calendar demo", "calendar": calendar, "time_min": timeMin, "time_max": timeMax}, nil
 }
@@ -175,11 +236,14 @@ func (b bridge) call(ctx context.Context, name string, in query) (map[string]any
 func (b bridge) handler() http.Handler {
 	server := mcp.NewServer(&mcp.Implementation{Name: "bobby-calendar", Version: "0.1.0"}, nil)
 	for _, tool := range []struct{ name, description string }{
-		{"calendar_mentor_events", "Read titles, times, and details from the mentor's shared demo calendar. For one Moscow day pass day=today, tomorrow, or YYYY-MM-DD; for a longer range pass time_min and time_max in RFC3339."},
-		{"calendar_mentor_freebusy", "Read busy intervals from the mentor's shared demo calendar. For one Moscow day pass day=today, tomorrow, or YYYY-MM-DD; for a longer range pass time_min and time_max in RFC3339."},
+		{"calendar_mentor_events", "Read dated events and published meeting or office-hour windows from the selected mentor calendar. Use this to answer when the mentor offers slots or what is scheduled. For one Moscow day pass day=today, tomorrow, or YYYY-MM-DD; for a relative week pass period=this_week or next_week; for explicit ranges pass time_min and time_max in RFC3339."},
+		{"calendar_mentor_freebusy", "Read only busy intervals from the selected mentor calendar. Busy intervals do not establish which meeting slots the mentor offers; use calendar_mentor_events for published windows. For one Moscow day pass day=today, tomorrow, or YYYY-MM-DD; for a relative week pass period=this_week or next_week; for explicit ranges pass time_min and time_max in RFC3339."},
 	} {
 		mcp.AddTool(server, &mcp.Tool{Name: tool.name, Description: tool.description}, func(ctx context.Context, _ *mcp.CallToolRequest, in query) (*mcp.CallToolResult, map[string]any, error) {
 			result, err := b.call(ctx, tool.name, in)
+			if err != nil {
+				log.Printf("calendar MCP tool=%q error=%v", tool.name, err)
+			}
 			return nil, result, err
 		})
 	}
