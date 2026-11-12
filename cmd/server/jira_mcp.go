@@ -120,6 +120,33 @@ func jiraListIssues(ctx context.Context, cfg jiraConfig) (jiraIssues, error) {
 	}
 	return result, nil
 }
+
+func jiraGetAllFields(ctx context.Context, cfg jiraConfig, key string) (map[string]any, error) {
+	key = strings.ToUpper(strings.TrimSpace(key))
+	if !issueKeyPattern.MatchString(key) || !strings.HasPrefix(key, cfg.ProjectKey+"-") {
+		return nil, errors.New("issue key must belong to the configured project")
+	}
+	var raw struct {
+		Key    string                     `json:"key"`
+		Names  map[string]string          `json:"names"`
+		Fields map[string]json.RawMessage `json:"fields"`
+	}
+	if err := jiraGET(ctx, cfg, "/rest/api/3/issue/"+url.PathEscape(key)+"?fields=*all&expand=names", &raw); err != nil {
+		return nil, err
+	}
+	fields := make(map[string]json.RawMessage)
+	for id, value := range raw.Fields {
+		if string(value) == "null" || len(value) == 0 {
+			continue
+		}
+		name := raw.Names[id]
+		if name == "" {
+			name = id
+		}
+		fields[name+" ("+id+")"] = value
+	}
+	return map[string]any{"key": raw.Key, "url": cfg.BaseURL + "/browse/" + url.PathEscape(raw.Key), "fields": fields}, nil
+}
 func newJiraMCP(cfg jiraConfig) http.Handler {
 	server := mcp.NewServer(&mcp.Implementation{Name: "hackchange-jira", Version: "1.0.0"}, nil)
 	mcp.AddTool(server, &mcp.Tool{Name: "jira_get_issue", Description: "Read a task from the configured test Jira project, including its description, status and URL."}, func(ctx context.Context, _ *mcp.CallToolRequest, arg jiraIssueArg) (*mcp.CallToolResult, jiraIssue, error) {
@@ -135,6 +162,13 @@ func newJiraMCP(cfg jiraConfig) http.Handler {
 		}
 		issues, err := jiraListIssues(ctx, cfg)
 		return nil, issues, err
+	})
+	mcp.AddTool(server, &mcp.Tool{Name: "jira_get_issue_fields", Description: "Read all nonempty Jira fields and their display names for a task when the user asks for details not present in the short issue view."}, func(ctx context.Context, _ *mcp.CallToolRequest, arg jiraIssueArg) (*mcp.CallToolResult, map[string]any, error) {
+		if cfg.Mode != "live" {
+			return nil, nil, errors.New("Jira is disabled")
+		}
+		result, err := jiraGetAllFields(ctx, cfg, arg.Key)
+		return nil, result, err
 	})
 	return mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
 }
