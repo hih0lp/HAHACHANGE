@@ -21,12 +21,24 @@ func TestCalendarPlannerValidatesModelRange(t *testing.T) {
 	defer model.Close()
 	a := answerer{url: model.URL, model: "test", client: model.Client()}
 	loc, _ := time.LoadLocation("Europe/Moscow")
-	plan, err := a.planCalendar(context.Background(), "Какие мероприятия на этой неделе?", time.Date(2026, 11, 12, 20, 0, 0, 0, loc))
+	plan, err := a.planCalendar(context.Background(), "Какие мероприятия на этой неделе?", time.Date(2026, 11, 12, 20, 0, 0, 0, loc), nil)
 	if err != nil || !plan.NeedsEvents || !strings.HasPrefix(plan.TimeMin, "2026-11-12T20:00") || plan.TimeMax != "2026-11-16T00:00:00+03:00" {
 		t.Fatalf("plan=%+v err=%v", plan, err)
 	}
 	response = `{"needs_events":true,"time_min":"2026-11-12T00:00:00+03:00","time_max":"2027-01-01T00:00:00+03:00"}`
-	if _, err := a.planCalendar(context.Background(), "Календарь", time.Now().In(loc)); err == nil {
+	if _, err := a.planCalendar(context.Background(), "Календарь", time.Now().In(loc), nil); err == nil {
 		t.Fatal("range over 31 days accepted")
+	}
+}
+
+func TestPlannerSelectsLiveForm(t *testing.T) {
+	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"choices":[{"message":{"content":"{\"needs_form\":true,\"form_id\":\"access-request\"}"}}]}`)
+	}))
+	defer model.Close()
+	a := answerer{url: model.URL, model: "test", client: model.Client()}
+	plan, err := a.planCalendar(context.Background(), "Куда отправить заявку на доступ?", time.Now(), []formChoice{{ID: "access-request", Title: "Заявка на доступ", URL: "/forms/access-request"}})
+	if err != nil || !plan.NeedsForm || plan.FormID != "access-request" {
+		t.Fatalf("plan=%+v err=%v", plan, err)
 	}
 }

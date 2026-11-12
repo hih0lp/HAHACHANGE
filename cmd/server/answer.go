@@ -160,25 +160,62 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 Если для ответа нужен инструмент, выбери его сам. Если клиент модели не сформировал нативный вызов функции, верни строго JSON без markdown: {"tool_call":{"name":"имя из каталога","arguments":{}}}. После получения результата MCP дай обычный ответ пользователю. Учитывай предыдущие реплики этого чата: короткое согласие или выбор ресурса продолжает начатое обращение. Если ранее ты предложил выбрать ресурс для заявки и пользователь выбрал его, найди подходящую форму сейчас, не спрашивай выбор повторно. Вопросы о задачах Jira, команде, участниках, ролях, ресурсах, правах и доступных формах требуют вызова инструмента до ответа. Когда пользователь хочет оформить обращение, найди подходящую форму через инструменты сервиса прав и дай ссылку Markdown [Заполнить форму](form_url из результата). Эта ссылка показывает форму прямо в чате. Когда предлагаешь форму, ответь только её названием и ссылкой form_url; не добавляй поля, инструкции, примеры, вложения и порядок согласования. Если пользователь отдельно обсуждает поля, прочитай схему формы через инструмент и помоги их заполнить. Если речь о доступе к конкретному ресурсу, проверь каталог ресурсов и текущее право, прежде чем описывать их. Не выдумывай идентификаторы ресурсов, названия прав и их значения даже в качестве примеров: бери их из результатов инструментов или оставь выбор открытым в форме. Не утверждай, что форма отправлена: её отправляет только пользователь после проверки полей и подтверждения в чате.`
 	}
 	if teamToken != "" {
+		var forms []formChoice
+		if a.rightsMCPURL != "" {
+			if listed, err := mcpTeamTool(ctx, a.rightsMCPURL, "", teamToken, "rights_forms_list", map[string]any{}); err == nil {
+				data, _ := json.Marshal(listed)
+				var catalogue struct {
+					Forms []formChoice `json:"forms"`
+				}
+				if json.Unmarshal(data, &catalogue) == nil {
+					forms = catalogue.Forms
+				}
+			}
+		}
 		if a.calendarMCPURL != "" {
-			plan, planErr := a.planCalendar(ctx, question, time.Now().In(moscow))
+			plan, planErr := a.planCalendar(ctx, question, time.Now().In(moscow), forms)
 			if planErr != nil {
 				prompt += "\nПериод календаря не удалось определить; не делай утверждений о расписании без проверки."
-			} else if plan.NeedsEvents || plan.NeedsAvailability {
-				for _, need := range []struct {
-					enabled     bool
-					name, label string
-				}{{plan.NeedsEvents, "calendar_onboarding_events", "События календаря наставника"}, {plan.NeedsAvailability, "calendar_mentor_freebusy", "Занятость наставника"}} {
-					if !need.enabled {
-						continue
+			} else {
+				if plan.NeedsForm {
+					selected := make([]formChoice, 0, len(forms))
+					for _, form := range forms {
+						if plan.FormID == "" || form.ID == plan.FormID {
+							selected = append(selected, form)
+						}
 					}
-					result, callErr := mcpTeamTool(ctx, a.calendarMCPURL, "", teamToken, need.name, map[string]any{"time_min": plan.TimeMin, "time_max": plan.TimeMax})
-					if callErr != nil {
-						prompt += "\n" + need.label + " недоступны: " + callErr.Error()
-						continue
+					if len(selected) == 0 {
+						selected = forms
 					}
-					if data, err := json.Marshal(result); err == nil {
-						prompt += "\nПроверенные " + need.label + " за период " + plan.TimeMin + " — " + plan.TimeMax + ": " + string(data)
+					if len(selected) == 0 {
+						return "Список форм сейчас недоступен. Попробуйте ещё раз позже.", hits, nil
+					}
+					links := make([]string, 0, len(selected))
+					for _, form := range selected {
+						if form.ID != "" && form.URL == "/forms/"+form.ID {
+							links = append(links, "["+form.Title+"]("+form.URL+")")
+						}
+					}
+					if len(links) > 0 {
+						return strings.Join(links, "\n"), hits, nil
+					}
+				}
+				if plan.NeedsEvents || plan.NeedsAvailability {
+					for _, need := range []struct {
+						enabled     bool
+						name, label string
+					}{{plan.NeedsEvents, "calendar_onboarding_events", "События календаря наставника"}, {plan.NeedsAvailability, "calendar_mentor_freebusy", "Занятость наставника"}} {
+						if !need.enabled {
+							continue
+						}
+						result, callErr := mcpTeamTool(ctx, a.calendarMCPURL, "", teamToken, need.name, map[string]any{"time_min": plan.TimeMin, "time_max": plan.TimeMax})
+						if callErr != nil {
+							prompt += "\n" + need.label + " недоступны: " + callErr.Error()
+							continue
+						}
+						if data, err := json.Marshal(result); err == nil {
+							prompt += "\nПроверенные " + need.label + " за период " + plan.TimeMin + " — " + plan.TimeMax + ": " + string(data)
+						}
 					}
 				}
 			}
