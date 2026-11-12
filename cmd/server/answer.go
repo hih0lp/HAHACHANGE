@@ -31,6 +31,22 @@ type answerer struct {
 	historyDB      *pgxpool.Pool
 }
 
+func verifiedJiraAccountID(teamContext string) string {
+	var context struct {
+		JiraAccountID string `json:"jira_account_id"`
+		Profile       struct {
+			JiraAccountID string `json:"jira_account_id"`
+		} `json:"profile"`
+	}
+	if json.Unmarshal([]byte(teamContext), &context) != nil {
+		return ""
+	}
+	if context.JiraAccountID != "" {
+		return context.JiraAccountID
+	}
+	return context.Profile.JiraAccountID
+}
+
 type completionToolCall struct {
 	ID       string `json:"id"`
 	Type     string `json:"type"`
@@ -172,7 +188,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 				}
 			}
 		}
-		if a.calendarMCPURL != "" {
+		{
 			plan, planErr := a.planCalendar(ctx, question, time.Now().In(moscow), forms)
 			if planErr != nil {
 				prompt += "\nПериод календаря не удалось определить; не делай утверждений о расписании без проверки."
@@ -200,7 +216,28 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 						return strings.Join(links, "\n"), hits, nil
 					}
 				}
-				if plan.NeedsEvents || plan.NeedsAvailability {
+				if plan.NeedsMyJiraIssues {
+					if a.jiraMode != "live" {
+						return "Jira сейчас не подключена, поэтому я не могу проверить личные задачи.", hits, nil
+					}
+					profile, profileErr := mcpTeamTool(ctx, a.teamMCPURL, "", teamToken, "team_profile", map[string]any{})
+					if profileErr != nil {
+						return "Не удалось проверить ваш профиль команды, поэтому я не могу определить личные задачи.", hits, nil
+					}
+					profileJSON, _ := json.Marshal(profile)
+					accountID := verifiedJiraAccountID(string(profileJSON))
+					if accountID == "" || strings.HasPrefix(accountID, "demo-") {
+						return "Ваш Jira-аккаунт пока не сопоставлен с профилем команды, поэтому я не могу определить личные задачи. Задачи проекта могу показать отдельно.", hits, nil
+					}
+					issues, callErr := mcpTeamTool(ctx, a.mcpURL, a.mcpKey, "", "jira_list_assigned_issues", map[string]any{"account_id": accountID})
+					if callErr != nil {
+						return "Не удалось проверить задачи, назначенные на ваш Jira-аккаунт: " + callErr.Error(), hits, nil
+					}
+					if data, err := json.Marshal(issues); err == nil {
+						prompt += "\nПроверенные задачи, назначенные текущему пользователю (Jira accountId из профиля команды): " + string(data) + ". Назови область поиска по project_key. Не подменяй личный список общим списком проекта. Описание и дата начала в кратком списке отсутствуют; если пользователь их запросил, получи карточку задачи. Не упоминай названия инструментов и внутренние команды. Если задач нет, скажи об этом. Если truncated=true, предупреди, что показана только первая страница; иначе не предлагай расширять список."
+					}
+				}
+				if a.calendarMCPURL != "" && (plan.NeedsEvents || plan.NeedsAvailability) {
 					for _, need := range []struct {
 						enabled     bool
 						name, label string
@@ -218,53 +255,51 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 						}
 					}
 				}
+				if plan.NeedsRecommendation {
+					missing := map[string]bool{}
+					for _, source := range []struct {
+						name, endpoint string
+						args           map[string]any
+					}{
+						{"team_profile", a.teamMCPURL, map[string]any{}},
+						{"team_members", a.teamMCPURL, map[string]any{}},
+						{"jira_list_issues", a.mcpURL, map[string]any{}},
+						{"gitlab_projects", a.gitLabMCPURL, map[string]any{}},
+					} {
+						if source.endpoint == "" {
+							missing[source.name] = true
+							continue
+						}
+						key, token := "", teamToken
+						if source.endpoint == a.mcpURL {
+							key, token = a.mcpKey, ""
+						}
+						result, callErr := mcpTeamTool(ctx, source.endpoint, key, token, source.name, source.args)
+						if callErr != nil {
+							missing[source.name] = true
+							prompt += "\nИсточник " + source.name + " недоступен: " + callErr.Error()
+							continue
+						}
+						if data, err := json.Marshal(result); err == nil {
+							prompt += "\nПроверенный источник " + source.name + ": " + string(data)
+						}
+					}
+					if len(missing) > 0 {
+						parts := []string{}
+						if missing["team_profile"] || missing["team_members"] {
+							parts = append(parts, "данные команды")
+						}
+						if missing["jira_list_issues"] {
+							parts = append(parts, "задачи Jira")
+						}
+						if missing["gitlab_projects"] {
+							parts = append(parts, "проекты и MR GitLab")
+						}
+						return "Пока не могу подготовить достоверную персональную рекомендацию: не удалось проверить " + strings.Join(parts, ", ") + ". Когда источник снова будет доступен, сопоставлю вашу команду, задачи, код и документацию. Навыки по общим материалам приписывать вам не буду.", hits, nil
+					}
+					systemPrompt += "\nВ персональной рекомендации используй только проверенные источники выше. Список проектов GitLab сам по себе не доказывает работу пользователя: запроси MR выбранных доступных проектов через подключённый инструмент, если это нужно для вывода, и не приписывай пользователю чужой код. Укажи, какие источники доступны и какие нет. Не приписывай человеку навыки, которых нет в профиле или доказанной работе."
+				}
 			}
-		}
-		q := strings.ToLower(question)
-		if strings.Contains(q, "рекоменд") || strings.Contains(q, "подуч") || strings.Contains(q, "развива") {
-			missing := map[string]bool{}
-			for _, source := range []struct {
-				name, endpoint string
-				args           map[string]any
-			}{
-				{"team_profile", a.teamMCPURL, map[string]any{}},
-				{"team_members", a.teamMCPURL, map[string]any{}},
-				{"jira_list_issues", a.mcpURL, map[string]any{}},
-				{"gitlab_projects", a.gitLabMCPURL, map[string]any{}},
-				{"gitlab_merge_requests", a.gitLabMCPURL, map[string]any{"project": "2"}},
-			} {
-				if source.endpoint == "" {
-					missing[source.name] = true
-					continue
-				}
-				key, token := "", teamToken
-				if source.endpoint == a.mcpURL {
-					key, token = a.mcpKey, ""
-				}
-				result, callErr := mcpTeamTool(ctx, source.endpoint, key, token, source.name, source.args)
-				if callErr != nil {
-					missing[source.name] = true
-					prompt += "\nИсточник " + source.name + " недоступен: " + callErr.Error()
-					continue
-				}
-				if data, err := json.Marshal(result); err == nil {
-					prompt += "\nПроверенный источник " + source.name + ": " + string(data)
-				}
-			}
-			if len(missing) > 0 {
-				parts := []string{}
-				if missing["team_profile"] || missing["team_members"] {
-					parts = append(parts, "данные команды")
-				}
-				if missing["jira_list_issues"] {
-					parts = append(parts, "задачи Jira")
-				}
-				if missing["gitlab_projects"] || missing["gitlab_merge_requests"] {
-					parts = append(parts, "проекты и MR GitLab")
-				}
-				return "Пока не могу подготовить достоверную персональную рекомендацию: не удалось проверить " + strings.Join(parts, ", ") + ". Когда источник снова будет доступен, сопоставлю вашу команду, задачи, код и документацию. Навыки по общим материалам приписывать вам не буду.", hits, nil
-			}
-			systemPrompt += "\nВ персональной рекомендации используй только проверенные источники выше. Укажи, какие источники доступны и какие нет. Не приписывай человеку навыки, которых нет в профиле или доказанной работе."
 		}
 	}
 	messages := []map[string]any{{"role": "system", "content": systemPrompt}}

@@ -16,21 +16,39 @@ import (
 )
 
 type jiraIssue struct {
-	Key         string `json:"key"`
-	Summary     string `json:"summary"`
-	Status      string `json:"status"`
-	Description string `json:"description"`
-	DueDate     string `json:"due_date,omitempty"`
-	StartDate   string `json:"start_date,omitempty"`
-	URL         string `json:"url"`
+	Key               string `json:"key"`
+	Summary           string `json:"summary"`
+	Status            string `json:"status"`
+	Description       string `json:"description"`
+	DueDate           string `json:"due_date,omitempty"`
+	StartDate         string `json:"start_date,omitempty"`
+	AssigneeAccountID string `json:"assignee_account_id,omitempty"`
+	AssigneeName      string `json:"assignee_name,omitempty"`
+	URL               string `json:"url"`
 }
 type jiraIssues struct {
-	Issues []jiraIssue `json:"issues"`
+	ProjectKey string             `json:"project_key"`
+	Issues     []jiraIssueSummary `json:"issues"`
+	Truncated  bool               `json:"truncated,omitempty"`
+}
+type jiraIssueSummary struct {
+	Key               string `json:"key"`
+	Summary           string `json:"summary"`
+	Status            string `json:"status"`
+	DueDate           string `json:"due_date,omitempty"`
+	AssigneeAccountID string `json:"assignee_account_id,omitempty"`
+	AssigneeName      string `json:"assignee_name,omitempty"`
+	URL               string `json:"url"`
 }
 type jiraIssueArg struct {
 	Key string `json:"key" jsonschema:"Jira issue key, for example SCRUM-5"`
 }
 type jiraEmptyArg struct{}
+type jiraAssigneeArg struct {
+	AccountID string `json:"account_id" jsonschema:"Verified Jira accountId of the current user from the team profile"`
+}
+
+var jiraAccountIDPattern = regexp.MustCompile(`^[A-Za-z0-9:._-]+$`)
 
 var issueKeyPattern = regexp.MustCompile(`^[A-Z][A-Z0-9_]*-[0-9]+$`)
 
@@ -90,34 +108,64 @@ func jiraGetIssue(ctx context.Context, cfg jiraConfig, key string) (jiraIssue, e
 			Description any    `json:"description"`
 			DueDate     string `json:"duedate"`
 			StartDate   string `json:"customfield_10015"`
+			Assignee    struct {
+				AccountID   string `json:"accountId"`
+				DisplayName string `json:"displayName"`
+			} `json:"assignee"`
 		} `json:"fields"`
 	}
-	err := jiraGET(ctx, cfg, "/rest/api/3/issue/"+url.PathEscape(key)+"?fields=summary,status,description,duedate,customfield_10015", &raw)
+	err := jiraGET(ctx, cfg, "/rest/api/3/issue/"+url.PathEscape(key)+"?fields=summary,status,description,duedate,customfield_10015,assignee", &raw)
 	if err != nil {
 		return jiraIssue{}, err
 	}
-	return jiraIssue{Key: raw.Key, Summary: raw.Fields.Summary, Status: raw.Fields.Status.Name, Description: adfText(raw.Fields.Description), DueDate: raw.Fields.DueDate, StartDate: raw.Fields.StartDate, URL: cfg.BaseURL + "/browse/" + url.PathEscape(raw.Key)}, nil
+	return jiraIssue{Key: raw.Key, Summary: raw.Fields.Summary, Status: raw.Fields.Status.Name, Description: adfText(raw.Fields.Description), DueDate: raw.Fields.DueDate, StartDate: raw.Fields.StartDate, AssigneeAccountID: raw.Fields.Assignee.AccountID, AssigneeName: raw.Fields.Assignee.DisplayName, URL: cfg.BaseURL + "/browse/" + url.PathEscape(raw.Key)}, nil
 }
 func jiraListIssues(ctx context.Context, cfg jiraConfig) (jiraIssues, error) {
-	params := url.Values{"jql": {"project = " + cfg.ProjectKey + " ORDER BY updated DESC"}, "maxResults": {"10"}, "fields": {"summary,status"}}
+	return jiraSearchIssues(ctx, cfg, "")
+}
+
+func jiraSearchIssues(ctx context.Context, cfg jiraConfig, accountID string) (jiraIssues, error) {
+	if accountID != "" && !jiraAccountIDPattern.MatchString(accountID) {
+		return jiraIssues{}, errors.New("invalid Jira accountId")
+	}
+	jql := "project = " + cfg.ProjectKey
+	if accountID != "" {
+		jql += ` AND assignee = "` + accountID + `"`
+	}
+	jql += " ORDER BY updated DESC"
+	maxResults := "10"
+	if accountID != "" {
+		maxResults = "50"
+	}
+	params := url.Values{"jql": {jql}, "maxResults": {maxResults}, "fields": {"summary,status,assignee,duedate"}}
 	var raw struct {
-		Issues []struct {
+		NextPageToken string `json:"nextPageToken"`
+		Issues        []struct {
 			Key    string `json:"key"`
 			Fields struct {
 				Summary string `json:"summary"`
 				Status  struct {
 					Name string `json:"name"`
 				} `json:"status"`
+				DueDate  string `json:"duedate"`
+				Assignee struct {
+					AccountID   string `json:"accountId"`
+					DisplayName string `json:"displayName"`
+				} `json:"assignee"`
 			} `json:"fields"`
 		} `json:"issues"`
 	}
 	if err := jiraGET(ctx, cfg, "/rest/api/3/search/jql?"+params.Encode(), &raw); err != nil {
 		return jiraIssues{}, err
 	}
-	result := jiraIssues{Issues: make([]jiraIssue, 0, len(raw.Issues))}
+	result := jiraIssues{ProjectKey: cfg.ProjectKey, Issues: make([]jiraIssueSummary, 0, len(raw.Issues))}
 	for _, item := range raw.Issues {
-		result.Issues = append(result.Issues, jiraIssue{Key: item.Key, Summary: item.Fields.Summary, Status: item.Fields.Status.Name, URL: cfg.BaseURL + "/browse/" + url.PathEscape(item.Key)})
+		if accountID != "" && item.Fields.Assignee.AccountID != accountID {
+			continue
+		}
+		result.Issues = append(result.Issues, jiraIssueSummary{Key: item.Key, Summary: item.Fields.Summary, Status: item.Fields.Status.Name, DueDate: item.Fields.DueDate, AssigneeAccountID: item.Fields.Assignee.AccountID, AssigneeName: item.Fields.Assignee.DisplayName, URL: cfg.BaseURL + "/browse/" + url.PathEscape(item.Key)})
 	}
+	result.Truncated = raw.NextPageToken != ""
 	return result, nil
 }
 
@@ -156,11 +204,21 @@ func newJiraMCP(cfg jiraConfig) http.Handler {
 		issue, err := jiraGetIssue(ctx, cfg, arg.Key)
 		return nil, issue, err
 	})
-	mcp.AddTool(server, &mcp.Tool{Name: "jira_list_issues", Description: "Discover up to ten recently updated Jira issues. Entries contain only key, title, status and URL; this list does not include due dates, start dates or descriptions. Fetch each issue separately before answering about those fields or comparing issues."}, func(ctx context.Context, _ *mcp.CallToolRequest, _ jiraEmptyArg) (*mcp.CallToolResult, jiraIssues, error) {
+	mcp.AddTool(server, &mcp.Tool{Name: "jira_list_issues", Description: "Discover up to ten recently updated issues in the configured Jira project. Includes assignee accountId, title, status, due date and URL. This is a project-wide list, not a personal task list; compare assignee with the verified team profile or use jira_list_assigned_issues. Fetch each issue separately for descriptions, start dates or other fields."}, func(ctx context.Context, _ *mcp.CallToolRequest, _ jiraEmptyArg) (*mcp.CallToolResult, jiraIssues, error) {
 		if cfg.Mode != "live" {
 			return nil, jiraIssues{}, errors.New("Jira is disabled")
 		}
 		issues, err := jiraListIssues(ctx, cfg)
+		return nil, issues, err
+	})
+	mcp.AddTool(server, &mcp.Tool{Name: "jira_list_assigned_issues", Description: "Find issues assigned to the current employee in the configured Jira project. Supply their verified Jira accountId from the team profile, never an inferred name or a demo placeholder. Results include due dates and a truncated flag when more than 50 match."}, func(ctx context.Context, _ *mcp.CallToolRequest, arg jiraAssigneeArg) (*mcp.CallToolResult, jiraIssues, error) {
+		if cfg.Mode != "live" {
+			return nil, jiraIssues{}, errors.New("Jira is disabled")
+		}
+		if arg.AccountID == "" {
+			return nil, jiraIssues{}, errors.New("Jira accountId is required")
+		}
+		issues, err := jiraSearchIssues(ctx, cfg, arg.AccountID)
 		return nil, issues, err
 	})
 	mcp.AddTool(server, &mcp.Tool{Name: "jira_get_issue_fields", Description: "Fetch all nonempty fields of one Jira issue with Jira's display names and field IDs. Use when a requested fact is absent from jira_get_issue or a field needs clarification. Omitted null fields are not evidence of any workflow rule."}, func(ctx context.Context, _ *mcp.CallToolRequest, arg jiraIssueArg) (*mcp.CallToolResult, map[string]any, error) {

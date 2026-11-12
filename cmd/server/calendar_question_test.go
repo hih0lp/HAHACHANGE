@@ -42,3 +42,15 @@ func TestPlannerSelectsLiveForm(t *testing.T) {
 		t.Fatalf("plan=%+v err=%v", plan, err)
 	}
 }
+
+func TestPlannerClassifiesPersonalJiraWithoutPhraseRules(t *testing.T) {
+	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"choices":[{"message":{"content":"{\"needs_my_jira_issues\":true,\"needs_recommendation\":false}"}}]}`)
+	}))
+	defer model.Close()
+	a := answerer{url: model.URL, model: "test", client: model.Client()}
+	plan, err := a.planCalendar(context.Background(), "Что назначено мне в трекере?", time.Now(), nil)
+	if err != nil || !plan.NeedsMyJiraIssues {
+		t.Fatalf("plan=%+v err=%v", plan, err)
+	}
+}
