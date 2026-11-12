@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -22,6 +23,12 @@ func TestJiraCatalogueAndCallThroughMCP(t *testing.T) {
 	tools, err := mcpTeamTools(context.Background(), server.URL, "", "")
 	if err != nil || len(tools) != 3 {
 		t.Fatalf("MCP catalogue: count=%d err=%v", len(tools), err)
+	}
+	for _, tool := range tools {
+		function := tool["function"].(map[string]any)
+		if function["name"] == "jira_list_issues" && !strings.Contains(function["description"].(string), "does not include due dates") {
+			t.Fatal("Jira list description does not explain its missing fields")
+		}
 	}
 	result, err := mcpTeamTool(context.Background(), server.URL, "", "", "jira_list_issues", map[string]any{})
 	if err != nil || result == nil {

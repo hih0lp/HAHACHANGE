@@ -138,8 +138,8 @@ func (b bridge) call(ctx context.Context, name string, in query) (map[string]any
 func (b bridge) handler() http.Handler {
 	server := mcp.NewServer(&mcp.Implementation{Name: "bobby-calendar", Version: "0.1.0"}, nil)
 	for _, tool := range []struct{ name, description string }{
-		{"calendar_onboarding_events", "Read events from the selected onboarding calendar in a bounded date range."},
-		{"calendar_mentor_freebusy", "Read only busy intervals from the selected mentor demo calendar; never reveals event titles."},
+		{"calendar_onboarding_events", "Fetch scheduled events from the selected mentor calendar for a bounded RFC3339 time range (at most 31 days). Returns event titles, start/end times and available descriptions or links. Use event results for claims about what is scheduled; documents and free/busy data do not establish event titles. An empty result means no events in the queried range only."},
+		{"calendar_mentor_freebusy", "Fetch busy intervals from the same mentor calendar for a bounded RFC3339 time range (at most 31 days). Use to assess availability; this result has no event titles or descriptions and cannot identify a meeting."},
 	} {
 		mcp.AddTool(server, &mcp.Tool{Name: tool.name, Description: tool.description}, func(ctx context.Context, _ *mcp.CallToolRequest, in query) (*mcp.CallToolResult, map[string]any, error) {
 			result, err := b.call(ctx, tool.name, in)
