@@ -1,12 +1,12 @@
-# Reuse the already provisioned demo MCP containers on the distributed network.
+# Reuse the provisioned MCP services on the distributed network.
 # Their credentials remain in the separate private configuration, outside Git.
 services:
   api:
     environment:
-      GITLAB_MCP_URL: http://bobby-gitlab-mcp-demo:8080/mcp
+      GITLAB_MCP_URL: http://gitlab-integration:8080/mcp
       GITLAB_REMINDER_PROJECT: "2"
       CALENDAR_MCP_URL: http://bobby-calendar-mcp-updated:8080/mcp
   worker:
     environment:
-      GITLAB_MCP_URL: http://bobby-gitlab-mcp-demo:8080/mcp
+      GITLAB_MCP_URL: http://gitlab-integration:8080/mcp
       CALENDAR_MCP_URL: http://bobby-calendar-mcp-updated:8080/mcp
