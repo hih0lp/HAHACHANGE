@@ -295,6 +295,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 							key, token = a.mcpKey, ""
 						}
 						result, callErr := mcpTeamTool(ctx, source.endpoint, key, token, source.name, source.args)
+						evidence.record(toolSource(source.name), callErr)
 						if callErr != nil {
 							missing[source.name] = true
 							prompt += "\nИсточник " + source.name + " недоступен: " + callErr.Error()
