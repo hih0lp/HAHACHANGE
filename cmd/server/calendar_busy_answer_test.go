@@ -23,12 +23,12 @@ func TestFormatCalendarBusyRejectsMissingData(t *testing.T) {
 }
 
 func TestFormatCalendarEventsUsesReturnedTimes(t *testing.T) {
-	result := map[string]any{"data": map[string]any{"items": []any{map[string]any{"summary": "Ревью", "start": map[string]string{"dateTime": "2026-11-19T13:00:00Z"}, "end": map[string]string{"dateTime": "2026-11-19T14:00:00Z"}}}}}
+	result := map[string]any{"data": map[string]any{"items": []any{map[string]any{"summary": "Ревью", "description": "<p>Обсуждение &amp; разбор</p>", "htmlLink": "https://www.google.com/calendar/event?eid=demo", "start": map[string]string{"dateTime": "2026-11-19T13:00:00Z"}, "end": map[string]string{"dateTime": "2026-11-19T14:00:00Z"}}}}}
 	answer, err := formatCalendarEvents(result)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(answer, "19.11.2026 16:00–17:00 МСК — Ревью") || strings.Contains(answer, "13:00") {
+	if !strings.Contains(answer, "19.11.2026 16:00–17:00 МСК — Ревью. Обсуждение & разбор") || strings.Contains(answer, "13:00") || !strings.Contains(answer, "[Открыть событие](https://www.google.com/calendar/event?eid=demo)") {
 		t.Fatalf("unexpected event answer: %q", answer)
 	}
 }

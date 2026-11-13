@@ -4,9 +4,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
+	"net/url"
+	"regexp"
 	"strings"
 	"time"
 )
+
+var calendarHTMLTag = regexp.MustCompile(`<[^>]*>`)
 
 // formatCalendarBusy renders only intervals returned by the calendar MCP.
 // This avoids adding an unverified slot when the model phrases a direct answer.
@@ -67,6 +72,7 @@ func formatCalendarEvents(result any) (string, error) {
 			Items []struct {
 				Summary     string `json:"summary"`
 				Description string `json:"description"`
+				HTMLLink    string `json:"htmlLink"`
 				Start       struct {
 					DateTime string `json:"dateTime"`
 				} `json:"start"`
@@ -104,7 +110,14 @@ func formatCalendarEvents(result any) (string, error) {
 		start, end = start.In(zone), end.In(zone)
 		line := fmt.Sprintf("- %s %s–%s МСК — %s", start.Format("02.01.2006"), start.Format("15:04"), end.Format("15:04"), event.Summary)
 		if event.Description != "" {
-			line += ". " + event.Description
+			line += ". " + strings.TrimSpace(html.UnescapeString(calendarHTMLTag.ReplaceAllString(event.Description, "")))
+		}
+		if event.HTMLLink != "" {
+			link, parseErr := url.Parse(event.HTMLLink)
+			if parseErr != nil || link.Scheme != "https" || link.Host == "" {
+				return "", errors.New("invalid calendar event link")
+			}
+			line += " [Открыть событие](" + event.HTMLLink + ")"
 		}
 		lines = append(lines, line)
 	}
