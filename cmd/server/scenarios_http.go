@@ -12,7 +12,6 @@ import (
 )
 
 func registerScenarioRoutes(mux *http.ServeMux, store scenario.Store, api scenario.Client) {
-	mux.HandleFunc("GET /onboarding", onboardingPage)
 	mux.HandleFunc("POST /v1/scenarios/login", func(w http.ResponseWriter, r *http.Request) {
 		var input struct {
 			Username string `json:"username"`

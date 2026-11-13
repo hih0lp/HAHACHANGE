@@ -1,3 +1,10 @@
+FROM node:22-alpine AS frontend
+WORKDIR /ui
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend ./
+RUN npm run build
+
 FROM golang:1.23-alpine AS build
 
 WORKDIR /src
@@ -15,6 +22,8 @@ RUN adduser -D -u 10001 appuser && apk add --no-cache ca-certificates && mkdir -
 COPY --from=build /out/knowledge-api /usr/local/bin/knowledge-api
 
 USER appuser
+COPY --from=frontend /ui/dist /opt/bobby
+ENV BOBBY_WEB_ROOT=/opt/bobby
 EXPOSE 8000
 ENTRYPOINT ["/usr/local/bin/knowledge-api"]
 

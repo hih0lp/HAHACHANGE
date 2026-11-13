@@ -106,9 +106,6 @@ func call(handler http.Handler, method, path, body, apiKey string) *httptest.Res
 
 func TestKnowledgeHandlers(t *testing.T) {
 	handler := testHandler(t, "secret")
-	if response := call(handler, http.MethodGet, "/", "", ""); response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "Бобби · AI-buddy") {
-		t.Fatalf("web page = %d", response.Code)
-	}
 	if response := call(handler, http.MethodPost, "/v1/access-requests", `{}`, "secret"); response.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("disabled access route = %d", response.Code)
 	}

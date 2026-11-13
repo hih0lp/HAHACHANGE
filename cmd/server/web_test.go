@@ -3,65 +3,52 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
 
-func TestWebPageShowsOnlyAnswerWithInlineLinks(t *testing.T) {
-	response := httptest.NewRecorder()
-	webPage(response, httptest.NewRequest(http.MethodGet, "/", nil))
-	if response.Code != http.StatusOK {
-		t.Fatalf("status = %d", response.Code)
+func TestReactRoutesAndAssets(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("BOBBY_WEB_ROOT", root)
+	if err := os.Mkdir(filepath.Join(root, "assets"), 0755); err != nil {
+		t.Fatal(err)
 	}
-	page := response.Body.String()
-	for _, expected := range []string{
-		"fetch('/v1/jobs'",
-		"appendMessage(answer,job.answer)",
-		"link.textContent=match[1]",
-		"link.rel='noopener noreferrer'",
+	for path, contents := range map[string]string{
+		"index.html":     `<div id="root"></div><script type="module" src="/assets/main.js"></script>`,
+		"assets/main.js": "console.log('Bobby');",
 	} {
-		if !strings.Contains(page, expected) {
-			t.Errorf("page missing %q", expected)
+		if err := os.WriteFile(filepath.Join(root, path), []byte(contents), 0644); err != nil {
+			t.Fatal(err)
 		}
 	}
-	for _, forbidden := range []string{
-		"Только поиск", "sourceCard(", "job.sources", "data.hits", "fetch('/v1/knowledge/search'", "Тестовая заявка на доступ", "access-form", "/v1/access-requests",
-	} {
-		if strings.Contains(page, forbidden) {
-			t.Errorf("page unexpectedly contains %q", forbidden)
+	handler := demoSession("test-session-secret", newHandler(nil, config{}))
+	for _, path := range []string{"/", "/onboarding", "/tasks"} {
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `id="root"`) {
+			t.Fatalf("%s: status %d, body %q", path, response.Code, response.Body.String())
 		}
-	}
-	if !strings.Contains(page, "/v1/deadline-notifications") || !strings.Contains(page, "Скоро дедлайн") {
-		t.Fatal("deadline notification flow is missing")
-	}
-	if strings.Contains(page, "/v1/reminders/ws") {
-		t.Fatal("legacy reminder subscription would duplicate deadline cards")
-	}
-	for _, expected := range []string{"function messageTime(", "job.completed_at||job.created_at", "item.created_at", "timeZone:'Europe/Moscow'"} {
-		if !strings.Contains(page, expected) {
-			t.Errorf("timestamp UI missing %q", expected)
+		if len(response.Result().Cookies()) != 1 || response.Header().Get("Cache-Control") != "no-store" {
+			t.Fatalf("%s did not bootstrap the demo session", path)
+		}
+		asset := httptest.NewRequest(http.MethodGet, "/assets/main.js", nil)
+		asset.AddCookie(response.Result().Cookies()[0])
+		assetResponse := httptest.NewRecorder()
+		handler.ServeHTTP(assetResponse, asset)
+		if assetResponse.Code != http.StatusOK || !strings.Contains(assetResponse.Body.String(), "Bobby") {
+			t.Fatalf("asset: status %d, body %q", assetResponse.Code, assetResponse.Body.String())
 		}
 	}
 }
 
-func TestWebPageIsChatOnly(t *testing.T) {
+func TestWebPageReportsMissingBuild(t *testing.T) {
+	t.Setenv("BOBBY_WEB_ROOT", t.TempDir())
 	response := httptest.NewRecorder()
 	webPage(response, httptest.NewRequest(http.MethodGet, "/", nil))
-	page := response.Body.String()
-	for _, expected := range []string{`aria-label="Сообщения чата"`, `bubble user`, `bubble assistant`, `fetch('/v1/jobs'`} {
-		if !strings.Contains(page, expected) {
-			t.Errorf("page missing %q", expected)
-		}
-	}
-	for _, expected := range []string{`openInlineForm`, `Подтвердить отправку`, `Idempotency-Key`, `teamSessionReady`} {
-		if !strings.Contains(page, expected) {
-			t.Errorf("chat form missing %q", expected)
-		}
-	}
-	for _, forbidden := range []string{`data-scenario=`, `Учебное пространство команды`, `Тестовая заявка на доступ`} {
-		if strings.Contains(page, forbidden) {
-			t.Errorf("page unexpectedly contains %q", forbidden)
-		}
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d", response.Code)
 	}
 }
 

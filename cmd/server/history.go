@@ -19,7 +19,10 @@ type chatTurn struct {
 
 func registerHistoryRoutes(mux *http.ServeMux, apiKey string, jobs *distributed.System) {
 	mux.Handle("GET /v1/chat/history", authorize(apiKey, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		owner := ownerFrom(r)
+		owner, ok := chatOwner(w, r)
+		if !ok {
+			return
+		}
 		if owner == "" {
 			writeError(w, http.StatusUnauthorized, errText("chat session is required"))
 			return

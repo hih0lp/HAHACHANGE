@@ -21,6 +21,8 @@ import (
 
 type ownerKey struct{}
 
+var errChatSession = errText("team session required")
+
 func demoSession(secret string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		internalJiraMCP := r.URL.Path == "/mcp"
@@ -35,7 +37,7 @@ func demoSession(secret string, next http.Handler) http.Handler {
 				}
 			}
 		}
-		if owner == "" && r.Method == http.MethodGet && (r.URL.Path == "/" || strings.HasPrefix(r.URL.Path, "/forms/")) {
+		if owner == "" && r.Method == http.MethodGet && (r.URL.Path == "/" || r.URL.Path == "/onboarding" || r.URL.Path == "/tasks" || strings.HasPrefix(r.URL.Path, "/forms/")) {
 			id, err := distributed.NewID()
 			if err != nil {
 				writeError(w, 500, err)
@@ -62,6 +64,36 @@ func ownerFrom(r *http.Request) string {
 	return owner + ":" + demoRole(r)
 }
 
+func accountChatOwner(r *http.Request, token string) (string, error) {
+	base, _ := r.Context().Value(ownerKey{}).(string)
+	endpoint := os.Getenv("TEAM_ACCESS_URL")
+	if base == "" || endpoint == "" || token == "" {
+		return "", errChatSession
+	}
+	profile, err := (scenario.Client{BaseURL: endpoint}).Profile(r.Context(), token)
+	if err != nil {
+		return "", err
+	}
+	return base + ":account:" + profile.ID, nil
+}
+
+func chatOwner(w http.ResponseWriter, r *http.Request) (string, bool) {
+	if r.Header.Get("X-Bobby-Account") != "1" {
+		return ownerFrom(r), true
+	}
+	token, _ := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	owner, err := accountChatOwner(r, token)
+	if err != nil {
+		if errors.Is(err, errChatSession) {
+			writeError(w, http.StatusUnauthorized, err)
+		} else {
+			scenarioError(w, err)
+		}
+		return "", false
+	}
+	return owner, true
+}
+
 func registerDistributedJobRoutes(mux *http.ServeMux, jobs *distributed.System, apiKey string) {
 	mux.Handle("POST /v1/jobs", authorize(apiKey, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var input struct{ Query, Scenario string }
@@ -83,19 +115,21 @@ func registerDistributedJobRoutes(mux *http.ServeMux, jobs *distributed.System, 
 			writeError(w, 400, errText("unknown scenario"))
 			return
 		}
+		owner, ok := chatOwner(w, r)
+		if !ok {
+			return
+		}
 		teamToken := ""
 		if endpoint := os.Getenv("TEAM_ACCESS_URL"); endpoint != "" {
-			if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
-				teamToken = strings.TrimPrefix(auth, "Bearer ")
-				// Validate the credential here, but do not prefetch team data. The
-				// model chooses read-only tools later in the worker.
+			teamToken, _ = strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+			if teamToken != "" && r.Header.Get("X-Bobby-Account") != "1" {
 				if _, err := (scenario.Client{BaseURL: endpoint}).Profile(r.Context(), teamToken); err != nil {
 					writeError(w, 503, errText("team access verification failed"))
 					return
 				}
 			}
 		}
-		job, err := jobs.Submit(r.Context(), ownerFrom(r), input.Scenario, input.Query)
+		job, err := jobs.Submit(r.Context(), owner, input.Scenario, input.Query)
 		if err != nil {
 			writeError(w, 503, errText("request storage is unavailable"))
 			return
@@ -108,7 +142,11 @@ func registerDistributedJobRoutes(mux *http.ServeMux, jobs *distributed.System, 
 		writeJSON(w, 202, job)
 	})))
 	mux.Handle("GET /v1/jobs/{id}", authorize(apiKey, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		job, err := jobs.Get(r.Context(), ownerFrom(r), r.PathValue("id"))
+		owner, ok := chatOwner(w, r)
+		if !ok {
+			return
+		}
+		job, err := jobs.Get(r.Context(), owner, r.PathValue("id"))
 		if errors.Is(err, pgx.ErrNoRows) {
 			writeError(w, 404, errText("job not found"))
 			return
@@ -121,24 +159,41 @@ func registerDistributedJobRoutes(mux *http.ServeMux, jobs *distributed.System, 
 	})))
 	mux.HandleFunc("GET /v1/jobs/{id}/ws", func(w http.ResponseWriter, r *http.Request) {
 		id, owner := r.PathValue("id"), ownerFrom(r)
-		job, err := jobs.Get(r.Context(), owner, id)
-		if err != nil {
-			writeError(w, 404, errText("job not found"))
-			return
+		account := r.URL.Query().Get("account") == "1"
+		var job distributed.Job
+		if !account {
+			var err error
+			job, err = jobs.Get(r.Context(), owner, id)
+			if err != nil {
+				writeError(w, 404, errText("job not found"))
+				return
+			}
 		}
 		conn, err := (&websocket.Upgrader{}).Upgrade(w, r, nil)
 		if err != nil {
 			return
 		}
 		defer conn.Close()
-		if apiKey != "" {
-			conn.SetReadLimit(2048)
+		if apiKey != "" || account {
+			conn.SetReadLimit(8192)
 			_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 			var auth struct {
 				APIKey string `json:"api_key"`
+				Token  string `json:"access_token"`
 			}
 			if conn.ReadJSON(&auth) != nil || subtle.ConstantTimeCompare([]byte(auth.APIKey), []byte(apiKey)) != 1 {
 				return
+			}
+			_ = conn.SetReadDeadline(time.Time{})
+			if account {
+				owner, err = accountChatOwner(r, auth.Token)
+				if err != nil {
+					return
+				}
+				job, err = jobs.Get(r.Context(), owner, id)
+				if err != nil {
+					return
+				}
 			}
 		}
 		if conn.WriteJSON(job) != nil || job.Status == "completed" || job.Status == "failed" {

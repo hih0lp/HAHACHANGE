@@ -6,3 +6,6 @@ app
 specs
 coverage.out
 coverage-new.out
+frontend/node_modules
+frontend/dist
+frontend/test

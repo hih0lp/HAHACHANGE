@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -74,6 +75,7 @@ func newHandler(service *rag.Service, cfg config) http.Handler {
 			teamClient := scenario.Client{BaseURL: endpoint, RightsURL: os.Getenv("RIGHTS_URL")}
 			registerDeadlineNotifications(mux, cfg.Distributed.DB, cfg.APIKey, cfg.Jira, cfg.Reminder, teamClient)
 			registerTeamSessionRoute(mux, teamClient)
+			registerPersonalJiraRoute(mux, cfg.APIKey, cfg.Jira, cfg.Reminder, teamClient)
 			if os.Getenv("RIGHTS_URL") != "" {
 				registerFormRoutes(mux, cfg.APIKey, endpoint)
 			}
@@ -94,6 +96,9 @@ func newHandler(service *rag.Service, cfg config) http.Handler {
 	mux.Handle("POST /mcp", mcpHandler)
 	mux.Handle("GET /mcp", mcpHandler)
 	mux.Handle("DELETE /mcp", mcpHandler)
+	mux.HandleFunc("GET /onboarding", webPage)
+	mux.HandleFunc("GET /tasks", webPage)
+	mux.Handle("GET /assets/", http.StripPrefix("/assets/", http.FileServer(http.Dir(filepath.Join(webRoot(), "assets")))))
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			http.NotFound(w, r)
