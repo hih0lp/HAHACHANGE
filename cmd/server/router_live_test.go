@@ -57,6 +57,12 @@ func TestLiveRouteCases(t *testing.T) {
 			if item.name == "recommendation" && strings.Contains(answer, "Не удалось проверить обоснование") {
 				t.Fatal("recommendation response failed source validation")
 			}
+			if item.name == "personal" && strings.Contains(strings.ToLower(answer), "описание:") {
+				t.Fatal("short personal Jira list claimed an unverified description")
+			}
+			if item.name == "calendar" && (strings.Contains(answer, "](#)") || strings.Contains(answer, "демонстрационный")) {
+				t.Fatal("empty calendar answer contained an unsupported link or claim")
+			}
 		})
 	}
 }

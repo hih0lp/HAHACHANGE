@@ -132,6 +132,21 @@ func renderPersonalJiraList(value any, accountID string) (string, error) {
 	return out.String(), nil
 }
 
+func calendarEventsEmpty(value any) (bool, error) {
+	var envelope struct {
+		Data struct {
+			Items *[]json.RawMessage `json:"items"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(mustJSON(value), &envelope); err != nil {
+		return false, err
+	}
+	if envelope.Data.Items == nil {
+		return false, errors.New("calendar items missing")
+	}
+	return len(*envelope.Data.Items) == 0, nil
+}
+
 func personalGitLabMRs(result any, identityID string) []map[string]any {
 	data, err := json.Marshal(result)
 	if err != nil || identityID == "" {
@@ -652,7 +667,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 					if callErr != nil {
 						return "Не удалось проверить задачи, назначенные на ваш Jira-аккаунт: " + callErr.Error(), hits, nil
 					}
-					if plan.NeedsOnlyMyJiraList {
+					if plan.NeedsOnlyMyJiraList || (plan.NeedsMyJiraIssues && !plan.NeedsProjectJiraIssues && !plan.NeedsEvents && !plan.NeedsAvailability && !plan.NeedsForm && !selected["documents"] && !selected["gitlab"] && !selected["rights"] && !plan.NeedsSpecificJiraIssue) {
 						answer, renderErr := renderPersonalJiraList(issues, accountID)
 						if renderErr != nil {
 							return "Не удалось проверить список ваших задач Jira.", hits, nil
@@ -678,6 +693,14 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 						}
 						if data, err := json.Marshal(result); err == nil {
 							prompt += "\nПроверенные " + need.label + " за период " + plan.TimeMin + " — " + plan.TimeMax + ": " + string(data)
+						}
+						if need.name == "calendar_onboarding_events" && !plan.NeedsAvailability && len(selected) == 1 {
+							if empty, parseErr := calendarEventsEmpty(result); parseErr == nil && empty {
+								start, dateErr := time.Parse(time.RFC3339, plan.TimeMin)
+								if dateErr == nil {
+									return "На " + start.In(moscow).Format("02.01.2006") + " в календаре наставника нет запланированных событий.", hits, nil
+								}
+							}
 						}
 					}
 				}

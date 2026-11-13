@@ -152,6 +152,23 @@ func TestRecommendationUsesDetailedAssignedIssueOnly(t *testing.T) {
 	}
 }
 
+func TestCalendarEmptyResultRequiresActualItemsArray(t *testing.T) {
+	empty, err := calendarEventsEmpty(map[string]any{"data": map[string]any{"items": []any{}}})
+	if err != nil || !empty {
+		t.Fatalf("empty=%v err=%v", empty, err)
+	}
+	empty, err = calendarEventsEmpty(map[string]any{"data": map[string]any{"items": []any{map[string]any{"summary": "Meeting"}}}})
+	if err != nil || empty {
+		t.Fatalf("event empty=%v err=%v", empty, err)
+	}
+	if empty, err := calendarEventsEmpty(map[string]any{"data": map[string]any{}}); err == nil || empty {
+		t.Fatalf("missing items empty=%v err=%v", empty, err)
+	}
+	if empty, err := calendarEventsEmpty(map[string]any{"data": map[string]any{"items": "bad"}}); err == nil || empty {
+		t.Fatalf("invalid items empty=%v err=%v", empty, err)
+	}
+}
+
 func TestPlaceholderURLsAreRemovedFromEvidence(t *testing.T) {
 	input := map[string]any{"profile": map[string]any{"url": "https://example.invalid/user", "name": "Intern"}, "links": []any{"https://jira.example.com/browse/SCRUM-7"}}
 	clean := removePlaceholderURLs(input).(map[string]any)
