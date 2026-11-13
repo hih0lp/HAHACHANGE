@@ -1,27 +1,14 @@
 services:
   api:
     image: bobby-mocks-api:local
-    networks:
-      - default
-      - shared
-      - gitlab_demo
     environment:
       GITLAB_MCP_URL: ${GITLAB_MCP_URL}
       GITLAB_REMINDER_PROJECT: ${GITLAB_REMINDER_PROJECT}
   worker:
     image: bobby-mocks-api:local
-    networks:
-      - default
-      - shared
-      - gitlab_demo
     environment:
       GITLAB_MCP_URL: ${GITLAB_MCP_URL}
   team-access:
     image: bobby-mocks-team-access:local
   access-rights:
     image: bobby-mocks-team-access:local
-
-networks:
-  gitlab_demo:
-    external: true
-    name: ${GITLAB_MCP_NETWORK:?Set GITLAB_MCP_NETWORK}
