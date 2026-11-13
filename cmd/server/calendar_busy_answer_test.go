@@ -21,3 +21,14 @@ func TestFormatCalendarBusyRejectsMissingData(t *testing.T) {
 		t.Fatal("missing calendar data must fail")
 	}
 }
+
+func TestFormatCalendarEventsUsesReturnedTimes(t *testing.T) {
+	result := map[string]any{"data": map[string]any{"items": []any{map[string]any{"summary": "Ревью", "start": map[string]string{"dateTime": "2026-11-19T13:00:00Z"}, "end": map[string]string{"dateTime": "2026-11-19T14:00:00Z"}}}}}
+	answer, err := formatCalendarEvents(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(answer, "19.11.2026 16:00–17:00 МСК — Ревью") || strings.Contains(answer, "13:00") {
+		t.Fatalf("unexpected event answer: %q", answer)
+	}
+}
