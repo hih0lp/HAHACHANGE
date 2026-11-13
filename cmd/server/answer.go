@@ -254,6 +254,8 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 					}
 				}
 				if a.calendarMCPURL != "" && (plan.NeedsEvents || plan.NeedsAvailability) {
+					directCalendar := a.jiraMode == "mock" && !plan.NeedsForm && !plan.NeedsMyJiraIssues && !plan.NeedsRecommendation
+					var directAnswers []string
 					for _, need := range []struct {
 						enabled     bool
 						name, label string
@@ -263,26 +265,34 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 						}
 						result, callErr := mcpTeamTool(ctx, a.calendarMCPURL, "", teamToken, need.name, map[string]any{"time_min": plan.TimeMin, "time_max": plan.TimeMax})
 						if callErr != nil {
-							prompt += "\n" + need.label + " недоступны: " + callErr.Error()
+							if directCalendar {
+								directAnswers = append(directAnswers, need.label+" недоступны: "+callErr.Error())
+							} else {
+								prompt += "\n" + need.label + " недоступны: " + callErr.Error()
+							}
 							continue
 						}
-						if a.jiraMode == "mock" && need.name == "calendar_onboarding_events" && !plan.NeedsAvailability && !plan.NeedsForm && !plan.NeedsMyJiraIssues && !plan.NeedsRecommendation {
-							answer, formatErr := formatCalendarEvents(result)
-							if formatErr != nil {
-								return "Не удалось прочитать события календаря.", hits, nil
+						if directCalendar {
+							var answer string
+							var formatErr error
+							if need.name == "calendar_onboarding_events" {
+								answer, formatErr = formatCalendarEvents(result)
+							} else {
+								answer, formatErr = formatCalendarBusy(result)
 							}
-							return answer, hits, nil
-						}
-						if a.jiraMode == "mock" && need.name == "calendar_mentor_freebusy" && !plan.NeedsForm && !plan.NeedsMyJiraIssues && !plan.NeedsRecommendation {
-							answer, formatErr := formatCalendarBusy(result)
 							if formatErr != nil {
-								return "Не удалось прочитать интервалы занятости календаря.", hits, nil
+								directAnswers = append(directAnswers, "Не удалось прочитать "+strings.ToLower(need.label)+".")
+							} else {
+								directAnswers = append(directAnswers, answer)
 							}
-							return answer, hits, nil
+							continue
 						}
 						if data, err := json.Marshal(result); err == nil {
 							prompt += "\nПроверенные " + need.label + " за период " + plan.TimeMin + " — " + plan.TimeMax + ": " + string(data)
 						}
+					}
+					if directCalendar {
+						return strings.Join(directAnswers, "\n\n"), hits, nil
 					}
 				}
 				if plan.NeedsRecommendation {
