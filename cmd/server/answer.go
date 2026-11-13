@@ -336,7 +336,7 @@ type completionMessage struct {
 
 const agentSystemPrompt = `Тебя зовут Бобби. Ты ИИ-помощник стажёра. Помогай разбираться с задачами, онбордингом и доступными материалами, а также отвечай на общие вопросы, объясняй понятия и помогай с идеями и кодом. Отвечай по-русски, ясно и по делу.
 
-Сначала определи, о чём вопрос. Если он о конкретных задачах, внутренних процессах, правилах, людях, командах или правах доступа, используй только предоставленные данные подключённых сервисов и релевантные фрагменты документов. Указывай URL рядом с подтверждённым фактом, а если URL не дан — имя файла источника. Если нужных данных нет или инструмент недоступен, прямо скажи, что не можешь подтвердить ответ. Не выдумывай регламенты, сроки, контакты, участников, состояние задач, состав команды или права пользователя. Описание роли, процесса или заявки само по себе не доказывает назначение конкретного человека или предоставление доступа. Не утверждай, что выполнил действие, пока подключённый сервис не подтвердил его результат.
+Сначала определи, о чём вопрос. Исходный запрос пользователя имеет приоритет перед редакторской формулировкой, если они расходятся по датам, отрицаниям, именам, ключам задач, действиям или источникам. Если вопрос о конкретных задачах, внутренних процессах, правилах, людях, командах или правах доступа, используй только предоставленные данные подключённых сервисов и релевантные фрагменты документов. Указывай URL рядом с подтверждённым фактом, а если URL не дан — имя файла источника. Если нужных данных нет или инструмент недоступен, прямо скажи, что не можешь подтвердить ответ. Не выдумывай регламенты, сроки, контакты, участников, состояние задач, состав команды или права пользователя. Описание роли, процесса или заявки само по себе не доказывает назначение конкретного человека или предоставление доступа. Не утверждай, что выполнил действие, пока подключённый сервис не подтвердил его результат.
 
 Сервис team-access отражает права только в учебном прототипе. Не переноси его результат на реальные права в Jira или внутренних системах. При состоянии missing говори «в прототипе право не выдано»; не называй это временным состоянием без подтверждения. Не придумывай, к кому обращаться за доступом, если источник не указывает порядок.
 
@@ -369,22 +369,9 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 		return "", nil, fmt.Errorf("query filter: %w", routeErr)
 	}
 	selected := map[string]bool{}
-	for _, category := range route.Categories {
-		selected[category] = true
-	}
 	var routeForms []formChoice
-	if selected["rights"] && teamToken != "" && a.rightsMCPURL != "" {
-		if listed, err := callMCP(ctx, a.rightsMCPURL, "", teamToken, "rights_forms_list", map[string]any{}); err == nil {
-			data, _ := json.Marshal(listed)
-			var catalogue struct {
-				Forms []formChoice `json:"forms"`
-			}
-			if json.Unmarshal(data, &catalogue) == nil {
-				routeForms = catalogue.Forms
-			}
-		}
-	}
-	plan, planErr := a.planCalendar(ctx, question, time.Now().In(moscow), routeForms)
+	planningQuestion := "Исходное сообщение: " + question + "\nРедакторская формулировка: " + route.CleanedQuestion
+	plan, planErr := a.planCalendar(ctx, planningQuestion, time.Now().In(moscow), routeForms)
 	if planErr != nil {
 		return "", nil, fmt.Errorf("query plan: %w", planErr)
 	}
@@ -399,7 +386,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 			}
 		}
 		if len(routeForms) > 0 {
-			if refined, err := a.planCalendar(ctx, question, time.Now().In(moscow), routeForms); err == nil {
+			if refined, err := a.planCalendar(ctx, planningQuestion, time.Now().In(moscow), routeForms); err == nil {
 				plan.FormID = refined.FormID
 			}
 		}
@@ -431,7 +418,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 	if plan.NeedsOpenGitLabMRs {
 		selected["gitlab"] = true
 	}
-	log.Printf("router job=%s filter_categories=%v categories=%v latency=%s", traceID, route.Categories, selected, time.Since(routeStarted))
+	log.Printf("router job=%s categories=%v latency=%s", traceID, selected, time.Since(routeStarted))
 	var hits []rag.SearchHit
 	var searchErr error
 	if selected["documents"] && a.service != nil {
@@ -472,7 +459,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 	if searchErr != nil {
 		searchState = "Поиск документов временно недоступен."
 	}
-	prompt := "Исходный запрос: " + question + "\nОчищенный запрос: " + route.CleanedQuestion + "\nКатегории: " + strings.Join(route.Categories, ", ") + "\n\n" + searchState + "\nФрагменты документов (используй только если относятся к вопросу):\n" + sources.String()
+	prompt := "Исходный запрос: " + question + "\nОчищенный запрос: " + route.CleanedQuestion + "\n\n" + searchState + "\nФрагменты документов (используй только если относятся к вопросу):\n" + sources.String()
 	if selected["team"] && !plan.NeedsRecommendation && teamToken != "" && a.teamMCPURL != "" {
 		for _, tool := range []string{"team_profile", "team_members"} {
 			result, callErr := callMCP(ctx, a.teamMCPURL, "", teamToken, tool, map[string]any{})

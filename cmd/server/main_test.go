@@ -154,11 +154,11 @@ func TestAskWithLLM(t *testing.T) {
 			t.Error(err)
 		}
 		if strings.Contains(request.Messages[0].Content, "Classify the user's requested evidence") {
-			_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]string{"content": `{"needs_events":false}`}}}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]string{"content": `{"required_categories":["documents"],"needs_events":false}`}}}})
 			return
 		}
 		if request.Model == "qwen3-1.7b" {
-			_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]string{"content": `{"cleaned_question":"Как проходит ревью?","categories":["documents"]}`}}}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]string{"content": `{"cleaned_question":"Как проходит ревью?"}`}}}})
 			return
 		}
 		if request.Model != "qwen3-8b" || len(request.Messages) != 2 || request.Messages[0].Role != "system" || !strings.Contains(request.Messages[0].Content, "Тебя зовут Бобби") || request.Messages[1].Role != "user" || !strings.Contains(request.Messages[1].Content, "rules.md") {

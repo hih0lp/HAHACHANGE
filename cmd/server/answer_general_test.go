@@ -19,8 +19,8 @@ func TestGeneralQuestionWorksWithoutDocumentSearch(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 			t.Fatal(err)
 		}
-		if strings.Contains(input.Messages[0].Content, "Ты фильтр запросов") {
-			_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"{\"cleaned_question\":\"Как тебя зовут?\",\"categories\":[]}"}}]}`))
+		if strings.Contains(input.Messages[0].Content, "Ты языковой редактор") {
+			_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"{\"cleaned_question\":\"Как тебя зовут?\"}"}}]}`))
 			return
 		}
 		if strings.Contains(input.Messages[0].Content, "Classify the user's requested evidence") {

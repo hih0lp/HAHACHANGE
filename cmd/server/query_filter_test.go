@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-func TestQueryFilterUsesSmallModelAndMultipleCategories(t *testing.T) {
+func TestQueryFilterOnlyNormalizesWithSmallModel(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var in struct {
 			Model    string `json:"model"`
@@ -21,25 +21,25 @@ func TestQueryFilterUsesSmallModelAndMultipleCategories(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			t.Fatal(err)
 		}
-		if in.Model != "qwen3-1.7b" || !strings.Contains(in.Messages[0].Content, "ВСЕ категории") || !strings.Contains(in.Messages[1].Content, "джире") {
+		if in.Model != "qwen3-1.7b" || !strings.Contains(in.Messages[0].Content, "не определяй инструменты") || !strings.Contains(in.Messages[1].Content, "джире") {
 			t.Fatalf("request=%+v", in)
 		}
-		fmt.Fprint(w, `{"choices":[{"message":{"content":"{\"cleaned_question\":\"Что завтра в онбординге и какие задачи в Jira?\",\"categories\":[\"calendar\",\"jira\"]}"}}]}`)
+		fmt.Fprint(w, `{"choices":[{"message":{"content":"{\"cleaned_question\":\"Что завтра в онбординге и какие задачи в Jira?\"}"}}]}`)
 	}))
 	defer server.Close()
 	route, err := (answerer{url: server.URL, client: server.Client()}).filterQuestion(context.Background(), "А че завтра по онбордингу и задачки в джире?")
-	if err != nil || strings.Join(route.Categories, ",") != "calendar,jira" || !strings.Contains(route.CleanedQuestion, "Jira") {
+	if err != nil || route.CleanedQuestion != "Что завтра в онбординге и какие задачи в Jira?" {
 		t.Fatalf("route=%+v err=%v", route, err)
 	}
 }
 
 func TestQueryFilterRejectsInvalidResponses(t *testing.T) {
-	for _, route := range []queryRoute{{Categories: []string{"jira"}}, {CleanedQuestion: "вопрос", Categories: []string{"unknown"}}, {CleanedQuestion: "вопрос", Categories: []string{"team", "team"}}} {
-		if err := validateQueryRoute(&route); err == nil {
+	for _, route := range []cleanedQuery{{}, {CleanedQuestion: strings.Repeat("в", 2001)}} {
+		if err := validateCleanedQuery(&route); err == nil {
 			t.Fatalf("accepted %+v", route)
 		}
 	}
-	for _, response := range []string{`not-json`, `{"cleaned_question":"","categories":[]}`, `{"cleaned_question":"ok","categories":["unknown"]}`} {
+	for _, response := range []string{`not-json`, `{"cleaned_question":""}`, `{"cleaned_question":"   "}`, `{"cleaned_question":"вопрос","categories":["jira"]}`, `{"cleaned_question":"вопрос"} {}`} {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, `{"choices":[{"message":{"content":%q}}]}`, response)
 		}))
@@ -48,6 +48,38 @@ func TestQueryFilterRejectsInvalidResponses(t *testing.T) {
 		if err == nil {
 			t.Fatalf("accepted %s", response)
 		}
+	}
+}
+
+func TestPlannerReceivesOriginalWhenEditorChangesMeaning(t *testing.T) {
+	plannerSawOriginal := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			Model    string `json:"model"`
+			Messages []struct {
+				Content string `json:"content"`
+			} `json:"messages"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Error(err)
+			return
+		}
+		var content string
+		switch {
+		case request.Model == "qwen3-1.7b":
+			content = `{"cleaned_question":"Что сегодня по онбордингу?"}`
+		case strings.Contains(request.Messages[0].Content, "Classify the user's requested evidence"):
+			plannerSawOriginal = strings.Contains(request.Messages[1].Content, "Исходное сообщение: Что завтра по онбордингу?") && strings.Contains(request.Messages[1].Content, "Редакторская формулировка: Что сегодня по онбордингу?")
+			content = `{"required_categories":[]}`
+		default:
+			content = "Проверено"
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]string{"content": content}}}})
+	}))
+	defer server.Close()
+	_, _, err := (answerer{url: server.URL, client: server.Client(), model: "qwen3-8b"}).Ask(context.Background(), "Что завтра по онбордингу?")
+	if err != nil || !plannerSawOriginal {
+		t.Fatalf("plannerSawOriginal=%t err=%v", plannerSawOriginal, err)
 	}
 }
 

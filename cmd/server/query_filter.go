@@ -12,21 +12,20 @@ import (
 	"time"
 )
 
-type queryRoute struct {
-	CleanedQuestion string   `json:"cleaned_question"`
-	Categories      []string `json:"categories"`
+type cleanedQuery struct {
+	CleanedQuestion string `json:"cleaned_question"`
 }
 
 var routeCategories = []string{"jira", "calendar", "gitlab", "documents", "rights", "team"}
 
-const routeInstruction = `Ты фильтр запросов. Верни только JSON с cleaned_question и categories. Допустимые категории: jira — трекер задач и статусы задач; calendar — встречи, даты и слоты наставника; gitlab — код, проекты, коммиты и merge requests; documents — документы и инструкции; rights — права, доступ и заявки; team — сотрудники, роли, наставники и профиль. Выбери ВСЕ категории, без которых нельзя ответить на каждую часть запроса. Для личных задач добавь team для проверки личности. Для персональных рекомендаций добавь jira, gitlab, documents и team. Не заменяй упомянутый сервис другим: Jira и GitLab — разные системы. Перепиши только разговорные обороты. Сохрани имена систем, отрицания, даты, ключи задач и смысл всех частей. Если запрос смешанный, сохрани каждую часть. Не отвечай на вопрос.`
+const routeInstruction = `Ты языковой редактор. Верни только JSON вида {"cleaned_question":"..."}. Сделай формулировку грамотнее: исправь пунктуацию, убери разговорные частицы и замени очевидные разговорные формы нейтральными. Смысловые слова сохраняй, если не уверен в точной замене. Временные выражения, отрицания, названия продуктов, имена, идентификаторы, числа и каждую часть вопроса копируй посимвольно и в том же порядке. Не переводи и не объясняй. Если сомневаешься, оставь слово без изменений. Не отвечай на вопрос и не определяй инструменты.`
 
-func validateQueryRoute(route *queryRoute) error {
+func validateCleanedQuery(route *cleanedQuery) error {
 	route.CleanedQuestion = strings.TrimSpace(route.CleanedQuestion)
 	if route.CleanedQuestion == "" || len([]rune(route.CleanedQuestion)) > 2000 {
 		return errors.New("invalid cleaned question")
 	}
-	return validateCategories(route.Categories)
+	return nil
 }
 
 func validateCategories(categories []string) error {
@@ -44,18 +43,18 @@ func validateCategories(categories []string) error {
 	return nil
 }
 
-func (a answerer) filterQuestion(ctx context.Context, question string) (queryRoute, error) {
+func (a answerer) filterQuestion(ctx context.Context, question string) (cleanedQuery, error) {
 	model := a.routerModel
 	if model == "" {
 		model = "qwen3-1.7b"
 	}
 	payload, err := json.Marshal(map[string]any{"model": model, "stream": false, "temperature": 0, "messages": []map[string]string{{"role": "system", "content": routeInstruction}, {"role": "user", "content": question}}})
 	if err != nil {
-		return queryRoute{}, err
+		return cleanedQuery{}, err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(a.url, "/")+"/v1/chat/completions", bytes.NewReader(payload))
 	if err != nil {
-		return queryRoute{}, err
+		return cleanedQuery{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if key := os.Getenv("LLM_API_KEY"); key != "" {
@@ -67,11 +66,11 @@ func (a answerer) filterQuestion(ctx context.Context, question string) (queryRou
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return queryRoute{}, err
+		return cleanedQuery{}, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode/100 != 2 {
-		return queryRoute{}, errors.New("query filter unavailable")
+		return cleanedQuery{}, errors.New("query filter unavailable")
 	}
 	var completion struct {
 		Choices []struct {
@@ -81,17 +80,19 @@ func (a answerer) filterQuestion(ctx context.Context, question string) (queryRou
 		} `json:"choices"`
 	}
 	if json.NewDecoder(io.LimitReader(resp.Body, 65536)).Decode(&completion) != nil || len(completion.Choices) == 0 {
-		return queryRoute{}, errors.New("invalid query filter response")
+		return cleanedQuery{}, errors.New("invalid query filter response")
 	}
 	content := strings.TrimSpace(completion.Choices[0].Message.Content)
 	content = strings.TrimPrefix(strings.TrimPrefix(content, "```json"), "```")
 	content = strings.TrimSuffix(strings.TrimSpace(content), "```")
-	var route queryRoute
-	if json.Unmarshal([]byte(strings.TrimSpace(content)), &route) != nil {
-		return queryRoute{}, errors.New("invalid query filter JSON")
+	var route cleanedQuery
+	decoder := json.NewDecoder(strings.NewReader(strings.TrimSpace(content)))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&route) != nil || decoder.Decode(new(any)) != io.EOF {
+		return cleanedQuery{}, errors.New("invalid query filter JSON")
 	}
-	if err := validateQueryRoute(&route); err != nil {
-		return queryRoute{}, err
+	if err := validateCleanedQuery(&route); err != nil {
+		return cleanedQuery{}, err
 	}
 	return route, nil
 }
