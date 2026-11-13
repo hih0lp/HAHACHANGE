@@ -135,6 +135,23 @@ func TestRecommendationRequiresVerifiedPersonalAndDocumentEvidence(t *testing.T)
 	}
 }
 
+func TestRecommendationUsesDetailedAssignedIssueOnly(t *testing.T) {
+	issue := jiraIssue{Key: "SCRUM-7", AssigneeAccountID: "me", URL: "https://jira.example/browse/SCRUM-7"}
+	if recommendationIssueEligible(issue, "SCRUM-7", "me") {
+		t.Fatal("empty description accepted")
+	}
+	issue.Description = "Implement request validation"
+	if !recommendationIssueEligible(issue, "SCRUM-7", "me") {
+		t.Fatal("described assigned issue rejected")
+	}
+	if recommendationIssueEligible(issue, "SCRUM-7", "other") {
+		t.Fatal("foreign assignee accepted")
+	}
+	if recommendationIssueEligible(issue, "SCRUM-8", "me") {
+		t.Fatal("wrong key accepted")
+	}
+}
+
 func TestPlaceholderURLsAreRemovedFromEvidence(t *testing.T) {
 	input := map[string]any{"profile": map[string]any{"url": "https://example.invalid/user", "name": "Intern"}, "links": []any{"https://jira.example.com/browse/SCRUM-7"}}
 	clean := removePlaceholderURLs(input).(map[string]any)

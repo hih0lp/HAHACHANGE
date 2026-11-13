@@ -103,6 +103,10 @@ func recommendationSourceIDs(sources map[string]string) []string {
 	return ids
 }
 
+func recommendationIssueEligible(issue jiraIssue, expectedKey, accountID string) bool {
+	return issue.Key == expectedKey && issue.AssigneeAccountID == accountID && strings.TrimSpace(issue.Description) != "" && issue.URL != ""
+}
+
 func renderPersonalJiraList(value any, accountID string) (string, error) {
 	var list jiraIssues
 	if err := json.Unmarshal(mustJSON(value), &list); err != nil {
@@ -694,12 +698,35 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 							if json.Unmarshal(mustJSON(assigned), &list) != nil {
 								missing["jira_list_issues"] = true
 							}
-							for _, issue := range list.Issues {
-								if issue.AssigneeAccountID == accountID {
-									recommendationSources["jira:"+issue.Key] = "[" + issue.Key + "](" + issue.URL + ")"
-								}
+							prompt += "\nНазначенные задачи Jira (краткий список не доказывает тему обучения): " + string(mustJSON(assigned))
+							if len(list.Issues) > 5 {
+								prompt += "\nПодробно проверены первые пять назначенных задач; остальные не анализировались."
 							}
-							prompt += "\nТолько эти задачи Jira назначены текущему пользователю: " + string(mustJSON(assigned))
+							for index, issue := range list.Issues {
+								if index >= 5 {
+									break
+								}
+								if issue.AssigneeAccountID != accountID {
+									missing["jira_list_issues"] = true
+									continue
+								}
+								detail, detailErr := callMCP(ctx, a.mcpURL, a.mcpKey, "", "jira_get_issue", map[string]any{"key": issue.Key})
+								if detailErr != nil {
+									missing["jira_list_issues"] = true
+									continue
+								}
+								var full jiraIssue
+								if json.Unmarshal(mustJSON(detail), &full) != nil || full.Key != issue.Key || full.AssigneeAccountID != accountID {
+									missing["jira_list_issues"] = true
+									continue
+								}
+								if !recommendationIssueEligible(full, issue.Key, accountID) {
+									prompt += "\nУ задачи " + full.Key + " нет описания; по её краткому названию нельзя выводить тему персонального обучения."
+									continue
+								}
+								recommendationSources["jira:"+full.Key] = "[" + full.Key + "](" + full.URL + ")"
+								prompt += "\nПодтверждённая личная задача с описанием, источник jira:" + full.Key + ": " + string(mustJSON(full))
+							}
 						}
 					} else {
 						missing["jira_list_issues"] = true
@@ -740,6 +767,16 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 							parts = append(parts, "проекты и MR GitLab")
 						}
 						return "Пока не могу подготовить достоверную персональную рекомендацию: не удалось проверить " + strings.Join(parts, ", ") + ". Когда источник снова будет доступен, сопоставлю вашу команду, задачи, код и документацию. Навыки по общим материалам приписывать вам не буду.", hits, nil
+					}
+					personalEvidence := false
+					for id := range recommendationSources {
+						if strings.HasPrefix(id, "jira:") || strings.HasPrefix(id, "gitlab:") {
+							personalEvidence = true
+							break
+						}
+					}
+					if !personalEvidence {
+						return "Для персональной рекомендации пока недостаточно подтверждённой работы: не нашёл содержательного описания назначенных задач или записей с вашим GitLab ID среди проверенных открытых MR. Это не оценка ваших навыков; добавьте описание задачи или ссылку на свой MR.", hits, nil
 					}
 					systemPrompt = `/no_think
 Ты Бобби, наставник-помощник стажёра. Верни только JSON вида {"steps":[{"action":"конкретный следующий шаг", "sources":["jira:KEY", "doc:0"]}]}. Не больше трёх шагов. В каждом шаге укажи проверенную личную задачу Jira или личный MR GitLab и фрагмент документации из предоставленного списка source_id. Если связь между личной работой и документом нельзя обосновать, верни {"steps":[]}. Список доступных проектов и пустой список открытых MR не доказывают авторство, прежний опыт или отсутствие навыка. Не используй задачи других людей, не приписывай сотруднику навыки из общего playbook. Не выдумывай факты и URL. Пиши по-русски без markdown и без текста вне JSON.`
