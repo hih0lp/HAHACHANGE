@@ -57,7 +57,6 @@ func jiraGET(ctx context.Context, cfg jiraConfig, path string, out any) error {
 	if err != nil {
 		return err
 	}
-	req.SetBasicAuth(cfg.Email, cfg.APIToken)
 	req.Header.Set("Accept", "application/json")
 	client := &http.Client{Timeout: 20 * time.Second}
 	resp, err := client.Do(req)

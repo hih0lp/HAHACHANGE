@@ -83,10 +83,6 @@ func newHandler(service *rag.Service, cfg config) http.Handler {
 		jobs := newJobManager(envInt("JOB_WORKERS", 2), envInt("JOB_QUEUE_SIZE", 32), time.Duration(envInt("JOB_TIMEOUT_SECONDS", 180))*time.Second, answer.Ask)
 		registerJobRoutes(mux, jobs, cfg.APIKey)
 	}
-	// Создание заявки на доступ отключено: в доступных источниках не найден
-	// подтверждённый порядок оформления доступа. Исторический демо-код сохранён.
-	// registerAccessRoutes(mux, cfg.APIKey, cfg.Jira)
-	// registerDistributedAccessRoutes(mux, cfg.APIKey, cfg.Jira, cfg.Distributed)
 	registerReminderRoutes(mux, cfg.APIKey, cfg.Jira, cfg.Reminder)
 	registerGitLabReminderRoute(mux, os.Getenv("GITLAB_MCP_URL"), os.Getenv("GITLAB_REMINDER_PROJECT"))
 	registerCalendarReminderRoute(mux, os.Getenv("CALENDAR_MCP_URL"))
@@ -181,7 +177,7 @@ func loadConfig() config {
 	return config{
 		APIKey:         os.Getenv("API_KEY"),
 		IndexOnStartup: envBool("INDEX_ON_STARTUP", true),
-		Jira:           jiraConfig{Mode: env("JIRA_MODE", "off"), BaseURL: env("JIRA_BASE_URL", "http://mock-jira:8080"), ProjectKey: os.Getenv("JIRA_PROJECT_KEY"), IssueType: os.Getenv("JIRA_ISSUE_TYPE"), DataPath: env("JIRA_DATA_PATH", "/data/jira/access-requests.json")},
+		Jira:           jiraConfig{Mode: env("JIRA_MODE", "off"), BaseURL: env("JIRA_BASE_URL", "http://mock-jira:8080"), ProjectKey: os.Getenv("JIRA_PROJECT_KEY")},
 		Reminder:       reminderConfig{InternAccountID: os.Getenv("REMINDER_INTERN_ACCOUNT_ID"), HoursBefore: envInt("REMINDER_HOURS_BEFORE", 24), TimeZone: env("REMINDER_TIMEZONE", "Europe/Moscow")},
 		RAG: rag.Config{
 			QdrantURL:      env("QDRANT_URL", "http://qdrant:6333"),
