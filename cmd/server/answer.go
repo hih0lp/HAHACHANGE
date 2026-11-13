@@ -108,7 +108,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 	}
 	var teamTools []map[string]any
 	toolEndpoints := map[string]string{}
-	if a.jiraMode == "live" || a.jiraMode == "mock" {
+	if a.jiraMode == "mock" {
 		jiraTools, err := mcpTeamTools(ctx, a.mcpURL, a.mcpKey, "")
 		if err != nil {
 			return "", hits, fmt.Errorf("Jira tools/list: %w", err)
@@ -175,30 +175,6 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 
 Если для ответа нужен инструмент, выбери его сам. Если клиент модели не сформировал нативный вызов функции, верни строго JSON без markdown: {"tool_call":{"name":"имя из каталога","arguments":{}}}. После получения результата MCP дай обычный ответ пользователю. Учитывай предыдущие реплики этого чата: короткое согласие или выбор ресурса продолжает начатое обращение. Если ранее ты предложил выбрать ресурс для заявки и пользователь выбрал его, найди подходящую форму сейчас, не спрашивай выбор повторно. Вопросы о задачах Jira, команде, участниках, ролях, ресурсах, правах и доступных формах требуют вызова инструмента до ответа. Когда пользователь хочет оформить обращение, найди подходящую форму через инструменты сервиса прав и дай ссылку Markdown [Заполнить форму](form_url из результата). Эта ссылка показывает форму прямо в чате. Когда предлагаешь форму, ответь только её названием и ссылкой form_url; не добавляй поля, инструкции, примеры, вложения и порядок согласования. Если пользователь отдельно обсуждает поля, прочитай схему формы через инструмент и помоги их заполнить. Если речь о доступе к конкретному ресурсу, проверь каталог ресурсов и текущее право, прежде чем описывать их. Не выдумывай идентификаторы ресурсов, названия прав и их значения даже в качестве примеров: бери их из результатов инструментов или оставь выбор открытым в форме. Не утверждай, что форма отправлена: её отправляет только пользователь после проверки полей и подтверждения в чате.`
 	}
-	var jiraCards []string
-	if a.jiraMode == "mock" {
-		seen := map[string]bool{}
-		for _, key := range jiraKeyMentionPattern.FindAllString(strings.ToUpper(question), 10) {
-			if seen[key] {
-				continue
-			}
-			seen[key] = true
-			issue, callErr := mcpTeamTool(ctx, a.mcpURL, a.mcpKey, "", "jira_get_issue", map[string]any{"key": key})
-			if callErr != nil {
-				jiraCards = append(jiraCards, "Не удалось проверить карточку Jira "+key+": "+callErr.Error())
-				continue
-			}
-			card, formatErr := formatMockJiraCard(issue)
-			if formatErr != nil {
-				jiraCards = append(jiraCards, "Не удалось прочитать карточку Jira "+key+".")
-			} else {
-				jiraCards = append(jiraCards, card)
-			}
-		}
-		if len(jiraCards) > 0 {
-			return strings.Join(jiraCards, "\n\n"), hits, nil
-		}
-	}
 	if teamToken != "" {
 		var forms []formChoice
 		if a.rightsMCPURL != "" {
@@ -217,6 +193,29 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 			if planErr != nil {
 				prompt += "\nПериод календаря не удалось определить; не делай утверждений о расписании без проверки."
 			} else {
+				if plan.NeedsJiraIssue {
+					if a.jiraMode != "mock" {
+						return "Jira сейчас не подключена.", hits, nil
+					}
+					if len(plan.JiraIssueKeys) == 0 {
+						return "Не удалось определить ключ задачи Jira из вопроса.", hits, nil
+					}
+					cards := make([]string, 0, len(plan.JiraIssueKeys))
+					for _, key := range plan.JiraIssueKeys {
+						issue, callErr := mcpTeamTool(ctx, a.mcpURL, a.mcpKey, "", "jira_get_issue", map[string]any{"key": key})
+						if callErr != nil {
+							cards = append(cards, "Не удалось проверить карточку Jira "+key+": "+callErr.Error())
+							continue
+						}
+						card, formatErr := formatMockJiraCard(issue)
+						if formatErr != nil {
+							cards = append(cards, "Не удалось прочитать карточку Jira "+key+".")
+						} else {
+							cards = append(cards, card)
+						}
+					}
+					return strings.Join(cards, "\n\n"), hits, nil
+				}
 				if plan.NeedsTeamDirectory {
 					if a.teamMCPURL == "" {
 						return "Сервис команды сейчас не подключён, поэтому я не могу подтвердить состав команды.", hits, nil
@@ -257,7 +256,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 					}
 				}
 				if plan.NeedsMyJiraIssues {
-					if a.jiraMode != "live" && a.jiraMode != "mock" {
+					if a.jiraMode != "mock" {
 						return "Jira сейчас не подключена, поэтому я не могу проверить личные задачи.", hits, nil
 					}
 					profile, profileErr := mcpTeamTool(ctx, a.teamMCPURL, "", teamToken, "team_profile", map[string]any{})

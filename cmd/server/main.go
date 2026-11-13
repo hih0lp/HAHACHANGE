@@ -181,7 +181,7 @@ func loadConfig() config {
 	return config{
 		APIKey:         os.Getenv("API_KEY"),
 		IndexOnStartup: envBool("INDEX_ON_STARTUP", true),
-		Jira:           jiraConfig{Mode: env("JIRA_MODE", "off"), BaseURL: env("JIRA_BASE_URL", "https://gapshinmihael.atlassian.net"), ProjectKey: env("JIRA_PROJECT_KEY", "SCRUM"), IssueType: env("JIRA_ISSUE_TYPE", "Задача"), Email: os.Getenv("JIRA_EMAIL"), APIToken: os.Getenv("JIRA_API_TOKEN"), DataPath: env("JIRA_DATA_PATH", "/data/jira/access-requests.json")},
+		Jira:           jiraConfig{Mode: env("JIRA_MODE", "off"), BaseURL: env("JIRA_BASE_URL", "http://mock-jira:8080"), ProjectKey: os.Getenv("JIRA_PROJECT_KEY"), IssueType: os.Getenv("JIRA_ISSUE_TYPE"), DataPath: env("JIRA_DATA_PATH", "/data/jira/access-requests.json")},
 		Reminder:       reminderConfig{InternAccountID: os.Getenv("REMINDER_INTERN_ACCOUNT_ID"), HoursBefore: envInt("REMINDER_HOURS_BEFORE", 24), TimeZone: env("REMINDER_TIMEZONE", "Europe/Moscow")},
 		RAG: rag.Config{
 			QdrantURL:      env("QDRANT_URL", "http://qdrant:6333"),

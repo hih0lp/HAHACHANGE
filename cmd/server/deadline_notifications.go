@@ -25,7 +25,7 @@ func mentorWindow(now, due time.Time) bool {
 }
 
 func scanDeadlineNotifications(ctx context.Context, db *pgxpool.Pool, jira jiraConfig, cfg reminderConfig, directory scenario.Client, now time.Time) error {
-	if (jira.Mode != "live" && jira.Mode != "mock") || cfg.InternAccountID == "" {
+	if jira.Mode != "mock" || cfg.InternAccountID == "" {
 		return nil
 	}
 	login, err := directory.Login(ctx, "intern", env("TEAM_ACCESS_INTERN_PASSWORD", ""))

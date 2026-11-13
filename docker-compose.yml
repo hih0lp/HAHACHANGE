@@ -42,9 +42,8 @@ services:
       LLM_URL: ${LLM_URL:-http://host.docker.internal:1234}
       LLM_MODEL: ${LLM_MODEL:-qwen3-8b}
       JIRA_MODE: ${JIRA_MODE:-off}
-      JIRA_BASE_URL: ${JIRA_BASE_URL:-https://gapshinmihael.atlassian.net}
-      JIRA_PROJECT_KEY: ${JIRA_PROJECT_KEY:-SCRUM}
-      JIRA_ISSUE_TYPE: ${JIRA_ISSUE_TYPE:-Task}
+      JIRA_BASE_URL: ${JIRA_BASE_URL:-http://mock-jira:8080}
+      JIRA_PROJECT_KEY: ${JIRA_PROJECT_KEY:-}
       JIRA_DATA_PATH: /data/jira/access-requests.json
       JOB_WORKERS: ${JOB_WORKERS:-2}
       JOB_QUEUE_SIZE: ${JOB_QUEUE_SIZE:-32}

@@ -6,7 +6,7 @@ COPY cmd ./cmd
 COPY internal ./internal
 COPY pkg ./pkg
 
-RUN go test ./... \
+RUN go test -cover ./... \
     && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/knowledge-api ./cmd/server
 
 FROM alpine:3.20

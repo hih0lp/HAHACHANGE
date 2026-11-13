@@ -18,7 +18,7 @@ func TestJiraCatalogueAndCallThroughMCP(t *testing.T) {
 		_, _ = w.Write([]byte(`{"issues":[{"key":"SCRUM-5","fields":{"summary":"Тестовая задача","status":{"name":"To Do"}}}]}`))
 	}))
 	defer jira.Close()
-	server := httptest.NewServer(newJiraMCP(jiraConfig{Mode: "live", BaseURL: jira.URL, ProjectKey: "SCRUM", Email: "test@example.org", APIToken: "token"}))
+	server := httptest.NewServer(newJiraMCP(jiraConfig{Mode: "mock", BaseURL: jira.URL, ProjectKey: "SCRUM"}))
 	defer server.Close()
 	tools, err := mcpTeamTools(context.Background(), server.URL, "", "")
 	if err != nil || len(tools) != 4 {

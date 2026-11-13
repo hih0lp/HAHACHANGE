@@ -21,7 +21,11 @@ services:
       QDRANT_URL: http://avito-rag-qdrant-1:6333
       EMBEDDINGS_URL: http://avito-rag-embeddings-1:80
       DOCUMENTS_PATH: /data/knowledge
-      MCP_URL: http://api:8000/mcp
+      JIRA_MODE: mock
+      JIRA_BASE_URL: http://mock-jira:8080
+      JIRA_PROJECT_KEY: ${JIRA_PROJECT_KEY:?Set JIRA_PROJECT_KEY}
+      MCP_URL: http://mock-jira:8080/mcp
+      CALENDAR_MCP_URL: http://mock-calendar:8080/mcp
       TEAM_ACCESS_URL: http://team-access:8080
       RIGHTS_URL: http://access-rights:8080
       RIGHTS_MCP_URL: http://access-rights:8080/mcp
@@ -43,6 +47,10 @@ services:
         condition: service_started
       access-rights:
         condition: service_started
+      mock-jira:
+        condition: service_started
+      mock-calendar:
+        condition: service_started
 
   worker:
     build: .
@@ -54,7 +62,11 @@ services:
       DISTRIBUTED_MODE: "true"
       QDRANT_URL: http://avito-rag-qdrant-1:6333
       EMBEDDINGS_URL: http://avito-rag-embeddings-1:80
-      MCP_URL: http://api:8000/mcp
+      JIRA_MODE: mock
+      JIRA_BASE_URL: http://mock-jira:8080
+      JIRA_PROJECT_KEY: ${JIRA_PROJECT_KEY:?Set JIRA_PROJECT_KEY}
+      MCP_URL: http://mock-jira:8080/mcp
+      CALENDAR_MCP_URL: http://mock-calendar:8080/mcp
       RIGHTS_URL: http://access-rights:8080
       RIGHTS_MCP_URL: http://access-rights:8080/mcp
       TEAM_MCP_URL: http://team-access:8080/mcp
@@ -66,6 +78,10 @@ services:
         condition: service_healthy
       kafka-init:
         condition: service_completed_successfully
+      mock-jira:
+        condition: service_started
+      mock-calendar:
+        condition: service_started
     networks:
       - default
       - shared
@@ -178,6 +194,8 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-aibuddy}:${POSTGRES_PASSWORD}@postgres:5432/aibuddy_teams?sslmode=disable
       KAFKA_BROKERS: kafka:9092
       TEAM_ACCESS_ROLE: team
+      JIRA_MODE: mock
+      JIRA_BASE_URL: http://mock-jira:8080
 
       TEAM_ACCESS_TOKEN_TTL_HOURS: ${TEAM_ACCESS_TOKEN_TTL_HOURS:-8760}
       TEAM_ACCESS_MIGRATION: /app/migrations/001_team.sql
@@ -218,6 +236,30 @@ services:
         condition: service_started
       kafka-init:
         condition: service_completed_successfully
+
+  mock-jira:
+    build:
+      context: .
+      dockerfile: Dockerfile.mock-jira
+    restart: unless-stopped
+    environment:
+      MOCK_JIRA_JSON: /fixtures/jira.json
+      MOCK_LISTEN: :8080
+    volumes:
+      - ./fixtures/mock/jira.json:/fixtures/jira.json:ro
+
+  mock-calendar:
+    build:
+      context: .
+      dockerfile: Dockerfile.mock-calendar
+    restart: unless-stopped
+    environment:
+      MOCK_CALENDAR_JSON: /fixtures/calendar.json
+      MOCK_LISTEN: :8080
+      TEAM_DIRECTORY_URL: http://team-access:8080
+      CALENDAR_DEMO_SUBJECT: ${CALENDAR_DEMO_SUBJECT:?Set CALENDAR_DEMO_SUBJECT}
+    volumes:
+      - ./fixtures/mock/calendar.json:/fixtures/calendar.json:ro
 
   qdrant:
     profiles: [standalone]

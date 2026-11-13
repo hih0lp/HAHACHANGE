@@ -26,7 +26,7 @@ func TestRemindersOnlyForAssignedOpenTasksInsideWindow(t *testing.T) {
 	}))
 	defer jira.Close()
 	cfg := reminderConfig{InternAccountID: "intern-1", HoursBefore: 24, TimeZone: "Europe/Moscow"}
-	jcfg := jiraConfig{Mode: "live", BaseURL: jira.URL, ProjectKey: "SCRUM"}
+	jcfg := jiraConfig{Mode: "mock", BaseURL: jira.URL, ProjectKey: "SCRUM"}
 	zone, _ := time.LoadLocation(cfg.TimeZone)
 	before := time.Date(2026, 11, 9, 23, 0, 0, 0, zone)
 	result, err := loadReminders(context.Background(), jcfg, cfg, before)

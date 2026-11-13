@@ -55,6 +55,18 @@ func TestPlannerClassifiesPersonalJiraWithoutPhraseRules(t *testing.T) {
 	}
 }
 
+func TestPlannerSelectsIssueKeyWithoutPhraseRules(t *testing.T) {
+	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"choices":[{"message":{"content":"{\"needs_jira_issue\":true,\"jira_issue_keys\":[\"SCRUM-7\"]}"}}]}`)
+	}))
+	defer model.Close()
+	a := answerer{url: model.URL, model: "test", client: model.Client()}
+	plan, err := a.planCalendar(context.Background(), "Что известно о SCRUM-7?", time.Now(), nil)
+	if err != nil || !plan.NeedsJiraIssue || len(plan.JiraIssueKeys) != 1 || plan.JiraIssueKeys[0] != "SCRUM-7" {
+		t.Fatalf("plan=%+v err=%v", plan, err)
+	}
+}
+
 func TestPlannerClassifiesTeamDirectoryWithoutPhraseRules(t *testing.T) {
 	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"choices":[{"message":{"content":"{\"needs_team_directory\":true}"}}]}`)
