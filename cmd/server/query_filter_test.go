@@ -51,6 +51,21 @@ func TestQueryFilterRejectsInvalidResponses(t *testing.T) {
 	}
 }
 
+func TestPlannerCategoriesAreValidated(t *testing.T) {
+	if err := validateCategories([]string{"documents", "team"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateCategories([]string{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateCategories([]string{"gitlab", "gitlab"}); err == nil {
+		t.Fatal("duplicate category accepted")
+	}
+	if err := validateCategories([]string{"unknown"}); err == nil {
+		t.Fatal("unknown category accepted")
+	}
+}
+
 func TestGitLabProjectIDsFromLiveCatalogue(t *testing.T) {
 	ids := gitlabProjectIDs(map[string]any{"data": []any{map[string]any{"id": float64(2)}, map[string]any{"id": float64(17)}}})
 	if strings.Join(ids, ",") != "2,17" {
@@ -89,6 +104,37 @@ func TestPersonalGitLabEvidenceUsesVerifiedID(t *testing.T) {
 	}
 }
 
+func TestCompactGitLabMREvidence(t *testing.T) {
+	items := []map[string]any{{"iid": float64(3), "title": "Add checks", "web_url": "https://gitlab.example/mr/3", "description": strings.Repeat("a", 700), "private_note": "ignore"}}
+	compact := compactGitLabMRs(items)
+	if len(compact) != 1 || compact[0]["private_note"] != nil || len([]rune(compact[0]["description"].(string))) != 600 {
+		t.Fatalf("compact=%v", compact)
+	}
+}
+
+func TestRecommendationRequiresVerifiedPersonalAndDocumentEvidence(t *testing.T) {
+	sources := map[string]string{"jira:SCRUM-7": "[SCRUM-7](https://jira.example/7)", "doc:0": "[Guide](https://docs.example/guide)"}
+	answer, err := renderRecommendationJSON(`{"steps":[{"action":"Изучить проверку входных данных", "sources":["jira:SCRUM-7","doc:0"]}]}`, sources, true)
+	if err != nil || !strings.Contains(answer, "SCRUM-7") || !strings.Contains(answer, "не оценка прежнего опыта") {
+		t.Fatalf("answer=%q err=%v", answer, err)
+	}
+	for _, response := range []string{
+		`{"steps":[{"action":"Изучить SCRUM-6", "sources":["jira:SCRUM-7","doc:0"]}]}`,
+		`{"steps":[{"action":"Изучить проверку", "sources":["jira:SCRUM-6","doc:0"]}]}`,
+		`{"steps":[{"action":"", "sources":["jira:SCRUM-7","doc:0"]}]}`,
+	} {
+		if _, err := renderRecommendationJSON(response, sources, false); err == nil {
+			t.Fatalf("accepted %s", response)
+		}
+	}
+	if answer, err := renderRecommendationJSON(`{"steps":[{"action":"Изучить проверку", "sources":["doc:0"]}]}`, sources, false); err != nil || !strings.Contains(answer, "Не удалось связать") {
+		t.Fatalf("ungrounded=%q err=%v", answer, err)
+	}
+	if answer, err := renderRecommendationJSON(`{"steps":[]}`, sources, false); err != nil || !strings.Contains(answer, "Не удалось связать") {
+		t.Fatalf("empty=%q err=%v", answer, err)
+	}
+}
+
 func TestPlaceholderURLsAreRemovedFromEvidence(t *testing.T) {
 	input := map[string]any{"profile": map[string]any{"url": "https://example.invalid/user", "name": "Intern"}, "links": []any{"https://jira.example.com/browse/SCRUM-7"}}
 	clean := removePlaceholderURLs(input).(map[string]any)
@@ -116,5 +162,20 @@ func TestPersonalJiraListUsesOnlyAssignedFields(t *testing.T) {
 	list["truncated"] = true
 	if answer, err := renderPersonalJiraList(list, "me"); err != nil || !strings.Contains(answer, "первая страница") {
 		t.Fatalf("truncated answer=%q err=%v", answer, err)
+	}
+}
+
+func TestOpenGitLabListContainsOnlyVerifiedMRFields(t *testing.T) {
+	projects := map[string]any{"2": map[string]any{"data": []any{map[string]any{"iid": float64(7), "title": "Add checks", "web_url": "https://gitlab.example/mr/7", "author": map[string]any{"name": "Other"}}}, "next_page": ""}}
+	answer, err := renderOpenGitLabMRs(projects, false)
+	if err != nil || !strings.Contains(answer, "!7") || !strings.Contains(answer, "Add checks") || strings.Contains(answer, "Other") {
+		t.Fatalf("answer=%q err=%v", answer, err)
+	}
+	if _, err := renderOpenGitLabMRs(map[string]any{"2": map[string]any{"data": []any{map[string]any{"iid": 7}}}}, false); err == nil {
+		t.Fatal("incomplete MR accepted")
+	}
+	answer, err = renderOpenGitLabMRs(map[string]any{}, true)
+	if err != nil || !strings.Contains(answer, "нет") || !strings.Contains(answer, "часть") {
+		t.Fatalf("empty answer=%q err=%v", answer, err)
 	}
 }

@@ -54,6 +54,9 @@ func TestLiveRouteCases(t *testing.T) {
 			if item.want != "" && !strings.Contains(strings.ToLower(answer), strings.ToLower(item.want)) {
 				t.Fatalf("missing %q", item.want)
 			}
+			if item.name == "recommendation" && strings.Contains(answer, "Не удалось проверить обоснование") {
+				t.Fatal("recommendation response failed source validation")
+			}
 		})
 	}
 }

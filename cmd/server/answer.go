@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -92,6 +94,15 @@ func mustJSON(value any) []byte {
 	return encoded
 }
 
+func recommendationSourceIDs(sources map[string]string) []string {
+	ids := make([]string, 0, len(sources))
+	for id := range sources {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
+}
+
 func renderPersonalJiraList(value any, accountID string) (string, error) {
 	var list jiraIssues
 	if err := json.Unmarshal(mustJSON(value), &list); err != nil {
@@ -146,6 +157,124 @@ func personalGitLabMRs(result any, identityID string) []map[string]any {
 	return selected
 }
 
+func compactGitLabMRs(items []map[string]any) []map[string]any {
+	compact := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		mr := map[string]any{}
+		for _, field := range []string{"iid", "title", "web_url", "state"} {
+			if value, exists := item[field]; exists {
+				mr[field] = value
+			}
+		}
+		if description, ok := item["description"].(string); ok {
+			runes := []rune(description)
+			if len(runes) > 600 {
+				description = string(runes[:600])
+			}
+			mr["description"] = description
+		}
+		compact = append(compact, mr)
+	}
+	return compact
+}
+
+func renderRecommendationJSON(content string, sources map[string]string, noOpenPersonalMR bool) (string, error) {
+	content = strings.TrimSpace(content)
+	content = strings.TrimPrefix(strings.TrimPrefix(content, "```json"), "```")
+	content = strings.TrimSuffix(strings.TrimSpace(content), "```")
+	var result struct {
+		Steps []struct {
+			Action  string   `json:"action"`
+			Sources []string `json:"sources"`
+		} `json:"steps"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(content)), &result); err != nil {
+		return "", err
+	}
+	if len(result.Steps) > 3 {
+		return "", errors.New("too many recommendation steps")
+	}
+	if len(result.Steps) == 0 {
+		return "Не удалось связать вашу проверенную работу с материалами без предположений. Добавьте содержательное описание задачи Jira или пример своего MR.", nil
+	}
+	var out strings.Builder
+	out.WriteString("Что стоит изучить дальше на основе проверенных данных:\n")
+	validCount := 0
+	for _, step := range result.Steps {
+		step.Action = strings.TrimSpace(step.Action)
+		if step.Action == "" || len([]rune(step.Action)) > 500 {
+			return "", errors.New("invalid recommendation action")
+		}
+		if strings.Contains(step.Action, "http://") || strings.Contains(step.Action, "https://") {
+			return "", errors.New("unverified recommendation link")
+		}
+		for _, key := range recommendationIssueKeyPattern.FindAllString(step.Action, -1) {
+			if _, verified := sources["jira:"+key]; !verified {
+				return "", errors.New("unverified Jira issue in recommendation")
+			}
+		}
+		personal, document := false, false
+		citations := make([]string, 0, len(step.Sources))
+		for _, id := range step.Sources {
+			label, ok := sources[id]
+			if !ok {
+				return "", errors.New("unverified recommendation source")
+			}
+			personal = personal || strings.HasPrefix(id, "jira:") || strings.HasPrefix(id, "gitlab:")
+			document = document || strings.HasPrefix(id, "doc:")
+			citations = append(citations, label)
+		}
+		if !personal || !document {
+			continue
+		}
+		validCount++
+		fmt.Fprintf(&out, "\n%d. %s Источники: %s.", validCount, step.Action, strings.Join(citations, ", "))
+	}
+	if validCount == 0 {
+		return "Не удалось связать вашу проверенную работу с материалами без предположений. Добавьте содержательное описание задачи Jira или пример своего MR.", nil
+	}
+	if noOpenPersonalMR {
+		out.WriteString("\n\nВ проверенных открытых MR участие вашего GitLab-аккаунта не найдено. Это не оценка прежнего опыта или навыков.")
+	}
+	return out.String(), nil
+}
+
+var recommendationIssueKeyPattern = regexp.MustCompile(`\b[A-Z][A-Z0-9_]*-[0-9]+\b`)
+
+func renderOpenGitLabMRs(projectResults map[string]any, partial bool) (string, error) {
+	var out strings.Builder
+	out.WriteString("Открытые MR в доступных вам проектах GitLab:\n")
+	count := 0
+	for projectID, result := range projectResults {
+		var envelope struct {
+			Data []struct {
+				IID   int    `json:"iid"`
+				Title string `json:"title"`
+				URL   string `json:"web_url"`
+			} `json:"data"`
+			NextPage string `json:"next_page"`
+		}
+		if err := json.Unmarshal(mustJSON(result), &envelope); err != nil {
+			return "", err
+		}
+		for _, mr := range envelope.Data {
+			if mr.IID <= 0 || mr.Title == "" || mr.URL == "" {
+				return "", errors.New("incomplete GitLab MR")
+			}
+			fmt.Fprintf(&out, "\n- Проект %s: [!%d — %s](%s)", projectID, mr.IID, mr.Title, mr.URL)
+			count++
+		}
+		partial = partial || envelope.NextPage != ""
+	}
+	if count == 0 {
+		out.WriteString("\nОткрытых MR в проверенных проектах нет.")
+	}
+	if partial {
+		out.WriteString("\nПоказана только часть доступных проектов или MR.")
+	}
+	return out.String(), nil
+}
+
 func removePlaceholderURLs(value any) any {
 	switch v := value.(type) {
 	case string:
@@ -181,8 +310,9 @@ type completionToolCall struct {
 }
 
 type completionMessage struct {
-	Content   string               `json:"content"`
-	ToolCalls []completionToolCall `json:"tool_calls"`
+	Content          string               `json:"content"`
+	ReasoningContent string               `json:"reasoning_content"`
+	ToolCalls        []completionToolCall `json:"tool_calls"`
 }
 
 const agentSystemPrompt = `Тебя зовут Бобби. Ты ИИ-помощник стажёра. Помогай разбираться с задачами, онбордингом и доступными материалами, а также отвечай на общие вопросы, объясняй понятия и помогай с идеями и кодом. Отвечай по-русски, ясно и по делу.
@@ -255,6 +385,15 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 			}
 		}
 	}
+	if plan.RequiredCategories != nil {
+		if err := validateCategories(plan.RequiredCategories); err != nil {
+			return "", nil, fmt.Errorf("query plan categories: %w", err)
+		}
+		selected = map[string]bool{}
+		for _, category := range plan.RequiredCategories {
+			selected[category] = true
+		}
+	}
 	if plan.NeedsEvents || plan.NeedsAvailability {
 		selected["calendar"] = true
 	}
@@ -270,11 +409,18 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 			selected[category] = true
 		}
 	}
-	log.Printf("router job=%s categories=%v latency=%s", traceID, selected, time.Since(routeStarted))
+	if plan.NeedsOpenGitLabMRs {
+		selected["gitlab"] = true
+	}
+	log.Printf("router job=%s filter_categories=%v categories=%v latency=%s", traceID, route.Categories, selected, time.Since(routeStarted))
 	var hits []rag.SearchHit
 	var searchErr error
 	if selected["documents"] && a.service != nil {
-		hits, searchErr = a.service.Search(ctx, route.CleanedQuestion, 5)
+		limit := 5
+		if plan.NeedsRecommendation {
+			limit = 3
+		}
+		hits, searchErr = a.service.Search(ctx, route.CleanedQuestion, limit)
 	}
 	if searchErr != nil {
 		// General conversation should still work when document search is down.
@@ -285,7 +431,18 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 		}
 	}
 	var sources strings.Builder
-	for _, hit := range hits {
+	recommendationSources := map[string]string{}
+	for index, hit := range hits {
+		if plan.NeedsRecommendation {
+			id := fmt.Sprintf("doc:%d", index)
+			label := hit.Path
+			if hit.SourceURL != "" {
+				label = "[" + hit.Path + "](" + hit.SourceURL + ")"
+			}
+			recommendationSources[id] = label
+			fmt.Fprintf(&sources, "[%s, источник: %s]\n%s\n\n", id, label, hit.Text)
+			continue
+		}
 		if hit.SourceURL != "" {
 			fmt.Fprintf(&sources, "[Источник: %s, URL: %s, фрагмент %d]\n%s\n\n", hit.Path, hit.SourceURL, hit.ChunkIndex, hit.Text)
 		} else {
@@ -297,7 +454,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 		searchState = "Поиск документов временно недоступен."
 	}
 	prompt := "Исходный запрос: " + question + "\nОчищенный запрос: " + route.CleanedQuestion + "\nКатегории: " + strings.Join(route.Categories, ", ") + "\n\n" + searchState + "\nФрагменты документов (используй только если относятся к вопросу):\n" + sources.String()
-	if selected["team"] && teamToken != "" && a.teamMCPURL != "" {
+	if selected["team"] && !plan.NeedsRecommendation && teamToken != "" && a.teamMCPURL != "" {
 		for _, tool := range []string{"team_profile", "team_members"} {
 			result, callErr := callMCP(ctx, a.teamMCPURL, "", teamToken, tool, map[string]any{})
 			if callErr != nil {
@@ -310,6 +467,9 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 		}
 	}
 	gitlabEvidenceOK := false
+	gitlabMRResults := map[string]any{}
+	gitlabPartial := false
+	noOpenPersonalMR := true
 	if selected["gitlab"] && teamToken != "" && a.gitLabMCPURL != "" {
 		identity, identityErr := callMCP(ctx, a.gitLabMCPURL, "", teamToken, "gitlab_identity", map[string]any{})
 		projects, projectsErr := callMCP(ctx, a.gitLabMCPURL, "", teamToken, "gitlab_projects", map[string]any{})
@@ -318,10 +478,11 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 			if identityID != "" {
 				gitlabEvidenceOK = true
 				prompt += "\nПроверенная личность GitLab: " + string(mustJSON(identity))
-				prompt += "\nДоступные проекты GitLab: " + string(mustJSON(projects))
+				prompt += "\nID доступных проектов GitLab: " + string(mustJSON(gitlabProjectIDs(projects)))
 				ids := gitlabProjectIDs(projects)
 				if len(ids) > 5 {
 					prompt += "\nПроверены только первые пять доступных проектов GitLab."
+					gitlabPartial = true
 					ids = ids[:5]
 				}
 				for _, id := range ids {
@@ -331,8 +492,20 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 						prompt += "\nMR проекта " + id + " не удалось проверить."
 						continue
 					}
+					gitlabMRResults[id] = mrs
 					if plan.NeedsRecommendation {
-						prompt += "\nMR, где текущий пользователь GitLab указан автором или ревьюером в проекте " + id + ": " + string(mustJSON(personalGitLabMRs(mrs, identityID)))
+						personal := compactGitLabMRs(personalGitLabMRs(mrs, identityID))
+						if len(personal) > 0 {
+							noOpenPersonalMR = false
+						}
+						for _, mr := range personal {
+							ref := fmt.Sprintf("gitlab:%s:!%v", id, mr["iid"])
+							mr["source_id"] = ref
+							if link, ok := mr["web_url"].(string); ok {
+								recommendationSources[ref] = "[MR !" + fmt.Sprint(mr["iid"]) + "](" + link + ")"
+							}
+						}
+						prompt += "\nПроверенные открытые MR с участием текущего GitLab-аккаунта в проекте " + id + ": " + string(mustJSON(personal)) + ". Пустой список не означает отсутствия прошлой работы или навыка."
 					} else {
 						prompt += "\nОткрытые MR проекта " + id + ": " + string(mustJSON(mrs))
 					}
@@ -341,6 +514,13 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 		}
 		if !gitlabEvidenceOK {
 			prompt += "\nНе удалось достоверно сопоставить пользователя с GitLab или прочитать все проверяемые MR; не приписывай ему проекты, MR или навыки."
+		}
+		if plan.NeedsOpenGitLabMRs && gitlabEvidenceOK {
+			answer, renderErr := renderOpenGitLabMRs(gitlabMRResults, gitlabPartial)
+			if renderErr != nil {
+				return "Не удалось проверить список открытых MR GitLab.", hits, nil
+			}
+			return answer, hits, nil
 		}
 	}
 	client := a.client
@@ -355,7 +535,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 	}
 	var teamTools []map[string]any
 	toolEndpoints := map[string]string{}
-	if selected["jira"] && a.jiraMode == "live" {
+	if selected["jira"] && !plan.NeedsRecommendation && a.jiraMode == "live" {
 		jiraTools, err := mcpTeamTools(ctx, a.mcpURL, a.mcpKey, "")
 		if err != nil {
 			return "", hits, fmt.Errorf("Jira tools/list: %w", err)
@@ -366,7 +546,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 		}
 		teamTools = append(teamTools, jiraTools...)
 	}
-	if selected["team"] && teamToken != "" && a.teamMCPURL != "" {
+	if selected["team"] && !plan.NeedsRecommendation && teamToken != "" && a.teamMCPURL != "" {
 		var err error
 		available, err := mcpTeamTools(ctx, a.teamMCPURL, "", teamToken)
 		if err != nil {
@@ -378,7 +558,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 		}
 		teamTools = append(teamTools, available...)
 	}
-	if selected["rights"] && teamToken != "" && a.rightsMCPURL != "" {
+	if selected["rights"] && !plan.NeedsRecommendation && teamToken != "" && a.rightsMCPURL != "" {
 		available, err := mcpTeamTools(ctx, a.rightsMCPURL, "", teamToken)
 		if err != nil {
 			return "", hits, fmt.Errorf("access-rights MCP tools/list: %w", err)
@@ -389,7 +569,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 		}
 		teamTools = append(teamTools, available...)
 	}
-	if selected["gitlab"] && teamToken != "" && a.gitLabMCPURL != "" {
+	if selected["gitlab"] && !plan.NeedsRecommendation && teamToken != "" && a.gitLabMCPURL != "" {
 		available, err := mcpTeamTools(ctx, a.gitLabMCPURL, "", teamToken)
 		if err == nil {
 			for _, tool := range available {
@@ -401,7 +581,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 			}
 		}
 	}
-	if selected["calendar"] && teamToken != "" && a.calendarMCPURL != "" {
+	if selected["calendar"] && !plan.NeedsRecommendation && teamToken != "" && a.calendarMCPURL != "" {
 		available, err := mcpTeamTools(ctx, a.calendarMCPURL, "", teamToken)
 		if err == nil {
 			for _, tool := range available {
@@ -451,7 +631,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 						return strings.Join(links, "\n"), hits, nil
 					}
 				}
-				if plan.NeedsMyJiraIssues {
+				if plan.NeedsMyJiraIssues && !plan.NeedsRecommendation {
 					if a.jiraMode != "live" {
 						return "Jira сейчас не подключена, поэтому я не могу проверить личные задачи.", hits, nil
 					}
@@ -502,11 +682,23 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 					profile, profileErr := callMCP(ctx, a.teamMCPURL, "", teamToken, "team_profile", map[string]any{})
 					if profileErr != nil {
 						missing["team_profile"] = true
-					} else if accountID := verifiedJiraAccountID(string(mustJSON(profile))); accountID != "" && !strings.HasPrefix(accountID, "demo-") {
+					} else {
+						prompt += "\nПроверенный профиль текущего сотрудника: " + string(mustJSON(profile))
+					}
+					if accountID := verifiedJiraAccountID(string(mustJSON(profile))); profileErr == nil && accountID != "" && !strings.HasPrefix(accountID, "demo-") {
 						assigned, assignedErr := callMCP(ctx, a.mcpURL, a.mcpKey, "", "jira_list_assigned_issues", map[string]any{"account_id": accountID})
 						if assignedErr != nil {
 							missing["jira_list_issues"] = true
 						} else {
+							var list jiraIssues
+							if json.Unmarshal(mustJSON(assigned), &list) != nil {
+								missing["jira_list_issues"] = true
+							}
+							for _, issue := range list.Issues {
+								if issue.AssigneeAccountID == accountID {
+									recommendationSources["jira:"+issue.Key] = "[" + issue.Key + "](" + issue.URL + ")"
+								}
+							}
 							prompt += "\nТолько эти задачи Jira назначены текущему пользователю: " + string(mustJSON(assigned))
 						}
 					} else {
@@ -516,9 +708,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 						name, endpoint string
 						args           map[string]any
 					}{
-						{"team_profile", a.teamMCPURL, map[string]any{}},
 						{"team_members", a.teamMCPURL, map[string]any{}},
-						{"jira_list_issues", a.mcpURL, map[string]any{}},
 					} {
 						if source.endpoint == "" {
 							missing[source.name] = true
@@ -538,7 +728,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 							prompt += "\nПроверенный источник " + source.name + ": " + string(data)
 						}
 					}
-					if len(missing) > 0 {
+					if len(missing) > 0 || !gitlabEvidenceOK {
 						parts := []string{}
 						if missing["team_profile"] || missing["team_members"] {
 							parts = append(parts, "данные команды")
@@ -551,7 +741,9 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 						}
 						return "Пока не могу подготовить достоверную персональную рекомендацию: не удалось проверить " + strings.Join(parts, ", ") + ". Когда источник снова будет доступен, сопоставлю вашу команду, задачи, код и документацию. Навыки по общим материалам приписывать вам не буду.", hits, nil
 					}
-					systemPrompt += "\nВ персональной рекомендации используй только проверенные источники выше. Личными задачами считай только список Jira, отфильтрованный по проверенному accountId; общий список задач проекта не доказывает личную работу. Личными MR считай только отфильтрованный список с совпадающим GitLab user ID. Пустые списки не означают отсутствие навыка. Укажи, какие источники доступны и какие нет. Не приписывай человеку навыки, которых нет в профиле или доказанной работе."
+					systemPrompt = `/no_think
+Ты Бобби, наставник-помощник стажёра. Верни только JSON вида {"steps":[{"action":"конкретный следующий шаг", "sources":["jira:KEY", "doc:0"]}]}. Не больше трёх шагов. В каждом шаге укажи проверенную личную задачу Jira или личный MR GitLab и фрагмент документации из предоставленного списка source_id. Если связь между личной работой и документом нельзя обосновать, верни {"steps":[]}. Список доступных проектов и пустой список открытых MR не доказывают авторство, прежний опыт или отсутствие навыка. Не используй задачи других людей, не приписывай сотруднику навыки из общего playbook. Не выдумывай факты и URL. Пиши по-русски без markdown и без текста вне JSON.`
+					prompt += "\nРазрешённые идентификаторы источников: " + string(mustJSON(recommendationSourceIDs(recommendationSources)))
 				}
 			}
 		}
@@ -572,6 +764,18 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 	messages = append(messages, map[string]any{"role": "user", "content": prompt})
 	for step := 0; step < 5; step++ {
 		payload := map[string]any{"model": a.model, "stream": false, "messages": messages}
+		if plan.NeedsRecommendation {
+			payload["temperature"] = 0
+			payload["max_tokens"] = 1024
+			payload["response_format"] = map[string]any{"type": "json_schema", "json_schema": map[string]any{
+				"name": "personal_recommendation", "strict": true,
+				"schema": map[string]any{"type": "object", "properties": map[string]any{
+					"steps": map[string]any{"type": "array", "maxItems": 3, "items": map[string]any{"type": "object", "properties": map[string]any{
+						"action": map[string]any{"type": "string"}, "sources": map[string]any{"type": "array", "items": map[string]any{"type": "string", "enum": recommendationSourceIDs(recommendationSources)}},
+					}, "required": []string{"action", "sources"}, "additionalProperties": false}},
+				}, "required": []string{"steps"}, "additionalProperties": false},
+			}}
+		}
 		if len(teamTools) > 0 {
 			payload["tools"] = teamTools
 			payload["tool_choice"] = "auto"
@@ -602,7 +806,8 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 		}
 		var result struct {
 			Choices []struct {
-				Message completionMessage `json:"message"`
+				Message      completionMessage `json:"message"`
+				FinishReason string            `json:"finish_reason"`
 			} `json:"choices"`
 		}
 		if err := json.Unmarshal(responseBody, &result); err != nil {
@@ -647,9 +852,18 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 				continue
 			}
 			if strings.TrimSpace(message.Content) == "" {
+				log.Printf("llm empty job=%s finish=%s reasoning_chars=%d", traceID, result.Choices[0].FinishReason, len(message.ReasoningContent))
 				return "", hits, fmt.Errorf("LLM returned an empty answer")
 			}
 			answerText := message.Content
+			if plan.NeedsRecommendation {
+				recommendation, renderErr := renderRecommendationJSON(answerText, recommendationSources, noOpenPersonalMR)
+				if renderErr != nil {
+					log.Printf("recommendation validation job=%s error=%v", traceID, renderErr)
+					return "Не удалось проверить обоснование персональной рекомендации. Уточните задачу или попробуйте ещё раз.", hits, nil
+				}
+				return recommendation, hits, nil
+			}
 			for name := range toolEndpoints {
 				answerText = strings.ReplaceAll(answerText, name, "подключённый сервис")
 			}

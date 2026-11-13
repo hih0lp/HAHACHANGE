@@ -26,12 +26,16 @@ func validateQueryRoute(route *queryRoute) error {
 	if route.CleanedQuestion == "" || len([]rune(route.CleanedQuestion)) > 2000 {
 		return errors.New("invalid cleaned question")
 	}
+	return validateCategories(route.Categories)
+}
+
+func validateCategories(categories []string) error {
 	allowed := map[string]bool{}
 	for _, category := range routeCategories {
 		allowed[category] = true
 	}
 	seen := map[string]bool{}
-	for _, category := range route.Categories {
+	for _, category := range categories {
 		if !allowed[category] || seen[category] {
 			return errors.New("invalid route category")
 		}
