@@ -23,6 +23,9 @@ services:
       context: .
       dockerfile: Dockerfile.gitlab-integration
     image: bobby-mocks-gitlab-mcp:local
+    networks:
+      - default
+      - gitlab_demo
     environment:
       GITLAB_API_ORIGIN: ${GITLAB_API_ORIGIN:?Set GITLAB_API_ORIGIN}
       TEAM_DIRECTORY_URL: http://team-access:8080
@@ -33,3 +36,8 @@ services:
     depends_on:
       team-access:
         condition: service_started
+
+networks:
+  gitlab_demo:
+    external: true
+    name: ${GITLAB_DEMO_NETWORK:?Set GITLAB_DEMO_NETWORK}
