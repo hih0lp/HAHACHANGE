@@ -1,5 +1,6 @@
 services:
   api:
+    image: bobby-mocks-api:local
     environment:
       JIRA_MODE: mock
       JIRA_BASE_URL: http://mock-jira:8080
@@ -11,6 +12,7 @@ services:
       mock-calendar:
         condition: service_started
   worker:
+    image: bobby-mocks-api:local
     environment:
       JIRA_MODE: mock
       JIRA_BASE_URL: http://mock-jira:8080
@@ -42,3 +44,7 @@ services:
       CALENDAR_DEMO_SUBJECT: intern
     volumes:
       - ./fixtures/mock/calendar.json:/fixtures/calendar.json:ro
+  team-access:
+    image: bobby-mocks-team-access:local
+  access-rights:
+    image: bobby-mocks-team-access:local
