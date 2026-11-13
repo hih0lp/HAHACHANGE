@@ -16,13 +16,19 @@ import (
 type jiraConfig struct{ Mode, BaseURL, ProjectKey, IssueType, Email, APIToken, DataPath string }
 
 func (c jiraConfig) validate() error {
-	if c.Mode != "off" && c.Mode != "live" {
-		return errors.New("JIRA_MODE must be off or live")
+	if c.Mode != "off" && c.Mode != "live" && c.Mode != "mock" {
+		return errors.New("JIRA_MODE must be off, live or mock")
 	}
 	if c.Mode == "off" {
 		return nil
 	}
 	u, err := url.Parse(c.BaseURL)
+	if c.Mode == "mock" {
+		if err != nil || u.Scheme != "http" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "" || c.ProjectKey == "" {
+			return errors.New("mock Jira needs an internal HTTP origin and project key")
+		}
+		return nil
+	}
 	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "" {
 		return errors.New("JIRA_BASE_URL must be an HTTPS site origin")
 	}

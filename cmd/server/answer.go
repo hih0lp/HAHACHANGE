@@ -108,7 +108,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 	}
 	var teamTools []map[string]any
 	toolEndpoints := map[string]string{}
-	if a.jiraMode == "live" {
+	if a.jiraMode == "live" || a.jiraMode == "mock" {
 		jiraTools, err := mcpTeamTools(ctx, a.mcpURL, a.mcpKey, "")
 		if err != nil {
 			return "", hits, fmt.Errorf("Jira tools/list: %w", err)
@@ -233,7 +233,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 					}
 				}
 				if plan.NeedsMyJiraIssues {
-					if a.jiraMode != "live" {
+					if a.jiraMode != "live" && a.jiraMode != "mock" {
 						return "Jira сейчас не подключена, поэтому я не могу проверить личные задачи.", hits, nil
 					}
 					profile, profileErr := mcpTeamTool(ctx, a.teamMCPURL, "", teamToken, "team_profile", map[string]any{})

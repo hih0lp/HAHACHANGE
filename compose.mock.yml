@@ -1,0 +1,42 @@
+services:
+  api:
+    environment:
+      JIRA_MODE: mock
+      JIRA_BASE_URL: http://mock-jira:8080
+      JIRA_PROJECT_KEY: SCRUM
+      CALENDAR_MCP_URL: http://mock-calendar:8080/mcp
+    depends_on:
+      mock-jira:
+        condition: service_started
+      mock-calendar:
+        condition: service_started
+  worker:
+    environment:
+      JIRA_MODE: mock
+      JIRA_BASE_URL: http://mock-jira:8080
+      JIRA_PROJECT_KEY: SCRUM
+      MCP_URL: http://mock-jira:8080/mcp
+      CALENDAR_MCP_URL: http://mock-calendar:8080/mcp
+    depends_on:
+      mock-jira:
+        condition: service_started
+      mock-calendar:
+        condition: service_started
+  mock-jira:
+    build:
+      context: .
+      dockerfile: Dockerfile.mock-jira
+    environment:
+      MOCK_JIRA_JSON: /fixtures/jira.json
+    volumes:
+      - ./fixtures/mock/jira.json:/fixtures/jira.json:ro
+  mock-calendar:
+    build:
+      context: .
+      dockerfile: Dockerfile.mock-calendar
+    environment:
+      MOCK_CALENDAR_JSON: /fixtures/calendar.json
+      TEAM_DIRECTORY_URL: http://team-access:8080
+      CALENDAR_DEMO_SUBJECT: intern
+    volumes:
+      - ./fixtures/mock/calendar.json:/fixtures/calendar.json:ro

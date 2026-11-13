@@ -1,0 +1,14 @@
+{
+  "calendar_id":"mentor-demo",
+  "summary":"Бобби — доступность ментора (демо)",
+  "time_zone":"Europe/Moscow",
+  "events":[
+    {"id":"mentor-2026-11-17","summary":"Окно ментора: вопросы и 1:1 (демо)","description":"Учебное окно доступности по открытому чек-листу стажёра Авито. Не отражает расписание реального наставника.","start":{"dateTime":"2026-11-17T15:30:00+03:00","timeZone":"Europe/Moscow"},"end":{"dateTime":"2026-11-17T16:00:00+03:00","timeZone":"Europe/Moscow"},"status":"confirmed"},
+    {"id":"mentor-2026-11-19","summary":"Окно ментора: ревью и разбор задач (демо)","description":"Учебное окно для обсуждения задач, прогресса и вопросов по материалам стажировки.","start":{"dateTime":"2026-11-19T16:00:00+03:00","timeZone":"Europe/Moscow"},"end":{"dateTime":"2026-11-19T17:00:00+03:00","timeZone":"Europe/Moscow"},"status":"confirmed"},
+    {"id":"mentor-2026-11-24","summary":"Окно ментора: вопросы и 1:1 (демо)","start":{"dateTime":"2026-11-24T15:30:00+03:00","timeZone":"Europe/Moscow"},"end":{"dateTime":"2026-11-24T16:00:00+03:00","timeZone":"Europe/Moscow"},"status":"confirmed"},
+    {"id":"mentor-2026-11-26","summary":"Окно ментора: ревью и разбор задач (демо)","start":{"dateTime":"2026-11-26T16:00:00+03:00","timeZone":"Europe/Moscow"},"end":{"dateTime":"2026-11-26T17:00:00+03:00","timeZone":"Europe/Moscow"},"status":"confirmed"},
+    {"id":"mentor-2026-12-01","summary":"Окно ментора: вопросы и 1:1 (демо)","start":{"dateTime":"2026-12-01T15:30:00+03:00","timeZone":"Europe/Moscow"},"end":{"dateTime":"2026-12-01T16:00:00+03:00","timeZone":"Europe/Moscow"},"status":"confirmed"},
+    {"id":"mentor-2026-12-03","summary":"Окно ментора: ревью и разбор задач (демо)","start":{"dateTime":"2026-12-03T16:00:00+03:00","timeZone":"Europe/Moscow"},"end":{"dateTime":"2026-12-03T17:00:00+03:00","timeZone":"Europe/Moscow"},"status":"confirmed"},
+    {"id":"mentor-2026-12-08","summary":"Окно ментора: вопросы и 1:1 (демо)","start":{"dateTime":"2026-12-08T15:30:00+03:00","timeZone":"Europe/Moscow"},"end":{"dateTime":"2026-12-08T16:00:00+03:00","timeZone":"Europe/Moscow"},"status":"confirmed"}
+  ]
+}

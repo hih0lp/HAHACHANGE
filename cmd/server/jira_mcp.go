@@ -198,21 +198,21 @@ func jiraGetAllFields(ctx context.Context, cfg jiraConfig, key string) (map[stri
 func newJiraMCP(cfg jiraConfig) http.Handler {
 	server := mcp.NewServer(&mcp.Implementation{Name: "hackchange-jira", Version: "1.0.0"}, nil)
 	mcp.AddTool(server, &mcp.Tool{Name: "jira_get_issue", Description: "Fetch authoritative details of one Jira issue: title (summary), status, description if present, due_date, start_date and URL. Use this for facts about a specific issue and for each issue in a comparison. A missing date is known only from this issue result, never from status or a list entry."}, func(ctx context.Context, _ *mcp.CallToolRequest, arg jiraIssueArg) (*mcp.CallToolResult, jiraIssue, error) {
-		if cfg.Mode != "live" {
+		if cfg.Mode != "live" && cfg.Mode != "mock" {
 			return nil, jiraIssue{}, errors.New("Jira is disabled")
 		}
 		issue, err := jiraGetIssue(ctx, cfg, arg.Key)
 		return nil, issue, err
 	})
 	mcp.AddTool(server, &mcp.Tool{Name: "jira_list_issues", Description: "Discover up to ten recently updated issues in the configured Jira project. Includes assignee accountId, title, status, due date and URL. This is a project-wide list, not a personal task list; compare assignee with the verified team profile or use jira_list_assigned_issues. Fetch each issue separately for descriptions, start dates or other fields."}, func(ctx context.Context, _ *mcp.CallToolRequest, _ jiraEmptyArg) (*mcp.CallToolResult, jiraIssues, error) {
-		if cfg.Mode != "live" {
+		if cfg.Mode != "live" && cfg.Mode != "mock" {
 			return nil, jiraIssues{}, errors.New("Jira is disabled")
 		}
 		issues, err := jiraListIssues(ctx, cfg)
 		return nil, issues, err
 	})
 	mcp.AddTool(server, &mcp.Tool{Name: "jira_list_assigned_issues", Description: "Find issues assigned to the current employee in the configured Jira project. Supply their verified Jira accountId from the team profile, never an inferred name or a demo placeholder. Results include due dates and a truncated flag when more than 50 match."}, func(ctx context.Context, _ *mcp.CallToolRequest, arg jiraAssigneeArg) (*mcp.CallToolResult, jiraIssues, error) {
-		if cfg.Mode != "live" {
+		if cfg.Mode != "live" && cfg.Mode != "mock" {
 			return nil, jiraIssues{}, errors.New("Jira is disabled")
 		}
 		if arg.AccountID == "" {
@@ -222,7 +222,7 @@ func newJiraMCP(cfg jiraConfig) http.Handler {
 		return nil, issues, err
 	})
 	mcp.AddTool(server, &mcp.Tool{Name: "jira_get_issue_fields", Description: "Fetch all nonempty fields of one Jira issue with Jira's display names and field IDs. Use when a requested fact is absent from jira_get_issue or a field needs clarification. Omitted null fields are not evidence of any workflow rule."}, func(ctx context.Context, _ *mcp.CallToolRequest, arg jiraIssueArg) (*mcp.CallToolResult, map[string]any, error) {
-		if cfg.Mode != "live" {
+		if cfg.Mode != "live" && cfg.Mode != "mock" {
 			return nil, nil, errors.New("Jira is disabled")
 		}
 		result, err := jiraGetAllFields(ctx, cfg, arg.Key)

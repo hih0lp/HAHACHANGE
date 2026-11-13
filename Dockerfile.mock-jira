@@ -1,0 +1,9 @@
+FROM golang:1.23-alpine AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+COPY cmd/mock-jira ./cmd/mock-jira
+RUN CGO_ENABLED=0 go build -trimpath -o /mock-jira ./cmd/mock-jira
+FROM alpine:3.20
+COPY --from=build /mock-jira /usr/local/bin/mock-jira
+USER 10001
+ENTRYPOINT ["/usr/local/bin/mock-jira"]

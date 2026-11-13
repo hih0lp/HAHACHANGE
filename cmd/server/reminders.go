@@ -45,7 +45,7 @@ func reminderDueAt(date string, zone *time.Location) (time.Time, error) {
 
 func loadReminders(ctx context.Context, jira jiraConfig, cfg reminderConfig, now time.Time) (reminderSnapshot, error) {
 	result := reminderSnapshot{Reminders: []reminder{}}
-	if jira.Mode != "live" || strings.TrimSpace(cfg.InternAccountID) == "" {
+	if (jira.Mode != "live" && jira.Mode != "mock") || strings.TrimSpace(cfg.InternAccountID) == "" {
 		result.Message = "Напоминания выключены: укажите Jira accountId стажёра и включите live Jira."
 		return result, nil
 	}
