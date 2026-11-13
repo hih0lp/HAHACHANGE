@@ -178,7 +178,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 	var jiraCards []string
 	if a.jiraMode == "mock" {
 		seen := map[string]bool{}
-		for _, key := range issueKeyPattern.FindAllString(strings.ToUpper(question), 10) {
+		for _, key := range jiraKeyMentionPattern.FindAllString(strings.ToUpper(question), 10) {
 			if seen[key] {
 				continue
 			}

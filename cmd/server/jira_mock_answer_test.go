@@ -16,3 +16,10 @@ func TestFormatMockJiraCardPreservesMissingFields(t *testing.T) {
 		}
 	}
 }
+
+func TestJiraKeyMentionInQuestion(t *testing.T) {
+	keys := jiraKeyMentionPattern.FindAllString("Что известно о SCRUM-7: срок и статус?", 10)
+	if len(keys) != 1 || keys[0] != "SCRUM-7" {
+		t.Fatalf("Jira key not found in sentence: %v", keys)
+	}
+}

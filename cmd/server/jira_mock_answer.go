@@ -4,8 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 )
+
+var jiraKeyMentionPattern = regexp.MustCompile(`[A-Z][A-Z0-9_]*-[0-9]+`)
 
 func formatMockJiraCard(result any) (string, error) {
 	raw, err := json.Marshal(result)
