@@ -46,5 +46,8 @@ services:
       - ./fixtures/mock/calendar.json:/fixtures/calendar.json:ro
   team-access:
     image: bobby-mocks-team-access:local
+    environment:
+      JIRA_MODE: mock
+      JIRA_BASE_URL: http://mock-jira:8080
   access-rights:
     image: bobby-mocks-team-access:local

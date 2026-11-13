@@ -164,14 +164,15 @@ func (s *Service) seed(ctx context.Context) error {
 		}
 	}
 	base := strings.TrimRight(os.Getenv("JIRA_BASE_URL"), "/")
+	validBase := strings.HasPrefix(base, "https://") || (os.Getenv("JIRA_MODE") == "mock" && strings.HasPrefix(base, "http://"))
 	for _, id := range []string{"intern", "intern2", "approver", "catalog-lead", "catalog-mentor", "catalog-dev", "search-lead", "search-mentor", "search-analyst", "platform-lead", "platform-mentor", "platform-dev"} {
 		account, ok := realAccounts[id]
 		profile := "https://jira.example.invalid/jira/people/" + url.PathEscape(id)
 		if !ok {
 			account = "demo-" + id
 		} else {
-			if account == "" || base == "" || !strings.HasPrefix(base, "https://") {
-				return fmt.Errorf("real Jira account for %s requires an account ID and HTTPS JIRA_BASE_URL", id)
+			if account == "" || !validBase {
+				return fmt.Errorf("real Jira account for %s requires an account ID and a valid JIRA_BASE_URL", id)
 			}
 			profile = base + "/jira/people/" + url.PathEscape(account)
 		}
