@@ -266,7 +266,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 							prompt += "\n" + need.label + " недоступны: " + callErr.Error()
 							continue
 						}
-						if a.jiraMode == "mock" && need.name == "calendar_mentor_freebusy" && !plan.NeedsEvents && !plan.NeedsForm && !plan.NeedsMyJiraIssues && !plan.NeedsRecommendation {
+						if a.jiraMode == "mock" && need.name == "calendar_mentor_freebusy" && !plan.NeedsForm && !plan.NeedsMyJiraIssues && !plan.NeedsRecommendation {
 							answer, formatErr := formatCalendarBusy(result)
 							if formatErr != nil {
 								return "Не удалось прочитать интервалы занятости календаря.", hits, nil
