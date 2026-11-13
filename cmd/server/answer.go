@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -35,6 +36,18 @@ type answerer struct {
 	gitLabMCPURL   string
 	calendarMCPURL string
 	historyDB      *pgxpool.Pool
+}
+
+func needsFormCatalogue(plan calendarPlan) bool {
+	return plan.NeedsForm || slices.Contains(plan.RequiredCategories, "rights")
+}
+
+func mergeFormDecision(plan, refined calendarPlan) calendarPlan {
+	if refined.NeedsForm {
+		plan.NeedsForm = true
+		plan.FormID = refined.FormID
+	}
+	return plan
 }
 
 func verifiedJiraAccountID(teamContext string) string {
@@ -375,7 +388,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 	if planErr != nil {
 		return "", nil, fmt.Errorf("query plan: %w", planErr)
 	}
-	if plan.NeedsForm && len(routeForms) == 0 && teamToken != "" && a.rightsMCPURL != "" {
+	if needsFormCatalogue(plan) && teamToken != "" && a.rightsMCPURL != "" {
 		if listed, err := callMCP(ctx, a.rightsMCPURL, "", teamToken, "rights_forms_list", map[string]any{}); err == nil {
 			data, _ := json.Marshal(listed)
 			var catalogue struct {
@@ -387,7 +400,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 		}
 		if len(routeForms) > 0 {
 			if refined, err := a.planCalendar(ctx, planningQuestion, time.Now().In(moscow), routeForms); err == nil {
-				plan.FormID = refined.FormID
+				plan = mergeFormDecision(plan, refined)
 			}
 		}
 	}

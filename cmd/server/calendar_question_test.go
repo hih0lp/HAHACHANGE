@@ -43,6 +43,22 @@ func TestPlannerSelectsLiveForm(t *testing.T) {
 	}
 }
 
+func TestRightsRouteRefinesFormDecisionFromLiveCatalogue(t *testing.T) {
+	initial := calendarPlan{RequiredCategories: []string{"rights"}}
+	if !needsFormCatalogue(initial) || needsFormCatalogue(calendarPlan{RequiredCategories: []string{"jira"}}) {
+		t.Fatal("form catalogue should follow the planner's rights category")
+	}
+	refined := mergeFormDecision(initial, calendarPlan{NeedsForm: true, FormID: "access-request"})
+	if !refined.NeedsForm || refined.FormID != "access-request" {
+		t.Fatalf("refined plan=%+v", refined)
+	}
+	initial = calendarPlan{RequiredCategories: []string{"rights"}, NeedsForm: true, FormID: "access-request"}
+	refined = mergeFormDecision(initial, calendarPlan{RequiredCategories: []string{"rights"}})
+	if !refined.NeedsForm || refined.FormID != "access-request" {
+		t.Fatalf("lost valid initial form decision: %+v", refined)
+	}
+}
+
 func TestPlannerClassifiesPersonalJiraWithoutPhraseRules(t *testing.T) {
 	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"choices":[{"message":{"content":"{\"needs_my_jira_issues\":true,\"needs_recommendation\":false}"}}]}`)

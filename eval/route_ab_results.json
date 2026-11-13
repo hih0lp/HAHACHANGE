@@ -1,0 +1,241 @@
+[
+  {
+    "name": "jira",
+    "query": "Для SCRUM-7 скажи статус, срок исполнения и дату начала",
+    "expected": [
+      "jira"
+    ],
+    "old": {
+      "edited": "Статус, срок исполнения и дата начала для SCRUM-7",
+      "editor_categories": [
+        "jira",
+        "calendar",
+        "team"
+      ],
+      "planner_categories": [
+        "jira"
+      ],
+      "plan_flags": {
+        "needs_specific_jira_issue": true
+      },
+      "time_min": "",
+      "time_max": "",
+      "editor_seconds": 2.77,
+      "planner_seconds": 25.8
+    },
+    "new": {
+      "edited": "Для SCRUM-7 предоставь статус, срок исполнения и дату начала",
+      "editor_categories": null,
+      "planner_categories": [
+        "jira"
+      ],
+      "plan_flags": {
+        "needs_specific_jira_issue": true
+      },
+      "time_min": "",
+      "time_max": "",
+      "editor_seconds": 3.17,
+      "planner_seconds": 39.48
+    }
+  },
+  {
+    "name": "calendar",
+    "query": "Какие мероприятия завтра в онбординге?",
+    "expected": [
+      "calendar"
+    ],
+    "old": {
+      "edited": "Какие мероприятия завтра в онбординге?",
+      "editor_categories": [
+        "calendar",
+        "team"
+      ],
+      "planner_categories": [
+        "calendar"
+      ],
+      "plan_flags": {
+        "needs_events": true
+      },
+      "time_min": "2026-11-14T00:00:00+03:00",
+      "time_max": "2026-11-14T23:59:59+03:00",
+      "editor_seconds": 1.96,
+      "planner_seconds": 22.87
+    },
+    "new": {
+      "edited": "Какие мероприятия завтра в онбординге?",
+      "editor_categories": null,
+      "planner_categories": [
+        "calendar"
+      ],
+      "plan_flags": {
+        "needs_events": true
+      },
+      "time_min": "2026-11-14T00:00:00+03:00",
+      "time_max": "2026-11-15T00:00:00+03:00",
+      "editor_seconds": 2.26,
+      "planner_seconds": 23.77
+    }
+  },
+  {
+    "name": "rights",
+    "query": "Хочу получить доступ к джире, куда заявку отправить?",
+    "expected": [
+      "rights"
+    ],
+    "old": {
+      "edited": "Как получить доступ к GitLab и где отправить заявку?",
+      "editor_categories": [
+        "gitlab",
+        "team"
+      ],
+      "planner_categories": [
+        "rights"
+      ],
+      "plan_flags": {
+        "needs_form": true
+      },
+      "time_min": "",
+      "time_max": "",
+      "editor_seconds": 1.93,
+      "planner_seconds": 16.28
+    },
+    "new": {
+      "edited": "Хочу получить доступ к джире, куда заявку отправить?",
+      "editor_categories": null,
+      "planner_categories": [
+        "rights"
+      ],
+      "plan_flags": {},
+      "time_min": "",
+      "time_max": "",
+      "editor_seconds": 2.56,
+      "planner_seconds": 21.81
+    }
+  },
+  {
+    "name": "documents",
+    "query": "Что в документации по GitLab сказано о ревью?",
+    "expected": [
+      "documents"
+    ],
+    "old": {
+      "edited": "Что в документации по GitLab сказано о ревью?",
+      "editor_categories": [
+        "documents",
+        "gitlab"
+      ],
+      "planner_categories": [
+        "documents"
+      ],
+      "plan_flags": {},
+      "time_min": "",
+      "time_max": "",
+      "editor_seconds": 2.15,
+      "planner_seconds": 23.14
+    },
+    "new": {
+      "edited": "Что в документации по GitLab сказано о ревью?",
+      "editor_categories": null,
+      "planner_categories": [
+        "documents"
+      ],
+      "plan_flags": {},
+      "time_min": "",
+      "time_max": "",
+      "editor_seconds": 2.15,
+      "planner_seconds": 17.51
+    }
+  },
+  {
+    "name": "mixed",
+    "query": "Что завтра по онбордингу и какие задачи в Jira?",
+    "expected": [
+      "calendar",
+      "jira"
+    ],
+    "old": {
+      "edited": "Что завтра по онбордингу и какие задачи в Jira?",
+      "editor_categories": [
+        "jira",
+        "team"
+      ],
+      "planner_categories": [
+        "calendar",
+        "jira"
+      ],
+      "plan_flags": {
+        "needs_events": true
+      },
+      "time_min": "2026-11-14T00:00:00+03:00",
+      "time_max": "2026-11-14T23:59:59+03:00",
+      "editor_seconds": 1.84,
+      "planner_seconds": 62.68
+    },
+    "new": {
+      "edited": "Что завтра по онбордингу и какие задачи в Jira?",
+      "editor_categories": null,
+      "planner_categories": [
+        "calendar",
+        "jira"
+      ],
+      "plan_flags": {
+        "needs_events": true
+      },
+      "time_min": "2026-11-14T00:00:00+03:00",
+      "time_max": "2026-11-14T23:59:59+03:00",
+      "editor_seconds": 2.24,
+      "planner_seconds": 45.43
+    }
+  },
+  {
+    "name": "recommendation",
+    "query": "Что мне подучить с учетом моих задач Jira, MR GitLab, команды и документации?",
+    "expected": [
+      "jira",
+      "gitlab",
+      "team",
+      "documents"
+    ],
+    "old": {
+      "edited": "Что мне подучить с учетом моих задач Jira, MR GitLab, команды и документации?",
+      "editor_categories": [
+        "jira",
+        "gitlab",
+        "documents",
+        "team"
+      ],
+      "planner_categories": [
+        "jira",
+        "gitlab",
+        "team",
+        "documents"
+      ],
+      "plan_flags": {
+        "needs_my_jira_issues": true,
+        "needs_recommendation": true
+      },
+      "time_min": "",
+      "time_max": "",
+      "editor_seconds": 2.49,
+      "planner_seconds": 30.01
+    },
+    "new": {
+      "edited": "Что мне подучить с учетом моих задач Jira, MR GitLab, команды и документации?",
+      "editor_categories": null,
+      "planner_categories": [
+        "jira",
+        "gitlab",
+        "team",
+        "documents"
+      ],
+      "plan_flags": {
+        "needs_my_jira_issues": true,
+        "needs_recommendation": true
+      },
+      "time_min": "",
+      "time_max": "",
+      "editor_seconds": 4.81,
+      "planner_seconds": 26.28
+    }
+  }
+]
