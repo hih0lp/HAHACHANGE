@@ -176,7 +176,6 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 Если для ответа нужен инструмент, выбери его сам. Если клиент модели не сформировал нативный вызов функции, верни строго JSON без markdown: {"tool_call":{"name":"имя из каталога","arguments":{}}}. После получения результата MCP дай обычный ответ пользователю. Учитывай предыдущие реплики этого чата: короткое согласие или выбор ресурса продолжает начатое обращение. Если ранее ты предложил выбрать ресурс для заявки и пользователь выбрал его, найди подходящую форму сейчас, не спрашивай выбор повторно. Вопросы о задачах Jira, команде, участниках, ролях, ресурсах, правах и доступных формах требуют вызова инструмента до ответа. Когда пользователь хочет оформить обращение, найди подходящую форму через инструменты сервиса прав и дай ссылку Markdown [Заполнить форму](form_url из результата). Эта ссылка показывает форму прямо в чате. Когда предлагаешь форму, ответь только её названием и ссылкой form_url; не добавляй поля, инструкции, примеры, вложения и порядок согласования. Если пользователь отдельно обсуждает поля, прочитай схему формы через инструмент и помоги их заполнить. Если речь о доступе к конкретному ресурсу, проверь каталог ресурсов и текущее право, прежде чем описывать их. Не выдумывай идентификаторы ресурсов, названия прав и их значения даже в качестве примеров: бери их из результатов инструментов или оставь выбор открытым в форме. Не утверждай, что форма отправлена: её отправляет только пользователь после проверки полей и подтверждения в чате.`
 	}
 	var jiraCards []string
-	otherEvidenceNeeded := false
 	if a.jiraMode == "mock" {
 		seen := map[string]bool{}
 		for _, key := range issueKeyPattern.FindAllString(strings.ToUpper(question), 10) {
@@ -195,6 +194,9 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 			} else {
 				jiraCards = append(jiraCards, card)
 			}
+		}
+		if len(jiraCards) > 0 {
+			return strings.Join(jiraCards, "\n\n"), hits, nil
 		}
 	}
 	if teamToken != "" {
@@ -215,7 +217,6 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 			if planErr != nil {
 				prompt += "\nПериод календаря не удалось определить; не делай утверждений о расписании без проверки."
 			} else {
-				otherEvidenceNeeded = plan.NeedsForm || plan.NeedsMyJiraIssues || plan.NeedsEvents || plan.NeedsAvailability || plan.NeedsRecommendation
 				if plan.NeedsTeamDirectory {
 					if a.teamMCPURL == "" {
 						return "Сервис команды сейчас не подключён, поэтому я не могу подтвердить состав команды.", hits, nil
@@ -364,9 +365,6 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 				}
 			}
 		}
-	}
-	if len(jiraCards) > 0 && !otherEvidenceNeeded {
-		return strings.Join(jiraCards, "\n\n"), hits, nil
 	}
 	messages := []map[string]any{{"role": "system", "content": systemPrompt}}
 	if a.historyDB != nil {
