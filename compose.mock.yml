@@ -28,6 +28,7 @@ services:
       dockerfile: Dockerfile.mock-jira
     environment:
       MOCK_JIRA_JSON: /fixtures/jira.json
+      MOCK_LISTEN: :8080
     volumes:
       - ./fixtures/mock/jira.json:/fixtures/jira.json:ro
   mock-calendar:
@@ -36,6 +37,7 @@ services:
       dockerfile: Dockerfile.mock-calendar
     environment:
       MOCK_CALENDAR_JSON: /fixtures/calendar.json
+      MOCK_LISTEN: :8080
       TEAM_DIRECTORY_URL: http://team-access:8080
       CALENDAR_DEMO_SUBJECT: intern
     volumes:

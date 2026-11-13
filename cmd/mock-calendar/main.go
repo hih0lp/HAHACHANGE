@@ -153,5 +153,9 @@ func main() {
 		}
 		stream.ServeHTTP(w, r)
 	}))
-	log.Fatal(http.ListenAndServe(":8080", mux))
+	listen := os.Getenv("MOCK_LISTEN")
+	if listen == "" {
+		listen = "127.0.0.1:8080"
+	}
+	log.Fatal(http.ListenAndServe(listen, mux))
 }
