@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -58,6 +59,14 @@ func load(path string) (fixture, error) {
 	for _, v := range f.Issues {
 		if !keyPattern.MatchString(v.Key) || !strings.HasPrefix(v.Key, f.ProjectKey+"-") || v.Summary == "" || v.Status == "" || seen[v.Key] {
 			return f, fmt.Errorf("invalid or duplicate issue %q", v.Key)
+		}
+		for _, date := range []string{v.DueDate, v.StartDate} {
+			if date != "" {
+				parsed, parseErr := time.Parse("2006-01-02", date)
+				if parseErr != nil || parsed.Format("2006-01-02") != date {
+					return f, fmt.Errorf("invalid date in issue %q", v.Key)
+				}
+			}
 		}
 		seen[v.Key] = true
 	}

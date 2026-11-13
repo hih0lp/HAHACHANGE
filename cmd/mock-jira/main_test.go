@@ -40,3 +40,14 @@ func TestFixtureReloadAndPersonalList(t *testing.T) {
 		t.Fatal("invalid JSON accepted")
 	}
 }
+
+func TestFixtureRejectsInvalidDate(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "jira.json")
+	data := []byte(`{"project_key":"SCRUM","issues":[{"key":"SCRUM-7","summary":"Task","status":"In progress","due_date":"2026-11-31"}]}`)
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := load(path); err == nil {
+		t.Fatal("invalid date accepted")
+	}
+}
