@@ -1,0 +1,389 @@
+{
+  "model": "Qwen/Qwen3-Reranker-0.6B",
+  "load_seconds": 35.66742912499467,
+  "cases": [
+    {
+      "query": "Для задачи SCRUM-7 скажи статус, срок исполнения и дату начала",
+      "expected": [
+        "jira"
+      ],
+      "scores": {
+        "jira": 8.0625,
+        "calendar": -8.75,
+        "gitlab": -4.5,
+        "documents": -6.8125,
+        "rights": -7.96875,
+        "team": -8.375
+      },
+      "seconds": 9.775943749998987
+    },
+    {
+      "query": "Какие у меня задачи в Jira?",
+      "expected": [
+        "jira",
+        "team"
+      ],
+      "scores": {
+        "jira": 9.125,
+        "calendar": -9.875,
+        "gitlab": -1.1875,
+        "documents": -5.5625,
+        "rights": -4.25,
+        "team": -6.75
+      },
+      "seconds": 8.142965250000998
+    },
+    {
+      "query": "Какие мероприятия завтра в онбординге?",
+      "expected": [
+        "calendar"
+      ],
+      "scores": {
+        "jira": -4.8125,
+        "calendar": -5.5,
+        "gitlab": -6.0,
+        "documents": -7.0,
+        "rights": -8.125,
+        "team": -8.8125
+      },
+      "seconds": 8.59344675000466
+    },
+    {
+      "query": "Хочу получить доступ к джире, куда заявку отправить?",
+      "expected": [
+        "rights"
+      ],
+      "scores": {
+        "jira": 1.375,
+        "calendar": -8.4375,
+        "gitlab": 0.125,
+        "documents": -4.0625,
+        "rights": 4.1875,
+        "team": -7.0625
+      },
+      "seconds": 9.07298725000146
+    },
+    {
+      "query": "Кто мой наставник?",
+      "expected": [
+        "team"
+      ],
+      "scores": {
+        "jira": -7.625,
+        "calendar": -2.125,
+        "gitlab": -5.75,
+        "documents": -7.0625,
+        "rights": -7.90625,
+        "team": 2.625
+      },
+      "seconds": 9.038641792001727
+    },
+    {
+      "query": "Какие открытые MR есть в моих проектах GitLab?",
+      "expected": [
+        "gitlab"
+      ],
+      "scores": {
+        "jira": -4.75,
+        "calendar": -10.25,
+        "gitlab": 8.3125,
+        "documents": -6.4375,
+        "rights": -6.25,
+        "team": -8.125
+      },
+      "seconds": 9.507584292005049
+    },
+    {
+      "query": "Что в документации сказано про ревью кода?",
+      "expected": [
+        "documents"
+      ],
+      "scores": {
+        "jira": -0.9375,
+        "calendar": -9.375,
+        "gitlab": 6.5,
+        "documents": 2.3125,
+        "rights": -6.84375,
+        "team": -8.125
+      },
+      "seconds": 9.800441166997189
+    },
+    {
+      "query": "Что мне подучить с учетом моих задач Jira, MR GitLab, команды и документации?",
+      "expected": [
+        "jira",
+        "gitlab",
+        "team",
+        "documents"
+      ],
+      "scores": {
+        "jira": 7.625,
+        "calendar": -10.5625,
+        "gitlab": 6.5625,
+        "documents": 0.375,
+        "rights": -8.125,
+        "team": -5.0
+      },
+      "seconds": 10.49062795899954
+    },
+    {
+      "query": "Что завтра по онбордингу и какие задачи в Jira?",
+      "expected": [
+        "calendar",
+        "jira"
+      ],
+      "scores": {
+        "jira": 8.375,
+        "calendar": -9.625,
+        "gitlab": 0.75,
+        "documents": -4.8125,
+        "rights": -5.5,
+        "team": -6.8125
+      },
+      "seconds": 9.785334582993528
+    },
+    {
+      "query": "Скажи, как оформить доступ к GitLab и кто в команде согласует заявку",
+      "expected": [
+        "rights",
+        "team"
+      ],
+      "scores": {
+        "jira": -4.875,
+        "calendar": -10.625,
+        "gitlab": 9.1875,
+        "documents": -5.4375,
+        "rights": 5.5,
+        "team": 1.125
+      },
+      "seconds": 10.316262959000596
+    },
+    {
+      "query": "Сравни мою задачу SCRUM-7 с правилами ревью из playbook",
+      "expected": [
+        "jira",
+        "documents"
+      ],
+      "scores": {
+        "jira": -1.3125,
+        "calendar": -10.25,
+        "gitlab": 0.125,
+        "documents": 6.25,
+        "rights": -10.25,
+        "team": -9.0
+      },
+      "seconds": 10.68003362500167
+    },
+    {
+      "query": "Назови мои открытые MR и задачи, которые мне назначены",
+      "expected": [
+        "gitlab",
+        "jira",
+        "team"
+      ],
+      "scores": {
+        "jira": 3.875,
+        "calendar": -7.4375,
+        "gitlab": 0.125,
+        "documents": -5.5,
+        "rights": -4.0,
+        "team": -7.375
+      },
+      "seconds": 10.007942917000037
+    },
+    {
+      "query": "Есть ли свободное время у наставника на неделе и кто он?",
+      "expected": [
+        "calendar",
+        "team"
+      ],
+      "scores": {
+        "jira": -7.71875,
+        "calendar": 8.9375,
+        "gitlab": -8.875,
+        "documents": -8.25,
+        "rights": -9.1875,
+        "team": 1.0
+      },
+      "seconds": 10.010022249996837
+    },
+    {
+      "query": "Опиши содержимое SCRUM-7, а затем покажи форму доступа к Jira",
+      "expected": [
+        "jira",
+        "rights"
+      ],
+      "scores": {
+        "jira": 6.25,
+        "calendar": -9.75,
+        "gitlab": -0.125,
+        "documents": -5.125,
+        "rights": 1.0,
+        "team": -7.625
+      },
+      "seconds": 10.461366916999395
+    },
+    {
+      "query": "Что означает HTTP 502?",
+      "expected": [],
+      "scores": {
+        "jira": -7.71875,
+        "calendar": -8.3125,
+        "gitlab": -6.75,
+        "documents": -6.0,
+        "rights": -3.875,
+        "team": -7.875
+      },
+      "seconds": 9.525900958004058
+    },
+    {
+      "query": "Напиши пример функции на Go для сортировки среза",
+      "expected": [],
+      "scores": {
+        "jira": -6.75,
+        "calendar": -11.0,
+        "gitlab": -6.75,
+        "documents": -10.0625,
+        "rights": -10.875,
+        "team": -10.9375
+      },
+      "seconds": 10.194302041003539
+    },
+    {
+      "query": "В документации по GitLab что сказано о ревью?",
+      "expected": [
+        "documents"
+      ],
+      "scores": {
+        "jira": -4.4375,
+        "calendar": -10.125,
+        "gitlab": 9.375,
+        "documents": 0.625,
+        "rights": -6.65625,
+        "team": -7.59375
+      },
+      "seconds": 10.023732417001156
+    },
+    {
+      "query": "Какая дата дедлайна SCRUM-7? Не показывай календарь",
+      "expected": [
+        "jira"
+      ],
+      "scores": {
+        "jira": -0.8125,
+        "calendar": -7.34375,
+        "gitlab": -5.125,
+        "documents": -5.8125,
+        "rights": -8.25,
+        "team": -9.0
+      },
+      "seconds": 11.023816875000193
+    },
+    {
+      "query": "Какие события 13 ноября 2026 года и какие слоты наставника свободны?",
+      "expected": [
+        "calendar"
+      ],
+      "scores": {
+        "jira": -6.875,
+        "calendar": 9.875,
+        "gitlab": -7.6875,
+        "documents": -6.8125,
+        "rights": -8.4375,
+        "team": -5.0625
+      },
+      "seconds": 10.601347208001243
+    },
+    {
+      "query": "Есть ли задача коллеги по доступу и кто её исполнитель?",
+      "expected": [
+        "jira"
+      ],
+      "scores": {
+        "jira": 6.8125,
+        "calendar": -8.875,
+        "gitlab": -0.6875,
+        "documents": -6.125,
+        "rights": -1.0,
+        "team": -3.25
+      },
+      "seconds": 10.153113957996538
+    },
+    {
+      "query": "Покажи мои навыки по профилю команды и личным MR",
+      "expected": [
+        "team",
+        "gitlab"
+      ],
+      "scores": {
+        "jira": -4.4375,
+        "calendar": -8.625,
+        "gitlab": -3.625,
+        "documents": -6.1875,
+        "rights": -7.375,
+        "team": 4.5625
+      },
+      "seconds": 10.586384500005806
+    },
+    {
+      "query": "Что нам известно о моих навыках, если в Jira нет описания и MR не назначены?",
+      "expected": [
+        "jira",
+        "gitlab",
+        "team"
+      ],
+      "scores": {
+        "jira": 8.1875,
+        "calendar": -10.25,
+        "gitlab": 0.625,
+        "documents": -5.375,
+        "rights": -5.375,
+        "team": -6.4375
+      },
+      "seconds": 10.862543249997543
+    }
+  ],
+  "thresholds": [
+    {
+      "threshold": -5,
+      "precision": 0.5370370370370371,
+      "recall": 0.8529411764705882,
+      "exact": 0.22727272727272727,
+      "false_negative": 5,
+      "false_positive": 25
+    },
+    {
+      "threshold": -2,
+      "precision": 0.6923076923076923,
+      "recall": 0.7941176470588235,
+      "exact": 0.36363636363636365,
+      "false_negative": 7,
+      "false_positive": 12
+    },
+    {
+      "threshold": 0,
+      "precision": 0.78125,
+      "recall": 0.7352941176470589,
+      "exact": 0.4090909090909091,
+      "false_negative": 9,
+      "false_positive": 7
+    },
+    {
+      "threshold": 2,
+      "precision": 0.8571428571428571,
+      "recall": 0.5294117647058824,
+      "exact": 0.36363636363636365,
+      "false_negative": 16,
+      "false_positive": 3
+    },
+    {
+      "threshold": 5,
+      "precision": 0.8125,
+      "recall": 0.38235294117647056,
+      "exact": 0.2727272727272727,
+      "false_negative": 21,
+      "false_positive": 3
+    }
+  ],
+  "mean_route_seconds": 9.938851939455079
+}
