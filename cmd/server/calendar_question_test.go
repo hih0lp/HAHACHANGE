@@ -54,3 +54,15 @@ func TestPlannerClassifiesPersonalJiraWithoutPhraseRules(t *testing.T) {
 		t.Fatalf("plan=%+v err=%v", plan, err)
 	}
 }
+
+func TestPlannerClassifiesTeamDirectoryWithoutPhraseRules(t *testing.T) {
+	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"choices":[{"message":{"content":"{\"needs_team_directory\":true}"}}]}`)
+	}))
+	defer model.Close()
+	a := answerer{url: model.URL, model: "test", client: model.Client()}
+	plan, err := a.planCalendar(context.Background(), "Кто участвует в моём проекте и кто мой наставник?", time.Now(), nil)
+	if err != nil || !plan.NeedsTeamDirectory {
+		t.Fatalf("plan=%+v err=%v", plan, err)
+	}
+}

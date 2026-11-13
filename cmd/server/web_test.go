@@ -17,15 +17,19 @@ func TestWebPageShowsOnlyAnswerWithInlineLinks(t *testing.T) {
 	for _, expected := range []string{
 		"fetch('/v1/jobs'",
 		"appendMessage(answer,job.answer)",
-		"link.textContent=match[1]",
+		"link.textContent=label",
 		"link.className='form-link'",
-		"link.href=match[2]",
+		"link.href=href",
 		"event.preventDefault();openInlineForm",
+		"const formID=href.slice('/forms/'.length)",
 		"link.rel='noopener noreferrer'",
 	} {
 		if !strings.Contains(page, expected) {
 			t.Errorf("page missing %q", expected)
 		}
+	}
+	if strings.Contains(page, "openInlineForm(target.closest('.bubble'),match[2]") {
+		t.Fatal("form link handler captures the mutable parser match instead of its form ID")
 	}
 	for _, forbidden := range []string{
 		"Только поиск", "sourceCard(", "job.sources", "data.hits", "fetch('/v1/knowledge/search'", "Тестовая заявка на доступ", "access-form", "/v1/access-requests",

@@ -193,6 +193,22 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 			if planErr != nil {
 				prompt += "\nПериод календаря не удалось определить; не делай утверждений о расписании без проверки."
 			} else {
+				if plan.NeedsTeamDirectory {
+					if a.teamMCPURL == "" {
+						return "Сервис команды сейчас не подключён, поэтому я не могу подтвердить состав команды.", hits, nil
+					}
+					members, callErr := mcpTeamTool(ctx, a.teamMCPURL, "", teamToken, "team_members", map[string]any{})
+					if callErr != nil {
+						return "Не удалось проверить состав команды через сервис команды. Попробуйте ещё раз позже.", hits, nil
+					}
+					if data, err := json.Marshal(members); err == nil {
+						prompt += "\nПроверенный состав текущей команды: " + string(data) + ". Отвечай только по этим данным; не приписывай людям роли или отношения, которых здесь нет."
+					}
+					// The planner selected the team directory semantically. Keep only that
+					// service available to the answering model so an unrelated form or
+					// external tool cannot replace the verified team evidence.
+					teamTools = toolsForEndpoint(teamTools, toolEndpoints, a.teamMCPURL)
+				}
 				if plan.NeedsForm {
 					selected := make([]formChoice, 0, len(forms))
 					for _, form := range forms {
@@ -431,4 +447,19 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 		}
 	}
 	return "", hits, fmt.Errorf("LLM exceeded team-access tool-call limit")
+}
+
+func toolsForEndpoint(tools []map[string]any, endpoints map[string]string, endpoint string) []map[string]any {
+	selected := make([]map[string]any, 0, len(tools))
+	for _, tool := range tools {
+		function, ok := tool["function"].(map[string]any)
+		if !ok {
+			continue
+		}
+		name, _ := function["name"].(string)
+		if name != "" && endpoints[name] == endpoint {
+			selected = append(selected, tool)
+		}
+	}
+	return selected
 }
