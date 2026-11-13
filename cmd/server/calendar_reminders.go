@@ -6,9 +6,8 @@ import (
 	"time"
 )
 
-// registerCalendarReminderRoute reads only the selected onboarding calendar
-// through the caller's team session. The calendar integration owns the Google
-// credential and enforces the subject binding.
+// registerCalendarReminderRoute reads the editable mentor calendar mock
+// through the caller's team session. The mock enforces the subject binding.
 func registerCalendarReminderRoute(mux *http.ServeMux, endpoint string) {
 	if endpoint == "" {
 		return
