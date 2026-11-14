@@ -105,3 +105,30 @@ func TestFormValidationProxyChecksSessionValuesAndVersion(t *testing.T) {
 		t.Fatalf("missing values: %d %s", response.Code, response.Body.String())
 	}
 }
+
+func TestAccessFormRestoresSavedReceipt(t *testing.T) {
+	rights := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/access-requests" || r.URL.Query().Get("form_id") != "test-form" ||
+			r.Header.Get("Authorization") != "Bearer test-session" {
+			t.Errorf("unexpected receipt request: %s", r.URL)
+		}
+		_, _ = w.Write([]byte(`{"requests":[{"id":"saved","status":"approved"}]}`))
+	}))
+	defer rights.Close()
+	t.Setenv("RIGHTS_URL", rights.URL)
+	mux := http.NewServeMux()
+	registerFormRoutes(mux, "", rights.URL)
+	req := httptest.NewRequest(http.MethodGet, "/v1/forms/test-form/access-request", nil)
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, req)
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("without token: %d", response.Code)
+	}
+	req.Header.Set("Authorization", "Bearer test-session")
+	response = httptest.NewRecorder()
+	mux.ServeHTTP(response, req)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"id":"saved"`) ||
+		!strings.Contains(response.Body.String(), `"status":"approved"`) {
+		t.Fatalf("receipt: %d %s", response.Code, response.Body.String())
+	}
+}

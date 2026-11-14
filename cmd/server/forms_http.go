@@ -61,6 +61,22 @@ func registerFormRoutes(mux *http.ServeMux, key string, teamURL string) {
 		}
 		writeJSON(w, 200, v)
 	})))
+	mux.Handle("GET /v1/forms/{id}/access-request", authorize(key, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token := withToken(w, r)
+		if token == "" {
+			return
+		}
+		items, err := client.FormAccessRequests(r.Context(), token, r.PathValue("id"))
+		if err != nil {
+			writeError(w, 503, errText("request status unavailable"))
+			return
+		}
+		var receipt *scenario.Request
+		if len(items) > 0 {
+			receipt = &items[0]
+		}
+		writeJSON(w, 200, map[string]any{"receipt": receipt})
+	})))
 	mux.Handle("POST /v1/forms/{id}/validate", authorize(key, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := withToken(w, r)
 		if token == "" {

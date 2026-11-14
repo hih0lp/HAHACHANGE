@@ -85,6 +85,7 @@ async function fixtures(page) {
     }
     if (path === '/v1/form-resources') return respond({ resources: [baseScenario.widget.resource] });
     if (path === '/v1/forms/access-request') return respond(access);
+    if (path === '/v1/forms/access-request/access-request') return respond({ receipt: committed ?? null });
     if (path.endsWith('/validate')) return respond(body.values.reason.length < 5 ? { error: 'invalid form values' } : { valid: true }, body.values.reason.length < 5 ? 400 : 200);
     if (path.endsWith('/submit')) {
       const key = request.headers()['idempotency-key'];
@@ -370,10 +371,11 @@ try {
     await page.getByText('Нет связи с Бобби', { exact: false }).waitFor();
     assert.equal(form.keys.length, 1);
     if (width === 360) await page.reload();
-    await confirm.click();
+    else await confirm.click();
     await page.getByText('Номер заявки request-42').waitFor();
-    assert.deepEqual(form.keys, [form.keys[0], form.keys[0]]);
+    assert.deepEqual(form.keys, width === 360 ? [form.keys[0]] : [form.keys[0], form.keys[0]]);
     assert.equal(form.submits(), 1);
+    assert.equal(await page.getByRole('button', { name: 'Заполнить новую заявку' }).count(), 0);
     await shot(page, 'receipt', width);
     await page.getByRole('button', { name: 'Закрыть форму' }).click();
     await page.getByRole('heading', { name: 'Заявка на доступ' }).waitFor({ state: 'hidden' });
