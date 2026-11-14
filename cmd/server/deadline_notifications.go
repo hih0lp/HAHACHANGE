@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -25,7 +27,24 @@ func scanDeadlineNotifications(ctx context.Context, db *pgxpool.Pool, jira jiraC
 	if jira.Mode != "mock" || (cfg.InternMinutesBefore <= 0 && cfg.MentorMinutesBefore <= 0) {
 		return nil
 	}
-	login, err := directory.Login(ctx, "intern", env("TEAM_ACCESS_INTERN_PASSWORD", ""))
+	var errs []error
+	for _, role := range []struct{ user, passwordEnv string }{
+		{"intern", "TEAM_ACCESS_INTERN_PASSWORD"},
+		{"intern2", "TEAM_ACCESS_INTERN2_PASSWORD"},
+	} {
+		password := env(role.passwordEnv, "")
+		if password == "" {
+			continue
+		}
+		if err := scanInternDeadlineNotifications(ctx, db, jira, cfg, directory, now, role.user, password); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", role.user, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func scanInternDeadlineNotifications(ctx context.Context, db *pgxpool.Pool, jira jiraConfig, cfg reminderConfig, directory scenario.Client, now time.Time, user, password string) error {
+	login, err := directory.Login(ctx, user, password)
 	if err != nil {
 		return err
 	}
@@ -33,8 +52,10 @@ func scanDeadlineNotifications(ctx context.Context, db *pgxpool.Pool, jira jiraC
 	if err != nil {
 		return err
 	}
-	if profile.JiraAccountID != "" && !strings.HasPrefix(profile.JiraAccountID, "demo-") {
+	if profile.JiraAccountID != "" && (user == "intern2" || !strings.HasPrefix(profile.JiraAccountID, "demo-") || cfg.InternAccountID == "") {
 		cfg.InternAccountID = profile.JiraAccountID
+	} else if user == "intern2" {
+		return nil
 	}
 	mentor := ""
 	for _, team := range profile.Teams {

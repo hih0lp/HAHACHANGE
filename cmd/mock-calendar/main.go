@@ -11,6 +11,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/hackchange/avito-rag/internal/mockfixture"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -44,8 +45,12 @@ func load(path string) (fixture, error) {
 	if e != nil {
 		return fixture{}, e
 	}
+	return parseFixture(b)
+}
+
+func parseFixture(b []byte) (fixture, error) {
 	var f fixture
-	if e = json.Unmarshal(b, &f); e != nil {
+	if e := json.Unmarshal(b, &f); e != nil {
 		return f, e
 	}
 	if f.CalendarID == "" || f.TimeZone == "" {
@@ -125,6 +130,13 @@ func main() {
 	}
 	stream := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
 	mux := http.NewServeMux()
+	mockfixture.Register(mux, path, "calendar_save_fixture", os.Getenv("MOCK_FIXTURE_WRITE_TOKEN"), func(data []byte) error {
+		f, err := parseFixture(data)
+		if err == nil && f.Events == nil {
+			return errors.New("events must be an array")
+		}
+		return err
+	})
 	mux.Handle("/mcp", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := r.Header.Get("Authorization")
 		if len(token) < 8 || token[:7] != "Bearer " {
