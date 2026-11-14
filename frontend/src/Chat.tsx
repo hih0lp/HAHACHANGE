@@ -167,8 +167,8 @@ export function Chat({ token, apiKey, identity, formID, catalog, draft, onDraft,
             <div className="user-message"><p>{job.query}</p><Stamp value={job.created_at}/></div>
             <div className="assistant-message" aria-live="polite">
               <span className="message-avatar"><Bobby state={index < jobs.length - 1 ? 'idle' : job.status === 'completed' && job.answer?.trim() ? 'answering' : !completed(job) && !waiting[job.id] ? 'thinking' : 'idle'}/></span>
+              <strong className="message-name">Бобби</strong>
               <div className="message-body">
-                <strong className="message-name">Бобби</strong>
                 {job.status === 'completed' && (job.answer?.trim() ? <Answer text={job.answer} onForm={openForm} reveal={revealedAnswers.has(job.id)}/> : <p>Ответ пуст. Уточните вопрос или попробуйте снова.</p>)}
                 {job.status === 'failed' && <Notice error action={<button className="text-button" onClick={() => { onDraft(job.query); input.current?.focus(); }}>Повторить</button>}>
                   {job.error?.toLowerCase().match(/timeout|deadline exceeded/) ? 'Время ожидания ответа истекло.' : 'Не удалось получить ответ.'}

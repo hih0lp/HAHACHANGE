@@ -53,6 +53,6 @@ export function Answer({ text, onForm, reveal }: { text: string; onForm: (id: st
     } else blocks.push(<p key={key}>{inline(line, onForm)}</p>);
   }
   return <div className={reveal ? 'answer answer-reveal' : 'answer'}>
-    {reveal ? blocks.map((block, index) => cloneElement(block, { style: { animationDelay: `${Math.min(index * 85, 700)}ms` } })) : blocks}
+    {reveal ? blocks.map((block, index) => cloneElement(block, { style: { animationDelay: `${Math.min(index * 190, 1500)}ms` } })) : blocks}
   </div>;
 }
