@@ -29,7 +29,7 @@ type BobbyState = 'idle' | 'thinking' | 'answering' | 'listening' | 'waiting-for
 
 export function Bobby({ className, state = 'idle' }: { className?: string; state?: BobbyState }) {
   return <svg className={className} data-bobby-state={state} viewBox="30 10 1240 1170" aria-hidden="true">
-    <g transform={state === 'thinking' ? 'translate(0 70)' : undefined}>
+    <g className="bobby-body">
       <g stroke="var(--bobby-ink)" strokeWidth="24" strokeLinecap="round" strokeLinejoin="round">
         <path fill="var(--bobby-blue)" d="M463 907c-12 28-20 56-43 78-24 17-48 44-35 74 12 29 49 28 77 26 58-3 96-10 105-60l15-93Zm222 21c-8 30-19 64-17 92 2 52 48 61 104 61 54 0 108-6 107-47-1-37-33-58-60-68l16-54Z"/>
         <path fill="white" d="M288 794c-48-52-76-106-77-170-9-202 179-400 397-453 178-44 317 10 398 142 80 130 95 292 8 430-121 196-390 266-607 166-55 35-106 54-145 52-37-2-54-28-38-59 18-36 47-66 64-108Z"/>

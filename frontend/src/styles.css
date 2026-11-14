@@ -161,6 +161,14 @@
   .assistant-message { display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: var(--space-3); }
   .message-avatar { width: 38px; height: 38px; display: grid; place-items: center; border-radius: var(--radius-round); background: var(--hero-blue); }
   .message-avatar svg { width: 34px; height: 32px; }
+  .bobby-body { transform-origin: center; transform-box: fill-box; transition: transform 220ms ease-in-out; }
+  [data-bobby-state="thinking"] .bobby-body { transform: translateY(7%); }
+  [data-bobby-state="listening"] .bobby-body { transform: translate(2%, 2%) rotate(-5deg); }
+  [data-bobby-state="answering"] .bobby-body { transform: translate(-2%, -2%) rotate(4deg); }
+  [data-bobby-state="waiting-form"] .bobby-body { transform: translate(-3%, 3%) rotate(3deg); }
+  @media (prefers-reduced-motion: reduce) {
+    .bobby-body { transition: none; }
+  }
   .message-name { display: block; margin-bottom: var(--space-1); }
   .message-body { min-width: 0; overflow-wrap: anywhere; }
   .message-body time, .user-message time { display: block; font-size: var(--text-small); margin-top: var(--space-2); }
