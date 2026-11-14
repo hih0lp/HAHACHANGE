@@ -245,6 +245,8 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 				}
 				if plan.NeedsGitLab && a.gitLabMCPURL == "" && directScenario {
 					directParts = append(directParts, "GitLab сейчас отключён, поэтому я не могу проверить проекты, репозитории или merge request.")
+				} else if plan.NeedsGitLabProjects && directScenario {
+					directParts = append(directParts, a.gitLabProjectsAnswer(ctx, teamToken))
 				}
 				if plan.NeedsAccessCheck && directScenario {
 					resources, resourceErr := a.accessResources(ctx, teamToken)
@@ -255,7 +257,9 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 						if selectionErr == nil {
 							plan.ResourceID, plan.Capability = selection.ResourceID, selection.Capability
 						}
-						directParts = append(directParts, a.plannedAccessAnswer(ctx, teamToken, plan, resources))
+						if !plan.NeedsGitLabProjects || plan.ResourceID != "" || (selectionErr == nil && selection.NeedsAccessCheck) {
+							directParts = append(directParts, a.plannedAccessAnswer(ctx, teamToken, plan, resources))
+						}
 					}
 				}
 				if plan.NeedsJiraIssue {
@@ -454,7 +458,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 					}
 					systemPrompt += "\nВ персональной рекомендации используй только проверенные источники выше. Если GitLab подключён, список его проектов сам по себе не доказывает работу пользователя: запроси MR выбранных доступных проектов через подключённый инструмент, если это нужно для вывода. Если GitLab отключён, не утверждай ничего о его проектах и коде. Укажи, какие источники доступны и какие нет. Не приписывай человеку навыки, которых нет в профиле или доказанной работе."
 				}
-				if directScenario && plan.NeedsGitLab && a.gitLabMCPURL != "" {
+				if directScenario && plan.NeedsGitLab && !plan.NeedsGitLabProjects && a.gitLabMCPURL != "" {
 					verifiedParts = append(verifiedParts, directParts...)
 					teamTools = toolsForEndpoint(teamTools, toolEndpoints, a.gitLabMCPURL)
 					prompt += "\nОстальные части вопроса уже проверены подключёнными сервисами. Ответь только на часть о GitLab, используя его инструмент; не повторяй факты из других сервисов и не приписывай GitLab неподтверждённые данные."
