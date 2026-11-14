@@ -36,7 +36,7 @@ export function useBobbyWidget() {
     }
     const pip = (window as Window & { documentPictureInPicture?: PictureInPicture }).documentPictureInPicture;
     if (!pip) {
-      setFallback('Окно поверх приложений доступно в Chrome и Edge на HTTPS или localhost.');
+      setFallback('');
       setTarget('inline');
       return;
     }
@@ -106,7 +106,7 @@ export function BobbyWidget({ target, fallback, state, query, reply, error, onCl
         <button type="button" className="icon-button" aria-label="Открыть полный чат" title="Открыть полный чат" onClick={onChat}><Icon name="external"/></button>
         <button type="button" className="icon-button" aria-label="Закрыть мини-чат" title="Закрыть мини-чат" onClick={onClose}><Icon name="close"/></button>
       </header>
-      {target === 'inline' && <p className="bobby-widget-fallback">{fallback}</p>}
+      {target === 'inline' && fallback && <p className="bobby-widget-fallback">{fallback}</p>}
       <div className="bobby-widget-thread" ref={thread} aria-live="polite" tabIndex={0}>
         {query && <p className="bobby-widget-query">{query}</p>}
         {reply || (!query && <p className="muted">Напишите мне, если нужна помощь.</p>)}

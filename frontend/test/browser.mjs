@@ -142,6 +142,7 @@ try {
     await trigger.click();
     const widget = page.getByRole('region', { name: 'Мини-чат с Бобби' });
     await widget.waitFor();
+    assert.equal(await widget.locator('.bobby-widget-fallback').count(), 0);
     const input = widget.getByRole('textbox', { name: 'Ваш вопрос' });
     assert.equal(await input.evaluate(element => document.activeElement === element), true);
     await input.fill('Начать работу через мини-чат');
