@@ -54,11 +54,26 @@ async function fixtures(page) {
     if (path === '/v1/scenarios/login') { loginRequests++; return respond({ error: 'Unexpected login' }, 500); }
     if (path === '/v1/chat/history') return respond({ turns: [...jobs].reverse() });
     if (path === '/v1/deadline-notifications') return respond({ notifications: [] });
+    const action = /^\/v1\/jobs\/([^/]+)\/(edit|stop)$/.exec(path);
+    if (action) {
+      const index = jobs.findIndex(job => job.id === action[1]);
+      if (index === -1) return respond({ error: 'Job not found' }, 404);
+      if (action[2] === 'stop') {
+        const job = jobs[index];
+        if (job.status === 'running') Object.assign(job, { status: 'failed', error: 'Остановлено пользователем' });
+        return respond(job);
+      }
+      const replacement = { ...jobs[index], id: String(++serial), query: body.query, status: 'completed', answer: 'Ответ на изменённый вопрос' };
+      jobs.splice(index, 1);
+      jobs.push(replacement);
+      return respond({ ...replacement, status: 'queued', answer: undefined }, 202);
+    }
     if (path === '/v1/jobs' && body) {
       assert.equal(body.thread_id, undefined);
       const job = { id: String(++serial), query: body.query, status: 'completed', created_at: '2026-11-13T10:00:00Z', answer };
       if (body.query === 'Проверка длинного ответа') job.answer = '### Начало длинного ответа\n' + 'Длинный абзац для проверки прокрутки.\n'.repeat(60);
       if (body.query === 'Пустой ответ') job.answer = '';
+      if (body.query === 'Вопрос для остановки') Object.assign(job, { status: 'running', answer: undefined });
       if (body.query === 'Проверка тайм-аута') Object.assign(job, { status: 'failed', answer: '', error: 'context deadline exceeded' });
       jobs.push(job);
       return respond({ ...job, status: 'queued', answer: undefined }, 202);
@@ -279,6 +294,18 @@ try {
     await selection.getByRole('button', { name: 'Цитировать' }).click();
     await main.locator('.reply-context').getByText('Ваш первый шаг').waitFor();
     await main.getByRole('button', { name: 'Убрать цитату' }).click();
+    const completedTurn = main.locator('.turn').last();
+    assert.equal(await completedTurn.getByRole('button', { name: 'Остановить ответ' }).count(), 0);
+    await completedTurn.getByRole('button', { name: 'Изменить вопрос' }).click();
+    await completedTurn.getByRole('textbox', { name: 'Изменённый вопрос' }).fill('Вопрос после редактирования');
+    await completedTurn.getByRole('button', { name: 'Отправить', exact: true }).click();
+    await main.getByText('Ответ на изменённый вопрос', { exact: true }).waitFor();
+    assert.equal(await main.locator('.user-message').getByText('Уточни детали', { exact: false }).count(), 0);
+    await main.getByRole('textbox', { name: 'Ваш вопрос' }).fill('Вопрос для остановки');
+    await main.getByRole('textbox', { name: 'Ваш вопрос' }).press('Enter');
+    await main.getByRole('button', { name: 'Остановить ответ' }).click();
+    await main.getByText('Ответ остановлен.').waitFor();
+    await main.locator('.turn').last().getByRole('button', { name: 'Изменить вопрос' }).waitFor();
     await page.emulateMedia({ reducedMotion: 'reduce' });
     assert.equal(await main.locator('.bobby-body').last().evaluate(element => getComputedStyle(element).transitionDuration), '0s');
     assert.deepEqual(errors, []);

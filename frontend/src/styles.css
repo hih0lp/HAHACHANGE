@@ -339,6 +339,19 @@
     .answer-action, .reply-context .answer-action { min-width: 44px; min-height: 44px; }
   }
   .message-body time, .user-message time { display: block; font-size: var(--text-small); margin-top: var(--space-2); }
+  .message-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-1); }
+  .message-actions time { margin: 0; }
+  .message-edit textarea {
+    display: block;
+    width: min(340px, 56vw);
+    max-width: 100%;
+    min-height: 84px;
+    resize: vertical;
+    border: 1px solid var(--control-line);
+    border-radius: var(--radius-s);
+    padding: var(--space-2);
+    background: var(--white);
+  }
   .answer > * { margin-block: 0 var(--space-2); }
   .answer ul, .answer ol { padding-left: var(--space-6); }
   .answer-source, .external { display: inline; overflow-wrap: anywhere; }

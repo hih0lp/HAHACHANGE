@@ -35,12 +35,15 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
   const [revealedAnswers, setRevealedAnswers] = useState<Set<string>>(() => new Set());
   const [waiting, setWaiting] = useState<Record<string, 'reconnect' | 'timeout'>>({});
   const [sending, setSending] = useState(false);
+  const [edit, setEdit] = useState<{ id: string; query: string } | null>(null);
+  const [changing, setChanging] = useState(false);
   const [replyContext, setReplyContext] = useState<ReplyContext[]>([]);
   const [error, setError] = useState('');
   const [historyError, setHistoryError] = useState('');
   const [reload, setReload] = useState(0);
   const [deadlines, setDeadlines] = useState<Awaited<ReturnType<typeof api.deadlines>>['notifications']>([]);
   const watchers = useRef(new Map<string, () => void>());
+  const replaced = useRef(new Set<string>());
   const lock = useRef(false);
   const scroll = useRef<HTMLDivElement>(null);
   const latestTurn = useRef<HTMLDivElement>(null);
@@ -60,7 +63,7 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
     setHistoryError('');
     void api.history(apiKey).then(({ turns }) => {
       if (active) setJobs(current => {
-        const latest = new Map([...turns].reverse().map(job => [job.id, job]));
+        const latest = new Map([...turns].reverse().filter(job => !replaced.current.has(job.id)).map(job => [job.id, job]));
         current.forEach(job => {
           const server = latest.get(job.id);
           if (!server || !completed(server)) latest.set(job.id, job);
@@ -80,8 +83,9 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
 
   useEffect(() => {
     for (const job of jobs) {
-      if (completed(job) || watchers.current.has(job.id)) continue;
+      if (completed(job) || replaced.current.has(job.id) || watchers.current.has(job.id)) continue;
       const stop = watchJob(job.id, { key: apiKey }, update => {
+        if (replaced.current.has(update.id)) return;
         if (update.status === 'completed' && update.answer?.trim()) {
           setRevealedAnswers(previous => new Set(previous).add(update.id));
         }
@@ -168,6 +172,41 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
     void send(draft, fromWidget);
   }
 
+  async function changeJob(job: Job, query?: string) {
+    if (lock.current) return;
+    if (query !== undefined) {
+      if ([...query].length < 2) return;
+      if (query === job.query.trim()) { setEdit(null); return; }
+    }
+    lock.current = true;
+    setChanging(true);
+    setError('');
+    try {
+      if (query === undefined) {
+        const stopped = await api.stop(job.id, auth);
+        setJobs(current => upsert(current, stopped));
+      } else {
+        const replacement = await api.edit(job.id, query, auth);
+        replaced.current.add(job.id);
+        scrollAfterSend.current = true;
+        setJobs(current => upsert(current.filter(item => item.id !== job.id), replacement));
+        setEdit(null);
+      }
+      watchers.current.get(job.id)?.();
+      watchers.current.delete(job.id);
+      setWaiting(current => {
+        const next = { ...current };
+        delete next[job.id];
+        return next;
+      });
+    } catch (err) {
+      setError(errorText(err, query === undefined ? 'Не удалось остановить ответ.' : 'Не удалось изменить вопрос.'));
+    } finally {
+      setChanging(false);
+      lock.current = false;
+    }
+  }
+
   function openForm(id: string) {
     sourceButton.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     onForm(id);
@@ -215,6 +254,7 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
           <Answer text={answer} onForm={compact ? openFromWidget : openForm} reveal={!compact && revealedAnswers.has(job.id)}/>
         </AnswerActions>
       : <p>Ответ пуст. Уточните вопрос или попробуйте снова.</p>;
+    if (job.status === 'failed' && job.error === 'Остановлено пользователем') return <p className="message-status muted">Ответ остановлен.</p>;
     if (job.status === 'failed') return <Notice error action={<button className="text-button" onClick={event => {
       onDraft(job.query);
       setReplyContext([]);
@@ -255,7 +295,7 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
           }
         }} aria-label="Ваш вопрос" placeholder="Напишите вопрос Бобби" rows={1}/>
         {microphone(surface)}
-        <button className="send-button" aria-label={sending ? 'Отправляем вопрос' : 'Отправить вопрос'} title="Отправить вопрос" disabled={sending || [...draft.trim()].length < 2}><Icon name="send"/></button>
+        <button className="send-button" aria-label={sending ? 'Отправляем вопрос' : 'Отправить вопрос'} title="Отправить вопрос" disabled={sending || changing || [...draft.trim()].length < 2}><Icon name="send"/></button>
       </div>
     </form></>;
   }
@@ -290,7 +330,26 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
             <br/><External href={item.url}>{item.key} · {item.summary}</External> · {timeText(new Date(Date.parse(item.due_at) - 1).toISOString(), true)}
           </Notice>)}
           {jobs.map((job, index) => <div key={job.id} className="turn" ref={job.id === latest?.id ? latestTurn : undefined}>
-            <div className="user-message"><p>{job.query}</p><Stamp value={job.created_at}/></div>
+            <div className="user-message">
+              {edit?.id === job.id ? <form className="message-edit" onSubmit={event => {
+                event.preventDefault();
+                void changeJob(job, edit.query.trim());
+              }}>
+                <textarea aria-label="Изменённый вопрос" rows={3} autoFocus readOnly={changing}
+                  value={edit.query} onChange={event => setEdit({ id: job.id, query: event.target.value })}/>
+                <div className="message-actions">
+                  <button className="button primary" disabled={sending || changing || [...edit.query.trim()].length < 2}>Отправить</button>
+                  <button type="button" className="text-button" disabled={changing} onClick={() => setEdit(null)}>Отмена</button>
+                </div>
+              </form> : <p>{job.query}</p>}
+              <div className="message-actions">
+                <Stamp value={job.created_at}/>
+                {edit?.id !== job.id && <button type="button" className="answer-action" aria-label="Изменить вопрос" title="Изменить вопрос"
+                  disabled={sending || changing} onClick={() => setEdit({ id: job.id, query: job.query })}><Icon name="edit"/></button>}
+                {!completed(job) && <button type="button" className="answer-action" aria-label="Остановить ответ" title="Остановить ответ"
+                  disabled={sending || changing} onClick={() => void changeJob(job)}><Icon name="stop"/></button>}
+              </div>
+            </div>
             <div className="assistant-message" aria-live="polite">
               <span className="message-avatar"><Bobby state={index < jobs.length - 1 ? 'idle'
                 : composerState === 'listening' ? 'listening'

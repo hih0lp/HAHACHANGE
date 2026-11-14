@@ -15,6 +15,7 @@ const icons = {
   close: <path d="m6 6 12 12M18 6 6 18"/>,
   copy: <><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></>,
   reply: <path d="m9 5-5 5 5 5m-5-5h10a6 6 0 0 1 6 6v3"/>,
+  edit: <path d="m14 6 4 4M4 20l4.5-1L20 7.5 16.5 4 5 15.5 4 20Z"/>,
   quote: <path d="M10 11H5c0-3 1.5-5 4-6m-4 6v6h5v-6Zm14 0h-5c0-3 1.5-5 4-6m-4 6v6h5v-6Z"/>,
   minimize: <path d="M5 12h14"/>,
   external: <path d="M13 4h7v7m0-7-9 9m7 1v6H4V6h6"/>,
