@@ -258,12 +258,28 @@ try {
       try {
         motion.currentTime = 0;
         const bottom = body.getBoundingClientRect().bottom;
-        motion.currentTime = 1400;
-        if (bottom - body.getBoundingClientRect().bottom < 2) {
-          throw new Error('Bobby moves less than two screen pixels in the widget header');
+        motion.currentTime = 1300;
+        if (bottom - body.getBoundingClientRect().bottom < 4) {
+          throw new Error('Bobby moves less than four CSS pixels in the widget header');
         }
       } finally {
         motion.play();
+      }
+    });
+    await widget.locator('.bobby-widget-header .bobby-eye').first().evaluate(async eye => {
+      const blink = eye.getAnimations().find(animation => animation.animationName === 'bobby-blink');
+      if (!blink) throw new Error('Active Bobby does not blink');
+      await blink.ready;
+      blink.pause();
+      try {
+        blink.currentTime = 0;
+        const openHeight = eye.getBoundingClientRect().height;
+        blink.currentTime = 928;
+        if (eye.getBoundingClientRect().height > openHeight * .35) {
+          throw new Error('Bobby’s eye does not close visibly');
+        }
+      } finally {
+        blink.play();
       }
     });
     await widget.getByRole('heading', { name: 'Ваш первый шаг' }).waitFor();

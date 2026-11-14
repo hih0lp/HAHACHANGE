@@ -255,24 +255,27 @@
     .bobby-body { transition: transform 640ms cubic-bezier(.38, 0, .28, 1.12); }
     .bobby-gaze { transition: transform 480ms ease-in-out; }
     .bobby-smile, [data-bobby-expression] { transition: opacity 360ms ease-in-out, transform 560ms ease-in-out; }
-    [data-bobby-animated="true"] .bobby-motion { animation: bobby-breathe 2.8s ease-in-out infinite; }
+    [data-bobby-animated="true"] .bobby-motion { animation: bobby-breathe 2.6s ease-in-out infinite; }
     [data-bobby-animated="true"][data-bobby-state="answering"] .bobby-motion {
-      animation: bobby-breathe 2.8s ease-in-out infinite, bobby-nod 720ms ease-in-out;
+      animation: bobby-breathe 2.6s ease-in-out infinite, bobby-nod 720ms ease-in-out;
     }
-    [data-bobby-animated="true"] .bobby-eye { animation: bobby-blink 6.8s ease-in-out infinite; }
+    [data-bobby-animated="true"] .bobby-eye { animation: bobby-blink 3.2s ease-in-out infinite; }
     [data-bobby-state="thinking"] [data-bobby-expression="thinking"] circle { animation: bobby-thought 1.8s ease-in-out infinite; }
     [data-bobby-state="thinking"] [data-bobby-expression="thinking"] circle:nth-child(2) { animation-delay: 150ms; }
     [data-bobby-state="thinking"] [data-bobby-expression="thinking"] circle:nth-child(3) { animation-delay: 300ms; }
     [data-bobby-state="listening"] .bobby-accent[data-bobby-expression="listening"] {
       animation: bobby-listen 2.4s ease-in-out infinite;
     }
-    @keyframes bobby-breathe { 50% { transform: translateY(-6%) scale(1.025, 1.045); } }
+    @keyframes bobby-breathe { 50% { transform: translateY(-10%) scale(1.045, 1.09); } }
     @keyframes bobby-nod {
       0%, 100% { rotate: 0deg; translate: 0 0; }
       35% { rotate: -7deg; translate: 0 4%; }
       70% { rotate: 2deg; translate: 0 -2%; }
     }
-    @keyframes bobby-blink { 0%, 44%, 48%, 100% { transform: scaleY(1); } 46% { transform: scaleY(.13); } }
+    @keyframes bobby-blink {
+      0%, 24%, 37%, 100% { transform: scaleY(1); }
+      27%, 32% { transform: scaleY(.12); }
+    }
     @keyframes bobby-thought { 0%, 100% { opacity: .6; } 50% { opacity: 1; transform: translateY(-25%) scale(1.06); } }
     @keyframes bobby-listen { 50% { stroke-opacity: .5; } }
   }
