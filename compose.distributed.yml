@@ -26,6 +26,8 @@ services:
       JIRA_PROJECT_KEY: ${JIRA_PROJECT_KEY:?Set JIRA_PROJECT_KEY}
       MCP_URL: http://mock-jira:8080/mcp
       CALENDAR_MCP_URL: http://mock-calendar:8080/mcp
+      GITLAB_MCP_URL: ""
+      GITLAB_REMINDER_PROJECT: ""
       TEAM_ACCESS_URL: http://team-access:8080
       RIGHTS_URL: http://access-rights:8080
       RIGHTS_MCP_URL: http://access-rights:8080/mcp
@@ -67,6 +69,8 @@ services:
       JIRA_PROJECT_KEY: ${JIRA_PROJECT_KEY:?Set JIRA_PROJECT_KEY}
       MCP_URL: http://mock-jira:8080/mcp
       CALENDAR_MCP_URL: http://mock-calendar:8080/mcp
+      GITLAB_MCP_URL: ""
+      GITLAB_REMINDER_PROJECT: ""
       RIGHTS_URL: http://access-rights:8080
       RIGHTS_MCP_URL: http://access-rights:8080/mcp
       TEAM_MCP_URL: http://team-access:8080/mcp

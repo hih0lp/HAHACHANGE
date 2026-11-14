@@ -1,43 +1,9 @@
 services:
   api:
     image: bobby-mocks-api:local
-    environment:
-      GITLAB_MCP_URL: ${GITLAB_MCP_URL}
-      GITLAB_REMINDER_PROJECT: ${GITLAB_REMINDER_PROJECT}
-    depends_on:
-      gitlab-integration:
-        condition: service_started
   worker:
     image: bobby-mocks-api:local
-    environment:
-      GITLAB_MCP_URL: ${GITLAB_MCP_URL}
-    depends_on:
-      gitlab-integration:
-        condition: service_started
   team-access:
     image: bobby-mocks-team-access:local
   access-rights:
     image: bobby-mocks-team-access:local
-  gitlab-integration:
-    build:
-      context: .
-      dockerfile: Dockerfile.gitlab-integration
-    image: bobby-mocks-gitlab-mcp:local
-    networks:
-      - default
-      - gitlab_demo
-    environment:
-      GITLAB_API_ORIGIN: ${GITLAB_API_ORIGIN:?Set GITLAB_API_ORIGIN}
-      TEAM_DIRECTORY_URL: http://team-access:8080
-      GITLAB_DEMO_SUBJECT: ${GITLAB_DEMO_SUBJECT:?Set GITLAB_DEMO_SUBJECT}
-      GITLAB_DEMO_TOKEN_FILE: /run/secrets/gitlab_demo_token
-    volumes:
-      - ${GITLAB_DEMO_TOKEN_PATH:?Set GITLAB_DEMO_TOKEN_PATH}:/run/secrets/gitlab_demo_token:ro
-    depends_on:
-      team-access:
-        condition: service_started
-
-networks:
-  gitlab_demo:
-    external: true
-    name: ${GITLAB_DEMO_NETWORK:?Set GITLAB_DEMO_NETWORK}

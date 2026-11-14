@@ -1,10 +1,11 @@
-# Keep GitLab MCP on the distributed network. Jira and Calendar are supplied
-# by the editable mock services in compose.distributed.yml.
+# Compatibility overlay for existing deployment commands. GitLab is disabled;
+# Jira and Calendar MCPs are provided by compose.distributed.yml.
 services:
   api:
     environment:
-      GITLAB_MCP_URL: http://bobby-gitlab-mcp-demo:8080/mcp
-      GITLAB_REMINDER_PROJECT: "2"
+      GITLAB_MCP_URL: ""
+      GITLAB_REMINDER_PROJECT: ""
   worker:
     environment:
-      GITLAB_MCP_URL: http://bobby-gitlab-mcp-demo:8080/mcp
+      GITLAB_MCP_URL: ""
+      GITLAB_REMINDER_PROJECT: ""

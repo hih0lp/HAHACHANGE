@@ -78,3 +78,15 @@ func TestPlannerClassifiesTeamDirectoryWithoutPhraseRules(t *testing.T) {
 		t.Fatalf("plan=%+v err=%v", plan, err)
 	}
 }
+
+func TestPlannerClassifiesGitLabWithoutNameMatchingInGo(t *testing.T) {
+	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"choices":[{"message":{"content":"{\"needs_gitlab\":true}"}}]}`)
+	}))
+	defer model.Close()
+	a := answerer{url: model.URL, model: "test", client: model.Client()}
+	plan, err := a.planCalendar(context.Background(), "Какие репозитории у меня доступны?", time.Now(), nil)
+	if err != nil || !plan.NeedsGitLab {
+		t.Fatalf("plan=%+v err=%v", plan, err)
+	}
+}
