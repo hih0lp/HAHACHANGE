@@ -14,11 +14,21 @@ type MemoryHit struct {
 	Score float64
 }
 
+// Keep embedding inputs below the local model's token limit. The full turn
+// remains in PostgreSQL and is retrieved after the vector match.
+func memoryEmbeddingInput(text string) string {
+	runes := []rune(strings.TrimSpace(text))
+	if len(runes) > 300 {
+		runes = runes[:300]
+	}
+	return string(runes)
+}
+
 func (s *Service) UpsertMemory(ctx context.Context, jobID, owner string, createdAt time.Time, text string) error {
 	if s.cfg.MemoryCollectionName == "" || jobID == "" || owner == "" || strings.TrimSpace(text) == "" {
 		return errors.New("chat memory is not configured or its record is incomplete")
 	}
-	vectors, err := s.embed(ctx, []string{"passage: " + text})
+	vectors, err := s.embed(ctx, []string{"passage: " + memoryEmbeddingInput(text)})
 	if err != nil {
 		return err
 	}
@@ -35,7 +45,7 @@ func (s *Service) SearchMemory(ctx context.Context, owner, query string, before 
 	if s.cfg.MemoryCollectionName == "" || owner == "" || limit < 1 {
 		return nil, errors.New("chat memory search is not configured")
 	}
-	vectors, err := s.embed(ctx, []string{"query: " + query})
+	vectors, err := s.embed(ctx, []string{"query: " + memoryEmbeddingInput(query)})
 	if err != nil {
 		return nil, err
 	}

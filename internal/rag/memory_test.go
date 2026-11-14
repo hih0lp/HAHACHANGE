@@ -79,3 +79,10 @@ func mustJSON(value any) string {
 	data, _ := json.Marshal(value)
 	return string(data)
 }
+
+func TestMemoryEmbeddingInputFitsLocalModel(t *testing.T) {
+	input := memoryEmbeddingInput(strings.Repeat("длинный ответ ", 100))
+	if len([]rune(input)) != 300 {
+		t.Fatalf("embedding input has %d runes", len([]rune(input)))
+	}
+}
