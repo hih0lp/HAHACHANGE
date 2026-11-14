@@ -50,7 +50,11 @@ func registerDemoRoleRoute(mux *http.ServeMux) {
 			writeError(w, 400, errText("invalid demo role"))
 			return
 		}
-		http.SetCookie(w, &http.Cookie{Name: "buddy_demo_role", Value: in.Role, Path: "/", HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteLaxMode, MaxAge: 86400})
+		setDemoRoleCookie(w, r, in.Role)
 		writeJSON(w, 200, map[string]string{"role": in.Role})
 	})
+}
+
+func setDemoRoleCookie(w http.ResponseWriter, r *http.Request, role string) {
+	http.SetCookie(w, &http.Cookie{Name: "buddy_demo_role", Value: role, Path: "/", HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteLaxMode, MaxAge: demoSessionMaxAge})
 }

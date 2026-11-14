@@ -27,3 +27,19 @@ func TestDemoRoleSwitch(t *testing.T) {
 		t.Fatalf("unexpected role accepted: %d", bad.Code)
 	}
 }
+
+func TestDemoBootstrapRenewsSelectedRole(t *testing.T) {
+	handler := demoSession("test-secret", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(&http.Cookie{Name: "buddy_demo_role", Value: "intern2"})
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, req)
+	for _, cookie := range response.Result().Cookies() {
+		if cookie.Name == "buddy_demo_role" && cookie.Value == "intern2" && cookie.MaxAge == demoSessionMaxAge {
+			return
+		}
+	}
+	t.Fatal("bootstrap did not renew the selected role")
+}
