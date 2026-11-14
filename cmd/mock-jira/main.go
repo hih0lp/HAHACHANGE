@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hackchange/avito-rag/internal/mockfixture"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -48,8 +49,12 @@ func load(path string) (fixture, error) {
 	if err != nil {
 		return fixture{}, err
 	}
+	return parseFixture(data)
+}
+
+func parseFixture(data []byte) (fixture, error) {
 	var f fixture
-	if err = json.Unmarshal(data, &f); err != nil {
+	if err := json.Unmarshal(data, &f); err != nil {
 		return f, err
 	}
 	if f.ProjectKey == "" {
@@ -175,6 +180,13 @@ func main() {
 		return nil, map[string]any{"key": v.Key, "fields": issueFields(v)}, nil
 	})
 	mux := http.NewServeMux()
+	mockfixture.Register(mux, path, "jira_save_fixture", os.Getenv("MOCK_FIXTURE_WRITE_TOKEN"), func(data []byte) error {
+		f, err := parseFixture(data)
+		if err == nil && f.Issues == nil {
+			return errors.New("issues must be an array")
+		}
+		return err
+	})
 	mux.Handle("/mcp", mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true}))
 	mux.HandleFunc("GET /rest/api/3/issue/{key}", func(w http.ResponseWriter, r *http.Request) {
 		f, e := load(path)

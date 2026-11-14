@@ -95,7 +95,6 @@ func (s *System) EditChat(ctx context.Context, owner, oldID, query, token string
 		error=CASE WHEN status IN ('queued','running') THEN 'Остановлено пользователем' ELSE error END,
 		lease_token=NULL, lease_until=NULL
 		WHERE id=$1 AND owner_id=$2 AND thread_id IS NULL AND superseded_at IS NULL
-		  AND status IN ('queued','running')
 		RETURNING scenario`, oldID, owner).Scan(&scenario)
 	if err != nil {
 		return Job{}, err

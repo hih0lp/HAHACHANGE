@@ -21,6 +21,8 @@ import (
 
 type ownerKey struct{}
 
+const demoSessionMaxAge = 90 * 86400
+
 func demoSession(secret string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		internalJiraMCP := r.URL.Path == "/mcp"
@@ -46,7 +48,10 @@ func demoSession(secret string, next http.Handler) http.Handler {
 			}
 			mac := hmac.New(sha256.New, []byte(secret))
 			mac.Write([]byte(owner))
-			http.SetCookie(w, &http.Cookie{Name: "ai_demo_session", Value: owner + "." + hex.EncodeToString(mac.Sum(nil)), Path: "/", HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteLaxMode, MaxAge: 90 * 86400})
+			http.SetCookie(w, &http.Cookie{Name: "ai_demo_session", Value: owner + "." + hex.EncodeToString(mac.Sum(nil)), Path: "/", HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteLaxMode, MaxAge: demoSessionMaxAge})
+			if role, err := r.Cookie("buddy_demo_role"); err == nil && (role.Value == "intern" || role.Value == "intern2" || role.Value == "mentor") {
+				setDemoRoleCookie(w, r, role.Value)
+			}
 		}
 		if owner == "" && !internalJiraMCP {
 			writeError(w, 401, errText("open the application to start a demo session"))
