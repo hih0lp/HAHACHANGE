@@ -43,6 +43,7 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
   const [reload, setReload] = useState(0);
   const [deadlines, setDeadlines] = useState<Awaited<ReturnType<typeof api.deadlines>>['notifications']>([]);
   const watchers = useRef(new Map<string, () => void>());
+  const editMessage = useRef<HTMLElement | null>(null);
   const replaced = useRef(new Set<string>());
   const lock = useRef(false);
   const scroll = useRef<HTMLDivElement>(null);
@@ -140,7 +141,7 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
 
   async function send(text: string, fromWidget = false) {
     const question = text.trim();
-    if ([...question].length < 2 || lock.current) return;
+    if ([...question].length < 2 || lock.current || activeJob) return;
     const context = replyContext.map(({ kind, text }) => {
       const label = kind === 'reply' ? 'Ответ Бобби целиком' : 'Цитата из ответа Бобби';
       return `${label}\n${text.split(/\r?\n/).map(line => '> ' + line).join('\n')}`;
@@ -176,7 +177,7 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
     if (lock.current) return;
     if (query !== undefined) {
       if ([...query].length < 2) return;
-      if (query === job.query.trim()) { setEdit(null); return; }
+      if (query === job.query.trim()) { cancelEdit(); return; }
     }
     lock.current = true;
     setChanging(true);
@@ -207,6 +208,11 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
     }
   }
 
+  function cancelEdit() {
+    setEdit(null);
+    requestAnimationFrame(() => editMessage.current?.querySelector<HTMLButtonElement>('.answer-action')?.focus({ preventScroll: true }));
+  }
+
   function openForm(id: string) {
     sourceButton.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     onForm(id);
@@ -224,6 +230,7 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
   const hasMessages = jobs.length > 0 || !!formID || catalog || deadlines.length > 0;
   const composerState = sending ? 'thinking' : dictation.active || draft.trim() ? 'listening' : 'idle';
   const latest = jobs.at(-1);
+  const activeJob = [...jobs].reverse().find(job => !completed(job));
   const preparingReply = !!latest && !completed(latest) && !waiting[latest.id];
   const widgetState = sending || preparingReply ? 'thinking'
     : dictation.active || draft.trim() ? 'listening'
@@ -295,7 +302,11 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
           }
         }} aria-label="Ваш вопрос" placeholder="Напишите вопрос Бобби" rows={1}/>
         {microphone(surface)}
-        <button className="send-button" aria-label={sending ? 'Отправляем вопрос' : 'Отправить вопрос'} title="Отправить вопрос" disabled={sending || changing || [...draft.trim()].length < 2}><Icon name="send"/></button>
+        {activeJob
+          ? <button type="button" className="send-button stop-button" aria-label="Остановить ответ" title="Остановить ответ"
+              disabled={sending || changing} onClick={() => void changeJob(activeJob)}><Icon name="stop"/></button>
+          : <button key="send" className="send-button" aria-label={sending ? 'Отправляем вопрос' : 'Отправить вопрос'}
+              title="Отправить вопрос" disabled={sending || changing || [...draft.trim()].length < 2}><Icon name="send"/></button>}
       </div>
     </form></>;
   }
@@ -330,25 +341,32 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
             <br/><External href={item.url}>{item.key} · {item.summary}</External> · {timeText(new Date(Date.parse(item.due_at) - 1).toISOString(), true)}
           </Notice>)}
           {jobs.map((job, index) => <div key={job.id} className="turn" ref={job.id === latest?.id ? latestTurn : undefined}>
-            <div className="user-message">
+            <div className={edit?.id === job.id ? 'user-message is-editing' : 'user-message'}>
               {edit?.id === job.id ? <form className="message-edit" onSubmit={event => {
                 event.preventDefault();
                 void changeJob(job, edit.query.trim());
+              }} onKeyDown={event => {
+                if (event.key === 'Escape' && !changing && !event.nativeEvent.isComposing) {
+                  event.preventDefault();
+                  cancelEdit();
+                }
               }}>
                 <textarea aria-label="Изменённый вопрос" rows={3} autoFocus readOnly={changing}
                   value={edit.query} onChange={event => setEdit({ id: job.id, query: event.target.value })}/>
-                <div className="message-actions">
+                <div className="message-edit-actions">
+                  <button type="button" className="button secondary" disabled={changing} onClick={cancelEdit}>Отмена</button>
                   <button className="button primary" disabled={sending || changing || [...edit.query.trim()].length < 2}>Отправить</button>
-                  <button type="button" className="text-button" disabled={changing} onClick={() => setEdit(null)}>Отмена</button>
                 </div>
-              </form> : <p>{job.query}</p>}
-              <div className="message-actions">
-                <Stamp value={job.created_at}/>
-                {edit?.id !== job.id && <button type="button" className="answer-action" aria-label="Изменить вопрос" title="Изменить вопрос"
-                  disabled={sending || changing} onClick={() => setEdit({ id: job.id, query: job.query })}><Icon name="edit"/></button>}
-                {!completed(job) && <button type="button" className="answer-action" aria-label="Остановить ответ" title="Остановить ответ"
-                  disabled={sending || changing} onClick={() => void changeJob(job)}><Icon name="stop"/></button>}
-              </div>
+              </form> : <><p>{job.query}</p>
+                <div className="message-actions">
+                  <Stamp value={job.created_at}/>
+                  <button type="button" className="answer-action" aria-label="Изменить вопрос" title="Изменить вопрос"
+                    disabled={sending || changing} onClick={event => {
+                      editMessage.current = event.currentTarget.closest('.user-message');
+                      setEdit({ id: job.id, query: job.query });
+                    }}><Icon name="edit"/></button>
+                </div>
+              </>}
             </div>
             <div className="assistant-message" aria-live="polite">
               <span className="message-avatar"><Bobby state={index < jobs.length - 1 ? 'idle'

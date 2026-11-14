@@ -156,6 +156,9 @@
   .mic-button[aria-pressed="true"] { color: var(--error-ink); background: var(--error-bg); }
   .send-button { flex: none; width: var(--control); height: var(--control); border-radius: var(--radius-m); padding: 0; }
   .send-button:disabled { background: var(--neutral); color: var(--muted); }
+  .stop-button { border-radius: var(--radius-round); background: var(--ink); }
+  .stop-button:hover:not(:disabled) { background: #373737; }
+  .stop-button svg { width: 20px; height: 20px; fill: currentColor; }
   .composer-hint { text-align: center; color: var(--muted); font-size: var(--text-small); margin-top: var(--space-2); }
   .widget-trigger[aria-pressed="true"] { color: var(--action-hover); background: var(--selected); }
   .bobby-widget { display: flex; flex-direction: column; color: var(--ink); background: var(--white); overflow: hidden; }
@@ -341,17 +344,33 @@
   .message-body time, .user-message time { display: block; font-size: var(--text-small); margin-top: var(--space-2); }
   .message-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-1); }
   .message-actions time { margin: 0; }
+  .user-message.is-editing {
+    width: 100%;
+    max-width: 100%;
+    border-radius: var(--radius-l);
+    padding: var(--space-4);
+  }
+  .message-edit { display: grid; gap: var(--space-3); }
   .message-edit textarea {
     display: block;
-    width: min(340px, 56vw);
-    max-width: 100%;
-    min-height: 84px;
-    resize: vertical;
-    border: 1px solid var(--control-line);
+    width: 100%;
+    min-width: 0;
+    max-height: 36dvh;
+    field-sizing: content;
+    min-height: 52px;
+    resize: none;
+    border: 0;
     border-radius: var(--radius-s);
-    padding: var(--space-2);
-    background: var(--white);
+    padding: var(--space-2) 0;
+    background: transparent;
   }
+  .message-edit textarea:focus-visible { outline-offset: 0; outline-color: var(--control-line); }
+  .message-edit-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); }
+  .message-edit-actions .button { border-radius: var(--radius-round); }
+  .message-edit-actions .secondary { background: var(--white); border-color: var(--line); }
+  .message-edit-actions .secondary:hover:not(:disabled) { background: var(--hover); }
+  .message-edit-actions .primary { background: var(--ink); }
+  .message-edit-actions .primary:hover:not(:disabled) { background: #373737; }
   .answer > * { margin-block: 0 var(--space-2); }
   .answer ul, .answer ol { padding-left: var(--space-6); }
   .answer-source, .external { display: inline; overflow-wrap: anywhere; }
