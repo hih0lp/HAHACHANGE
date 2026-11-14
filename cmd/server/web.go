@@ -26,70 +26,12 @@ button:disabled{opacity:.55;cursor:wait}.card{margin-top:16px}pre{white-space:pr
 </style></head><body><main><h1>Бобби · AI-buddy</h1>
 <p id="team-state" class="meta">Подключаю сервис команды и доступов…</p>
 <label for="demo-role">Демо-роль <select id="demo-role"><option value="intern">Стажёр</option><option value="intern2">Второй стажёр</option><option value="mentor">Наставник</option></select></label>
-<nav id="chat-history" aria-label="История чатов" hidden><button id="new-chat" type="button">Новый чат</button><select id="chat-threads" aria-label="Открыть беседу"></select></nav>
-<section id="chat-notifications" aria-label="Напоминания"></section>
 <section id="results" aria-label="Сообщения чата" aria-live="polite"></section>
 <form id="form"><label for="query">Сообщение</label><input id="query" required minlength="2" placeholder="Спросите о задаче или онбординге">
 <label for="key">API-ключ (если задан на сервере)</label><input id="key" type="password" autocomplete="off" placeholder="Необязательно">
 <button id="submit" type="submit" value="ask">Отправить</button></form><p id="status" role="status"></p></main>
 <script>
 const form=document.getElementById('form'),results=document.getElementById('results'),status=document.getElementById('status'),button=document.getElementById('submit'),teamState=document.getElementById('team-state');
-const threadList=document.getElementById('chat-threads'),newChat=document.getElementById('new-chat'),notifications=document.getElementById('chat-notifications');
-let thread='',threads=[],sending=false,loadingChat=false;
-const sockets=new Set();
-function chatControls(){button.disabled=sending||loadingChat;threadList.disabled=button.disabled;newChat.disabled=button.disabled||thread==='new'}
-function showThreads(){
-  threadList.replaceChildren();
-  if(thread==='new')threadList.add(new Option('Новая беседа','new'));
-  for(const item of threads)threadList.add(new Option(item.title,item.id));
-  threadList.value=thread;
-}
-function authHeaders(){const key=document.getElementById('key').value;return key?{'X-API-Key':key}:{}}
-function addTurn(job,key){
-  const user=document.createElement('div');user.className='bubble user';user.textContent=job.query;results.append(user);
-  const card=document.createElement('article');card.className='bubble assistant';
-  const title=document.createElement('h2');title.textContent='AI-buddy';
-  const state=document.createElement('div');state.className='meta';state.dataset.state='';
-  const body=document.createElement('div');body.dataset.body='';
-  card.append(title,state,body);results.append(card);showJob(card,job);
-  if(job.status==='queued'||job.status==='running')watchJob(job,card,key);
-}
-async function openChat(id){
-  if(sending||loadingChat)return;
-  loadingChat=true;chatControls();status.textContent='';status.className='';
-  try{
-    let turns=[];
-    if(id!=='new'){
-      const response=await fetch('/v1/chat/history?thread_id='+encodeURIComponent(id),{headers:authHeaders()});
-      if(!response.ok)throw Error('История чата временно недоступна');
-      turns=(await response.json()).turns;
-    }
-    results.replaceChildren();
-    for(const socket of sockets)socket.close();
-    sockets.clear();
-    if(thread!==id)document.getElementById('query').value='';
-    thread=id;
-    showThreads();
-    for(const item of turns.reverse())addTurn(item,document.getElementById('key').value);
-  }catch(error){status.textContent=error.message;status.className='error';showThreads()}
-  finally{loadingChat=false;chatControls()}
-}
-async function loadThreads(){
-  if(sending||loadingChat)return;
-  loadingChat=true;chatControls();
-  try{
-    const response=await fetch('/v1/chat/threads',{headers:authHeaders()});
-    if(response.status===404)return;
-    if(!response.ok)throw Error('Список бесед временно недоступен');
-    threads=(await response.json()).threads;
-    document.getElementById('chat-history').hidden=false;
-  }catch(error){status.textContent=error.message;status.className='error';return}
-  finally{loadingChat=false;chatControls()}
-  await openChat(thread||threads[0]?.id||'new');
-}
-newChat.onclick=()=>openChat('new');
-threadList.onchange=()=>openChat(threadList.value);
-document.getElementById('key').addEventListener('change',loadThreads);
 async function connectTeamAccess(){try{const response=await fetch('/v1/team-access/session',{method:'POST'});const data=await response.json();if(!response.ok)throw Error(data.error||'Сервис команды и доступов недоступен');document.getElementById('demo-role').value=data.role;sessionStorage.setItem('team-access-token',data.access_token);teamState.textContent='Сервис команды и доступов подключён.';return data.access_token}catch(error){sessionStorage.removeItem('team-access-token');teamState.textContent=error.message;teamState.className='error';return ''}}
 const teamSessionReady=connectTeamAccess();
 function messageTime(card,value){if(!value)return;let stamp=card.querySelector('time');if(!stamp){stamp=document.createElement('time');card.append(stamp)}const date=new Date(value);if(Number.isNaN(date.getTime()))return;stamp.dateTime=date.toISOString();stamp.textContent=new Intl.DateTimeFormat('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Moscow'}).format(date)+' МСК'}
@@ -100,34 +42,29 @@ function showJob(card,job){const state=card.querySelector('[data-state]'),body=c
 state.textContent=job.status==='queued'?'В очереди':job.status==='running'?'Готовим ответ':job.status==='completed'?'Готово':'Ошибка';
 if(job.status==='completed'){body.replaceChildren();const answer=document.createElement('div');answer.className='answer';appendMessage(answer,job.answer);body.append(answer);messageTime(card,job.completed_at||job.created_at)}
 if(job.status==='failed'){body.textContent=job.error||'Не удалось получить ответ';body.className='error';messageTime(card,job.completed_at||job.created_at)}}
-function watchJob(job,card,key){let finished=false;const url=(location.protocol==='https:'?'wss://':'ws://')+location.host+'/v1/jobs/'+job.id+'/ws';const socket=new WebSocket(url);sockets.add(socket);
+function watchJob(job,card,key){let finished=false;const url=(location.protocol==='https:'?'wss://':'ws://')+location.host+'/v1/jobs/'+job.id+'/ws';const socket=new WebSocket(url);
 socket.onopen=()=>{if(key)socket.send(JSON.stringify({api_key:key}))};
 socket.onmessage=event=>{const update=JSON.parse(event.data);showJob(card,update);if(update.status==='completed'||update.status==='failed'){finished=true;socket.close()}};
-socket.onclose=()=>{sockets.delete(socket);if(!finished&&card.isConnected)pollJob(job.id,card,key)};socket.onerror=()=>socket.close()}
-async function pollJob(id,card,key){while(card.isConnected){await new Promise(resolve=>setTimeout(resolve,2000));if(!card.isConnected)return;try{const headers={};if(key)headers['X-API-Key']=key;const response=await fetch('/v1/jobs/'+id,{headers});if(!response.ok)throw Error('HTTP '+response.status);const job=await response.json();showJob(card,job);if(job.status==='completed'||job.status==='failed')return}catch(error){card.querySelector('[data-state]').textContent='Переподключение…'}}}
+socket.onclose=()=>{if(!finished)pollJob(job.id,card,key)};socket.onerror=()=>socket.close()}
+async function pollJob(id,card,key){for(;;){await new Promise(resolve=>setTimeout(resolve,2000));try{const headers={};if(key)headers['X-API-Key']=key;const response=await fetch('/v1/jobs/'+id,{headers});if(!response.ok)throw Error('HTTP '+response.status);const job=await response.json();showJob(card,job);if(job.status==='completed'||job.status==='failed')return}catch(error){card.querySelector('[data-state]').textContent='Переподключение…'}}}
 form.addEventListener('submit',async event=>{event.preventDefault();const query=document.getElementById('query').value,key=document.getElementById('key').value;
-if(sending||loadingChat)return;
-sending=true;chatControls();status.textContent='Отправляю…';status.className='';
+button.disabled=true;status.textContent='Отправляю…';status.className='';
 try{const teamToken=await teamSessionReady;if(!teamToken)throw Error('Сервис команды и доступов не подключён. Обновите страницу.');const headers={'Content-Type':'application/json'};if(key)headers['X-API-Key']=key;headers.Authorization='Bearer '+teamToken;
-const response=await fetch('/v1/jobs',{method:'POST',headers,body:JSON.stringify({query,scenario:'general',thread_id:thread})});
+const response=await fetch('/v1/jobs',{method:'POST',headers,body:JSON.stringify({query,scenario:'general'})});
 const data=await response.json();if(!response.ok)throw Error(data.error||'HTTP '+response.status);
-if(data.thread_id)thread=data.thread_id;
-if(thread){
-  const item=threads.find(entry=>entry.id===thread)||{id:thread,title:[...query.trim()].slice(0,80).join('')};
-  threads=[item,...threads.filter(entry=>entry.id!==thread)];showThreads();
-}
-addTurn(data,key);document.getElementById('query').value='';status.textContent='Запрос принят: '+data.id;
-}catch(error){status.textContent=error.message;status.className='error'}finally{sending=false;chatControls()}});
+const user=document.createElement('div');user.className='bubble user';user.textContent=query;results.append(user);const card=document.createElement('article');card.className='bubble assistant';const title=document.createElement('h2');title.textContent='AI-buddy';const state=document.createElement('div');state.className='meta';state.dataset.state='';const body=document.createElement('div');body.dataset.body='';card.append(title,state,body);results.append(card);showJob(card,data);watchJob(data,card,key);document.getElementById('query').value='';status.textContent='Запрос принят: '+data.id
+}catch(error){status.textContent=error.message;status.className='error'}finally{button.disabled=false}});
 const seenGitLabReminders=new Set();
-function showGitLabReminders(data){for(const item of data.reminders||[]){if(seenGitLabReminders.has(item.id))continue;seenGitLabReminders.add(item.id);const card=document.createElement('article');card.className='bubble assistant';const title=document.createElement('h2');title.textContent='AI-buddy · GitLab';const body=document.createElement('p');body.append(document.createTextNode('Открытый MR для проверки ревью: '));const link=document.createElement('a');link.href=item.url;link.target='_blank';link.rel='noopener noreferrer';link.textContent='!'+item.iid+' · '+item.title;body.append(link);card.append(title,body);messageTime(card,new Date());notifications.append(card)}}
+function showGitLabReminders(data){for(const item of data.reminders||[]){if(seenGitLabReminders.has(item.id))continue;seenGitLabReminders.add(item.id);const card=document.createElement('article');card.className='bubble assistant';const title=document.createElement('h2');title.textContent='AI-buddy · GitLab';const body=document.createElement('p');body.append(document.createTextNode('Открытый MR для проверки ревью: '));const link=document.createElement('a');link.href=item.url;link.target='_blank';link.rel='noopener noreferrer';link.textContent='!'+item.iid+' · '+item.title;body.append(link);card.append(title,body);messageTime(card,new Date());results.append(card)}}
 async function pollGitLabReminders(){try{const token=await teamSessionReady;if(token){const response=await fetch('/v1/gitlab/reminders',{headers:{Authorization:'Bearer '+token}});if(response.ok)showGitLabReminders(await response.json())}}catch(error){}setTimeout(pollGitLabReminders,60000)}
 pollGitLabReminders();
 const seenCalendarReminders=new Set();
-function showCalendarReminders(data){for(const item of data.data?.items||[]){const start=item.start?.dateTime;if(!start)continue;const id=item.id+':'+start;if(seenCalendarReminders.has(id))continue;seenCalendarReminders.add(id);const card=document.createElement('article');card.className='bubble assistant';const title=document.createElement('h2');title.textContent='AI-buddy · календарь';const body=document.createElement('p');body.textContent='Скоро: '+(item.summary||'событие')+' — '+new Date(start).toLocaleString();card.append(title,body);messageTime(card,new Date());notifications.append(card)}}
+function showCalendarReminders(data){for(const item of data.data?.items||[]){const start=item.start?.dateTime;if(!start)continue;const id=item.id+':'+start;if(seenCalendarReminders.has(id))continue;seenCalendarReminders.add(id);const card=document.createElement('article');card.className='bubble assistant';const title=document.createElement('h2');title.textContent='AI-buddy · календарь';const body=document.createElement('p');body.textContent='Скоро: '+(item.summary||'событие')+' — '+new Date(start).toLocaleString();card.append(title,body);messageTime(card,new Date());results.append(card)}}
 async function pollCalendarReminders(){try{const token=await teamSessionReady;if(token){const response=await fetch('/v1/calendar/reminders',{headers:{Authorization:'Bearer '+token}});if(response.ok)showCalendarReminders(await response.json())}}catch(error){}setTimeout(pollCalendarReminders,60000)}
 pollCalendarReminders();
 const seenDeadlineNotifications=new Set();
-async function loadDeadlineNotifications(){try{await teamSessionReady;const headers={},key=document.getElementById('key').value;if(key)headers['X-API-Key']=key;const response=await fetch('/v1/deadline-notifications',{headers});if(response.ok){const data=await response.json();for(const item of (data.notifications||[]).reverse()){if(seenDeadlineNotifications.has(item.id))continue;seenDeadlineNotifications.add(item.id);const card=document.createElement('article');card.className='bubble assistant deadline';const title=document.createElement('h2');title.textContent=item.kind==='mentor_deadline'?'Помогите стажёру':'Скоро дедлайн';const body=document.createElement('p');body.append(document.createTextNode(item.kind==='mentor_deadline'?'Срок задачи стажёра скоро истекает. Пожалуйста, помогите ему: ':'Скоро срок вашей задачи: '));const label=item.key+' · '+item.summary;if(item.url&&item.url.startsWith('https://')){const link=document.createElement('a');link.href=item.url;link.target='_blank';link.rel='noopener noreferrer';link.textContent=label;body.append(link)}else{body.append(document.createTextNode(label))}body.append(document.createTextNode(' — до '+new Date(item.due_at).toLocaleString()));card.append(title,body);messageTime(card,item.created_at);notifications.append(card)}}}catch(error){}setTimeout(loadDeadlineNotifications,15000)}
+async function loadDeadlineNotifications(){try{await teamSessionReady;const headers={},key=document.getElementById('key').value;if(key)headers['X-API-Key']=key;const response=await fetch('/v1/deadline-notifications',{headers});if(response.ok){const data=await response.json();for(const item of (data.notifications||[]).reverse()){if(seenDeadlineNotifications.has(item.id))continue;seenDeadlineNotifications.add(item.id);const card=document.createElement('article');card.className='bubble assistant deadline';const title=document.createElement('h2');title.textContent=item.kind==='mentor_deadline'?'Помогите стажёру':'Скоро дедлайн';const body=document.createElement('p');body.append(document.createTextNode(item.kind==='mentor_deadline'?'Срок задачи стажёра скоро истекает. Пожалуйста, помогите ему: ':'Скоро срок вашей задачи: '));const label=item.key+' · '+item.summary;if(item.url&&item.url.startsWith('https://')){const link=document.createElement('a');link.href=item.url;link.target='_blank';link.rel='noopener noreferrer';link.textContent=label;body.append(link)}else{body.append(document.createTextNode(label))}body.append(document.createTextNode(' — до '+new Date(item.due_at).toLocaleString()));card.append(title,body);messageTime(card,item.created_at);results.append(card)}}}catch(error){}setTimeout(loadDeadlineNotifications,15000)}
 loadDeadlineNotifications();
-loadThreads();
+async function loadHistory(){try{const headers={},key=document.getElementById('key').value;if(key)headers['X-API-Key']=key;const response=await fetch('/v1/chat/history',{headers});if(!response.ok)return;const data=await response.json();for(const item of (data.turns||[]).reverse()){const user=document.createElement('div');user.className='bubble user';user.textContent=item.query;results.append(user);const card=document.createElement('article');card.className='bubble assistant';const title=document.createElement('h2');title.textContent='AI-buddy';const state=document.createElement('div');state.className='meta';state.dataset.state='';const body=document.createElement('div');body.dataset.body='';card.append(title,state,body);results.append(card);showJob(card,item);if(item.status==='queued'||item.status==='running')watchJob(item,card,key)}}catch(error){status.textContent='История чата временно недоступна'}}
+loadHistory();
 </script></body></html>`

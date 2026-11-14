@@ -86,8 +86,8 @@ func registerDistributedJobRoutes(mux *http.ServeMux, jobs *distributed.System, 
 			writeError(w, 400, errText("unknown scenario"))
 			return
 		}
-		if input.ThreadID != "" && input.ThreadID != "new" && input.ThreadID != "legacy" && !validThreadID(input.ThreadID) {
-			writeError(w, 400, errText("invalid chat ID"))
+		if input.ThreadID != "" && input.ThreadID != "legacy" {
+			writeError(w, 400, errText("only the original chat is available"))
 			return
 		}
 		teamToken := ""
@@ -102,11 +102,7 @@ func registerDistributedJobRoutes(mux *http.ServeMux, jobs *distributed.System, 
 				}
 			}
 		}
-		job, err := jobs.SubmitChat(r.Context(), ownerFrom(r), input.Scenario, input.Query, input.ThreadID, teamToken)
-		if errors.Is(err, pgx.ErrNoRows) {
-			writeError(w, 404, errText("chat not found"))
-			return
-		}
+		job, err := jobs.SubmitChat(r.Context(), ownerFrom(r), input.Scenario, input.Query, teamToken)
 		if err != nil {
 			writeError(w, 503, errText("request storage is unavailable"))
 			return
