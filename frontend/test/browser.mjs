@@ -248,6 +248,24 @@ try {
     await widget.getByText('Думаю').waitFor();
     assert.ok(await widget.locator('.bobby-widget-thread').evaluate(element => element.scrollTop > 0));
     await widget.getByText('Ответ готов').waitFor();
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await widget.locator('.bobby-widget-header .bobby-motion').evaluate(async body => {
+      const motion = body.getAnimations().find(animation => animation.animationName === 'bobby-breathe');
+      if (!motion) throw new Error('Active Bobby does not breathe');
+      body.getAnimations().find(animation => animation.animationName === 'bobby-nod')?.finish();
+      await motion.ready;
+      motion.pause();
+      try {
+        motion.currentTime = 0;
+        const bottom = body.getBoundingClientRect().bottom;
+        motion.currentTime = 1400;
+        if (bottom - body.getBoundingClientRect().bottom < 2) {
+          throw new Error('Bobby moves less than two screen pixels in the widget header');
+        }
+      } finally {
+        motion.play();
+      }
+    });
     await widget.getByRole('heading', { name: 'Ваш первый шаг' }).waitFor();
     await scrollStyle.evaluate(element => element.remove());
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
