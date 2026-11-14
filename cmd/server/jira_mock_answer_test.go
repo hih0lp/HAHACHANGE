@@ -10,7 +10,10 @@ func TestFormatMockJiraCardPreservesMissingFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"DEMO-1", "Дата начала: не указана", "Срок: не указан", "Описание: не заполнено", "[Открыть задачу](https://jira.example/browse/DEMO-1)"} {
+	if strings.Contains(card, "https://") {
+		t.Fatalf("card exposed Jira URL: %q", card)
+	}
+	for _, want := range []string{"DEMO-1", "Дата начала: не указана", "Срок: не указан", "Описание: не заполнено"} {
 		if !strings.Contains(card, want) {
 			t.Fatalf("card %q lacks %q", card, want)
 		}
@@ -23,7 +26,7 @@ func TestFormatMockJiraListUsesOnlyReturnedFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, unwanted := range []string{"Описание", "первая", "инструмент", "дата начала"} {
+	for _, unwanted := range []string{"Описание", "первая", "инструмент", "дата начала", "https://"} {
 		if strings.Contains(answer, unwanted) {
 			t.Fatalf("list invented detail: %q", answer)
 		}

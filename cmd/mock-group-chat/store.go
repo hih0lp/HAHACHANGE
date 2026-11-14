@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -131,7 +132,7 @@ type searchArgs struct {
 	Query   string `json:"query" jsonschema:"topic or exact identifier to search for"`
 	From    string `json:"from" jsonschema:"inclusive RFC3339 timestamp"`
 	To      string `json:"to" jsonschema:"exclusive RFC3339 timestamp"`
-	GroupID string `json:"group_id,omitempty" jsonschema:"optional group ID"`
+	GroupID string `json:"group_id,omitempty" jsonschema:"group name, group ID, or group and author label; omit for all visible groups"`
 	Limit   int    `json:"limit,omitempty" jsonschema:"total messages including context; default 15 and maximum 30"`
 }
 
@@ -168,14 +169,24 @@ func searchParameters(a searchArgs) (time.Time, time.Time, int, error) {
 	return from, to, limit, nil
 }
 
+// Both read tools use the same membership and group-selection rules.
+const visibleChatMessages = `
+	SELECT m.*, g.name AS group_name, a.display_name AS author_name
+	FROM chat_group_members member
+	JOIN chat_groups g ON g.id = member.group_id
+	JOIN chat_messages m ON m.group_id = g.id
+	JOIN chat_group_members a ON a.group_id = g.id AND a.user_id = m.author_id
+	WHERE member.user_id = $1 AND (
+		$2 = '' OR g.id = $2 OR lower(g.name COLLATE "und-x-icu") = lower($2 COLLATE "und-x-icu")
+		OR lower((g.name || ' - ' || a.display_name) COLLATE "und-x-icu") =
+		   regexp_replace(lower($2 COLLATE "und-x-icu"), '[[:space:]]+[-–—][[:space:]]+', ' - ', 'g')
+	)
+`
+
 func (s store) search(ctx context.Context, user, group, query string, from, to time.Time, limit int, vector []float32) (searchResult, error) {
-	result := searchResult{Messages: []message{}}
 	rows, err := s.db.Query(ctx, `
-		WITH visible AS MATERIALIZED (
-			SELECT m.* FROM chat_group_members member
-			JOIN chat_messages m ON m.group_id = member.group_id
-			WHERE member.user_id = $1 AND ($2 = '' OR m.group_id = $2)
-			  AND m.sent_at >= $3 AND m.sent_at < $4
+		WITH visible AS MATERIALIZED (`+visibleChatMessages+`
+			AND m.sent_at >= $3 AND m.sent_at < $4
 		), search_query AS (
 			SELECT websearch_to_tsquery('russian', $5) AS lex
 		), scored AS (
@@ -208,16 +219,31 @@ func (s store) search(ctx context.Context, user, group, query string, from, to t
 		), unique_messages AS (
 			SELECT DISTINCT ON (id) id, rank, is_context FROM picked ORDER BY id, is_context, rank
 		)
-		SELECT v.id::text, v.group_id, g.name, a.display_name, v.sent_at, v.body, p.is_context
+		SELECT v.id::text, v.group_id, v.group_name, v.author_name, v.sent_at, v.body, p.is_context
 		FROM unique_messages p JOIN visible v USING (id)
-		JOIN chat_groups g ON g.id = v.group_id
-		JOIN chat_group_members a ON a.group_id = v.group_id AND a.user_id = v.author_id
 		ORDER BY p.is_context, p.rank, v.sent_at, v.id
 		LIMIT $7
-	`, user, group, from, to, query, vector, limit)
+	`, user, strings.TrimSpace(group), from, to, query, vector, limit)
 	if err != nil {
-		return result, err
+		return searchResult{}, err
 	}
+	return readMessages(rows)
+}
+
+func (s store) latest(ctx context.Context, user, group string) (searchResult, error) {
+	rows, err := s.db.Query(ctx, `
+		WITH visible AS (`+visibleChatMessages+` AND m.sent_at <= now())
+		SELECT id::text, group_id, group_name, author_name, sent_at, body, false
+		FROM visible ORDER BY sent_at DESC, id DESC LIMIT 10
+	`, user, strings.TrimSpace(group))
+	if err != nil {
+		return searchResult{}, err
+	}
+	return readMessages(rows)
+}
+
+func readMessages(rows pgx.Rows) (searchResult, error) {
+	result := searchResult{Messages: []message{}}
 	defer rows.Close()
 	for rows.Next() {
 		var m message

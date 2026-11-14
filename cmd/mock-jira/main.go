@@ -26,7 +26,6 @@ type issue struct {
 	StartDate         string         `json:"start_date,omitempty"`
 	AssigneeAccountID string         `json:"assignee_account_id,omitempty"`
 	AssigneeName      string         `json:"assignee_name,omitempty"`
-	URL               string         `json:"url"`
 	Fields            map[string]any `json:"fields,omitempty"`
 }
 type fixture struct {
@@ -73,7 +72,7 @@ func load(path string) (fixture, error) {
 	return f, nil
 }
 func summary(v issue) map[string]any {
-	m := map[string]any{"key": v.Key, "summary": v.Summary, "status": v.Status, "url": v.URL}
+	m := map[string]any{"key": v.Key, "summary": v.Summary, "status": v.Status}
 	for k, x := range map[string]string{"due_date": v.DueDate, "assignee_account_id": v.AssigneeAccountID, "assignee_name": v.AssigneeName} {
 		if x != "" {
 			m[k] = x
@@ -164,7 +163,7 @@ func main() {
 		if e != nil {
 			return nil, nil, e
 		}
-		return nil, map[string]any{"key": v.Key, "url": v.URL, "fields": issueFields(v)}, nil
+		return nil, map[string]any{"key": v.Key, "fields": issueFields(v)}, nil
 	})
 	mux := http.NewServeMux()
 	mux.Handle("/mcp", mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true}))
@@ -204,7 +203,7 @@ func main() {
 			if account != "" && v.AssigneeAccountID != account {
 				continue
 			}
-			items = append(items, map[string]any{"key": v.Key, "url": v.URL, "fields": map[string]any{"summary": v.Summary, "duedate": v.DueDate, "assignee": map[string]string{"accountId": v.AssigneeAccountID, "displayName": v.AssigneeName}, "status": map[string]any{"name": v.Status, "statusCategory": map[string]string{"key": v.StatusCategory}}}})
+			items = append(items, map[string]any{"key": v.Key, "fields": map[string]any{"summary": v.Summary, "duedate": v.DueDate, "assignee": map[string]string{"accountId": v.AssigneeAccountID, "displayName": v.AssigneeName}, "status": map[string]any{"name": v.Status, "statusCategory": map[string]string{"key": v.StatusCategory}}}})
 		}
 		sort.SliceStable(items, func(i, j int) bool {
 			return items[i].(map[string]any)["key"].(string) < items[j].(map[string]any)["key"].(string)

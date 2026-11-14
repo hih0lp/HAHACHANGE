@@ -1,4 +1,7 @@
 services:
+  worker:
+    environment:
+      GROUP_CHAT_MCP_URL: http://mock-group-chat:8080/mcp
   mock-group-chat:
     build:
       context: .

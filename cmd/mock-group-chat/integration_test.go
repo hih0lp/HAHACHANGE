@@ -113,7 +113,7 @@ func TestGroupChat(t *testing.T) {
 	}
 	defer intern2.Close()
 	tools, err := intern.ListTools(ctx, nil)
-	if err != nil || len(tools.Tools) != 1 || tools.Tools[0].Name != "search_group_messages" {
+	if err != nil || len(tools.Tools) != 2 || tools.Tools[0].Name != "latest_group_messages" || tools.Tools[1].Name != "search_group_messages" {
 		t.Fatalf("tools = %+v, err = %v", tools, err)
 	}
 	search := func(session *mcp.ClientSession, query, group string) []message {
@@ -146,6 +146,36 @@ func TestGroupChat(t *testing.T) {
 	}
 	if got := search(intern2, "SEARCH-42", "search"); len(got) != 2 || !strings.Contains(got[0].Text, "SEARCH-42") {
 		t.Fatalf("authorized exact match: %+v", got)
+	}
+	for _, group := range []string{"catalog", " Каталог ", "Каталог - Наставник", "Каталог — Наставник", "каталог – наставник"} {
+		for _, read := range []struct {
+			tool string
+			args map[string]any
+		}{
+			{"latest_group_messages", map[string]any{"group": group}},
+			{"search_group_messages", map[string]any{"group_id": group, "query": "CAT-128", "from": "2026-11-13T00:00:00+03:00", "to": "2026-11-14T00:00:00+03:00"}},
+		} {
+			for _, account := range []struct {
+				session *mcp.ClientSession
+				visible bool
+			}{{intern, true}, {intern2, false}} {
+				got, err := account.session.CallTool(ctx, &mcp.CallToolParams{Name: read.tool, Arguments: read.args})
+				if err != nil || got.IsError {
+					t.Fatalf("%s %q: %+v, %v", read.tool, group, got, err)
+				}
+				data, _ := json.Marshal(got.StructuredContent)
+				var result searchResult
+				if err := json.Unmarshal(data, &result); err != nil || result.Messages == nil ||
+					(len(result.Messages) > 0) != account.visible {
+					t.Fatalf("%s %q: unexpected result %s", read.tool, group, data)
+				}
+				for _, m := range result.Messages {
+					if m.GroupID != "catalog" || (strings.Contains(group, " - ") || strings.Contains(group, " — ") || strings.Contains(group, " – ")) && m.AuthorName != "Наставник" {
+						t.Fatalf("%s %q: unexpected message %+v", read.tool, group, m)
+					}
+				}
+			}
+		}
 	}
 	if got := search(intern, "5% трафика", "product"); len(got) != 0 {
 		t.Fatalf("message outside requested period: %+v", got)

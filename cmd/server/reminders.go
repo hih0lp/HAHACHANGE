@@ -22,11 +22,11 @@ type reminderConfig struct {
 }
 
 type reminder struct {
+	URL     string    `json:"url"`
 	ID      string    `json:"id"`
 	Key     string    `json:"key"`
 	Summary string    `json:"summary"`
 	DueAt   time.Time `json:"due_at"`
-	URL     string    `json:"url"`
 }
 
 type reminderSnapshot struct {
@@ -64,7 +64,6 @@ func loadRemindersWindow(ctx context.Context, jira jiraConfig, cfg reminderConfi
 	var raw struct {
 		Issues []struct {
 			Key    string `json:"key"`
-			URL    string `json:"url"`
 			Fields struct {
 				Summary  string `json:"summary"`
 				DueDate  string `json:"duedate"`
@@ -90,11 +89,7 @@ func loadRemindersWindow(ctx context.Context, jira jiraConfig, cfg reminderConfi
 		if err != nil || !deadlineWindow(now, due, window) {
 			continue
 		}
-		issueURL := issue.URL
-		if !strings.HasPrefix(issueURL, "https://") {
-			issueURL = ""
-		}
-		result.Reminders = append(result.Reminders, reminder{ID: issue.Key + ":" + issue.Fields.DueDate, Key: issue.Key, Summary: issue.Fields.Summary, DueAt: due, URL: issueURL})
+		result.Reminders = append(result.Reminders, reminder{ID: issue.Key + ":" + issue.Fields.DueDate, Key: issue.Key, Summary: issue.Fields.Summary, DueAt: due})
 	}
 	return result, nil
 }
