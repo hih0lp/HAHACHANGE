@@ -59,6 +59,23 @@ func (s chatService) handler() http.Handler {
 		}
 		return nil, result, nil
 	})
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "latest_group_messages",
+		Description: "List the newest messages visible to the signed-in user, optionally filtered by the exact group display name. No topic is required.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, a struct {
+		Group string `json:"group,omitempty" jsonschema:"exact group name or ID; omit for all visible groups"`
+	}) (*mcp.CallToolResult, searchResult, error) {
+		user, _ := ctx.Value(identityKey{}).(string)
+		if user == "" {
+			return nil, searchResult{}, errors.New("user authorization required")
+		}
+		result, err := s.store.latest(ctx, user, strings.TrimSpace(a.Group))
+		if err != nil {
+			log.Printf("latest group messages: %v", err)
+			return nil, searchResult{}, errors.New("message history unavailable")
+		}
+		return nil, result, nil
+	})
 	stream := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server },
 		&mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
 	mux := http.NewServeMux()

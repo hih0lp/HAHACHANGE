@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -218,6 +219,28 @@ func (s store) search(ctx context.Context, user, group, query string, from, to t
 	if err != nil {
 		return result, err
 	}
+	return readMessages(rows)
+}
+
+func (s store) latest(ctx context.Context, user, group string) (searchResult, error) {
+	rows, err := s.db.Query(ctx, `
+		SELECT m.id::text, g.id, g.name, a.display_name, m.sent_at, m.body, false
+		FROM chat_group_members member
+		JOIN chat_groups g ON g.id = member.group_id
+		JOIN chat_messages m ON m.group_id = g.id
+		JOIN chat_group_members a ON a.group_id = g.id AND a.user_id = m.author_id
+		WHERE member.user_id = $1 AND ($2 = '' OR g.id = $2 OR lower(g.name) = lower($2))
+		  AND m.sent_at <= now()
+		ORDER BY m.sent_at DESC, m.id DESC LIMIT 10
+	`, user, group)
+	if err != nil {
+		return searchResult{}, err
+	}
+	return readMessages(rows)
+}
+
+func readMessages(rows pgx.Rows) (searchResult, error) {
+	result := searchResult{Messages: []message{}}
 	defer rows.Close()
 	for rows.Next() {
 		var m message
