@@ -22,11 +22,11 @@ type reminderConfig struct {
 }
 
 type reminder struct {
+	URL     string    `json:"url"`
 	ID      string    `json:"id"`
 	Key     string    `json:"key"`
 	Summary string    `json:"summary"`
 	DueAt   time.Time `json:"due_at"`
-	URL     string    `json:"url"`
 }
 
 type reminderSnapshot struct {
@@ -45,6 +45,13 @@ func reminderDueAt(date string, zone *time.Location) (time.Time, error) {
 	return day.AddDate(0, 0, 1), nil
 }
 
+func reminderDeadline(dueAt, dueDate string, zone *time.Location) (time.Time, error) {
+	if dueAt != "" {
+		return time.Parse(time.RFC3339, dueAt)
+	}
+	return reminderDueAt(dueDate, zone)
+}
+
 func loadReminders(ctx context.Context, jira jiraConfig, cfg reminderConfig, now time.Time) (reminderSnapshot, error) {
 	return loadRemindersWindow(ctx, jira, cfg, now, time.Duration(cfg.HoursBefore)*time.Hour)
 }
@@ -60,14 +67,14 @@ func loadRemindersWindow(ctx context.Context, jira jiraConfig, cfg reminderConfi
 		return result, fmt.Errorf("invalid reminder timezone: %w", err)
 	}
 	result.Enabled = true
-	params := url.Values{"jql": {"project = " + jira.ProjectKey + " AND assignee = \"" + strings.ReplaceAll(cfg.InternAccountID, "\"", "") + "\" AND duedate is not EMPTY ORDER BY duedate ASC"}, "maxResults": {"100"}, "fields": {"summary,status,assignee,duedate"}}
+	params := url.Values{"jql": {"project = " + jira.ProjectKey + " AND assignee = \"" + strings.ReplaceAll(cfg.InternAccountID, "\"", "") + "\" ORDER BY duedate ASC"}, "maxResults": {"100"}, "fields": {"summary,status,assignee,duedate,due_at"}}
 	var raw struct {
 		Issues []struct {
 			Key    string `json:"key"`
-			URL    string `json:"url"`
 			Fields struct {
 				Summary  string `json:"summary"`
 				DueDate  string `json:"duedate"`
+				DueAt    string `json:"due_at"`
 				Assignee struct {
 					AccountID string `json:"accountId"`
 				} `json:"assignee"`
@@ -83,18 +90,14 @@ func loadRemindersWindow(ctx context.Context, jira jiraConfig, cfg reminderConfi
 		return result, err
 	}
 	for _, issue := range raw.Issues {
-		if issue.Fields.Assignee.AccountID != cfg.InternAccountID || issue.Fields.Status.Category.Key == "done" || issue.Fields.DueDate == "" {
+		if issue.Fields.Assignee.AccountID != cfg.InternAccountID || issue.Fields.Status.Category.Key == "done" || (issue.Fields.DueDate == "" && issue.Fields.DueAt == "") {
 			continue
 		}
-		due, err := reminderDueAt(issue.Fields.DueDate, zone)
+		due, err := reminderDeadline(issue.Fields.DueAt, issue.Fields.DueDate, zone)
 		if err != nil || !deadlineWindow(now, due, window) {
 			continue
 		}
-		issueURL := issue.URL
-		if !strings.HasPrefix(issueURL, "https://") {
-			issueURL = ""
-		}
-		result.Reminders = append(result.Reminders, reminder{ID: issue.Key + ":" + issue.Fields.DueDate, Key: issue.Key, Summary: issue.Fields.Summary, DueAt: due, URL: issueURL})
+		result.Reminders = append(result.Reminders, reminder{ID: issue.Key + ":" + due.Format(time.RFC3339), Key: issue.Key, Summary: issue.Fields.Summary, DueAt: due})
 	}
 	return result, nil
 }

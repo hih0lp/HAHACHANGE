@@ -14,7 +14,7 @@ import (
 
 func TestRemindersOnlyForAssignedOpenTasksInsideWindow(t *testing.T) {
 	jira := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/rest/api/3/search/jql" || !strings.Contains(r.URL.Query().Get("jql"), "duedate is not EMPTY") {
+		if r.URL.Path != "/rest/api/3/search/jql" || !strings.Contains(r.URL.Query().Get("jql"), "assignee =") {
 			t.Errorf("unexpected Jira request: %s", r.URL)
 		}
 		_, _ = w.Write([]byte(`{"issues":[
@@ -87,7 +87,7 @@ func TestReminderRoutesAndDisabledAccessRoute(t *testing.T) {
 func TestMockJiraMinuteReminderWindow(t *testing.T) {
 	jira := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"issues":[
-			{"key":"TEST-1","url":"https://jira.example/browse/TEST-1","fields":{"summary":"Задача стажёра","duedate":"2026-11-14","assignee":{"accountId":"intern-account"},"status":{"statusCategory":{"key":"indeterminate"}}}},
+			{"key":"TEST-1","fields":{"summary":"Задача стажёра","due_at":"2026-11-14T22:15:00+03:00","assignee":{"accountId":"intern-account"},"status":{"statusCategory":{"key":"indeterminate"}}}},
 			{"key":"TEST-2","fields":{"summary":"Закрыта","duedate":"2026-11-14","assignee":{"accountId":"intern-account"},"status":{"statusCategory":{"key":"done"}}}}
 		]}`))
 	}))
@@ -98,7 +98,7 @@ func TestMockJiraMinuteReminderWindow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	due := time.Date(2026, 11, 15, 0, 0, 0, 0, zone)
+	due := time.Date(2026, 11, 14, 22, 15, 0, 0, zone)
 	for _, test := range []struct {
 		at   time.Time
 		want int
@@ -112,7 +112,7 @@ func TestMockJiraMinuteReminderWindow(t *testing.T) {
 		if err != nil || len(result.Reminders) != test.want {
 			t.Fatalf("at %s: %+v, %v", test.at, result, err)
 		}
-		if test.want == 1 && (result.Reminders[0].Key != "TEST-1" || !result.Reminders[0].DueAt.Equal(due) || result.Reminders[0].URL != "https://jira.example/browse/TEST-1") {
+		if test.want == 1 && (result.Reminders[0].Key != "TEST-1" || !result.Reminders[0].DueAt.Equal(due) || result.Reminders[0].URL != "") {
 			t.Fatalf("wrong reminder: %+v", result.Reminders)
 		}
 	}

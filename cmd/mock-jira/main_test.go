@@ -51,3 +51,24 @@ func TestFixtureRejectsInvalidDate(t *testing.T) {
 		t.Fatal("invalid date accepted")
 	}
 }
+
+func TestFixtureAcceptsExactDeadlineAndRejectsInvalidTimestamp(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "jira.json")
+	write := func(dueAt string) error {
+		data := []byte(`{"project_key":"SCRUM","issues":[{"key":"SCRUM-8","summary":"Reminder test","status":"In progress","due_at":"` + dueAt + `"}]}`)
+		return os.WriteFile(path, data, 0600)
+	}
+	if err := write("2026-11-14T22:15:00+03:00"); err != nil {
+		t.Fatal(err)
+	}
+	fixture, err := load(path)
+	if err != nil || fixture.Issues[0].DueAt != "2026-11-14T22:15:00+03:00" {
+		t.Fatalf("fixture=%+v err=%v", fixture, err)
+	}
+	if err := write("2026-11-14 22:15"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := load(path); err == nil {
+		t.Fatal("invalid exact deadline accepted")
+	}
+}

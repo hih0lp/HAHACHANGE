@@ -61,9 +61,9 @@ func (s chatService) handler() http.Handler {
 	})
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "latest_group_messages",
-		Description: "List the newest messages visible to the signed-in user, optionally filtered by the exact group display name. No topic is required.",
+		Description: "List the newest messages visible to the signed-in user. Accepts the group name, ID, or the messenger's display label containing the group and author.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a struct {
-		Group string `json:"group,omitempty" jsonschema:"exact group name or ID; omit for all visible groups"`
+		Group string `json:"group,omitempty" jsonschema:"group name, group ID, or group and author label; omit for all visible groups"`
 	}) (*mcp.CallToolResult, searchResult, error) {
 		user, _ := ctx.Value(identityKey{}).(string)
 		if user == "" {

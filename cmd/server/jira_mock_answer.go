@@ -24,6 +24,9 @@ func formatMockJiraCard(result any) (string, error) {
 		assignee = "не назначен"
 	}
 	start, due := issue.StartDate, issue.DueDate
+	if issue.DueAt != "" {
+		due = issue.DueAt
+	}
 	if start == "" {
 		start = "не указана"
 	}
@@ -42,9 +45,6 @@ func formatMockJiraCard(result any) (string, error) {
 		"Срок: " + due,
 		"Описание: " + description,
 	}
-	if strings.HasPrefix(issue.URL, "https://") {
-		lines = append(lines, "[Открыть задачу]("+issue.URL+")")
-	}
 	return strings.Join(lines, "\n"), nil
 }
 
@@ -60,7 +60,7 @@ func formatMockJiraList(result any) (string, error) {
 			Summary string `json:"summary"`
 			Status  string `json:"status"`
 			DueDate string `json:"due_date"`
-			URL     string `json:"url"`
+			DueAt   string `json:"due_at"`
 		} `json:"issues"`
 		Truncated bool `json:"truncated"`
 	}
@@ -80,11 +80,10 @@ func formatMockJiraList(result any) (string, error) {
 			return "", errors.New("incomplete Jira issue in list")
 		}
 		line := "- **" + issue.Key + "** — " + issue.Summary + "; статус: " + issue.Status
-		if issue.DueDate != "" {
+		if issue.DueAt != "" {
+			line += "; срок: " + issue.DueAt
+		} else if issue.DueDate != "" {
 			line += "; срок: " + issue.DueDate
-		}
-		if strings.HasPrefix(issue.URL, "https://") {
-			line += "; [открыть задачу](" + issue.URL + ")"
 		}
 		lines = append(lines, line)
 	}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"strings"
@@ -59,6 +60,41 @@ func registerFormRoutes(mux *http.ServeMux, key string, teamURL string) {
 			return
 		}
 		writeJSON(w, 200, v)
+	})))
+	mux.Handle("POST /v1/forms/{id}/validate", authorize(key, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token := withToken(w, r)
+		if token == "" {
+			return
+		}
+		var in struct {
+			Version int            `json:"version"`
+			Values  map[string]any `json:"values"`
+		}
+		if json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&in) != nil || in.Version < 1 || in.Values == nil {
+			writeError(w, 400, errText("form version and values are required"))
+			return
+		}
+		result, err := client.ValidateForm(r.Context(), token, r.PathValue("id"), in.Values)
+		if err != nil {
+			var remote *scenario.RemoteError
+			if errors.As(err, &remote) {
+				switch remote.Status {
+				case http.StatusBadRequest:
+					writeError(w, http.StatusBadRequest, errText("Проверьте значения полей формы."))
+					return
+				case http.StatusUnauthorized, http.StatusForbidden:
+					writeError(w, remote.Status, errText("team session is unavailable"))
+					return
+				}
+			}
+			writeError(w, http.StatusServiceUnavailable, errText("form validation unavailable"))
+			return
+		}
+		if result["version"] != float64(in.Version) {
+			writeError(w, http.StatusConflict, errText("Форма изменилась. Откройте её заново."))
+			return
+		}
+		writeJSON(w, http.StatusOK, result)
 	})))
 	mux.Handle("POST /v1/forms/{id}/submit", authorize(key, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := withToken(w, r)

@@ -15,6 +15,7 @@ type jiraIssue struct {
 	Status            string `json:"status"`
 	Description       string `json:"description"`
 	DueDate           string `json:"due_date,omitempty"`
+	DueAt             string `json:"due_at,omitempty"`
 	StartDate         string `json:"start_date,omitempty"`
 	AssigneeAccountID string `json:"assignee_account_id,omitempty"`
 	AssigneeName      string `json:"assignee_name,omitempty"`
