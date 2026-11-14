@@ -137,21 +137,26 @@ function App() {
           <span className="topbar-icon"><Icon name={current.icon}/></span><strong className="topbar-section">{current.label}</strong></div>
         <div className="topbar-actions">
           <button className="icon-button widget-trigger" ref={widget.trigger} aria-label="Мини-чат с Бобби"
-            title="Мини-чат с Бобби" aria-pressed={!!widget.target} disabled={!sessionReady || widget.opening}
+            title="Мини-чат с Бобби" aria-pressed={!!widget.target} disabled={!token || widget.opening}
             onClick={() => void widget.open()}><Icon name="widget"/></button>
           <button className="topbar-profile" onClick={openProfile} aria-label="Открыть профиль">
             <span className="account-dot"/><span>{role ? roles[role] : 'Демо-режим'}</span><Icon name="user"/>
           </button>
         </div>
       </header>
-      {sessionReady && <div className="view" key={identity + ':' + sessionVersion}>
+      {token && <div className="view" key={identity + ':' + sessionVersion}>
         <Chat hidden={view !== 'chat'} token={token} apiKey={apiKey} identity={identity} formID={formID}
           catalog={catalog} draft={draft} onDraft={setDraft} onForm={id => navigate('chat', id)} onCloseForm={() => navigate('chat', '', !!formID && !!history.state?.catalog)}
           onCatalog={() => { navigate('chat', '', true); }} widget={widget}
           onOpenChat={() => { if (view !== 'chat') navigate('chat'); }}/>
         {view === 'tasks' && <Tasks token={token} apiKey={apiKey} onProfile={openProfile}/>}
       </div>}
-      {!sessionReady && <div className="section-page"><Notice>Открываем Бобби…</Notice></div>}
+      {!token && <div className="section-page">
+        <Notice error={!!demoError} action={demoError && <button className="text-button" onClick={() => {
+          setDemoError('');
+          setSessionVersion(value => value + 1);
+        }}>Повторить</button>}>{demoError || 'Подключаем демо-сессию…'}</Notice>
+      </div>}
     </main>
     {menu && <Modal title="Разделы" className="menu-dialog" onClose={() => setMenu(false)}>
       <nav className="navigation" aria-label="Основная навигация">{links()}</nav>

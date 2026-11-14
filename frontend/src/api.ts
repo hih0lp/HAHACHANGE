@@ -71,9 +71,15 @@ export async function request<T>(path: string, options: Options = {}): Promise<T
 
 const formPath = (id: string) => '/v1/forms/' + encodeURIComponent(id);
 export const api = {
-  demo: () => request<Session>('/v1/team-access/session', { body: {} }),
+  demo: async () => {
+    const session = await request<Session>('/v1/team-access/session', { body: {} });
+    if (typeof session.access_token !== 'string' || !session.access_token.trim()) {
+      throw new ApiError('Missing access token', 502);
+    }
+    return session;
+  },
   role: (role: Role) => request('/v1/demo/role', { body: { role } }),
-  history: (key: string) => request<{ turns: Job[] }>('/v1/chat/history', { key }),
+  history: (auth: Auth) => request<{ turns: Job[] }>('/v1/chat/history', auth),
   ask: (query: string, auth: Auth) => request<Job>('/v1/jobs', { ...auth, body: { query, scenario: 'general' } }),
   edit: (id: string, query: string, auth: Auth) => request<Job>('/v1/jobs/' + encodeURIComponent(id) + '/edit', { ...auth, body: { query } }),
   stop: (id: string, auth: Auth) => request<Job>('/v1/jobs/' + encodeURIComponent(id) + '/stop', { ...auth, body: {} }),
@@ -88,7 +94,7 @@ export const api = {
     request<Receipt>(formPath(id) + '/submit', { ...auth, idem, body: { version, values, confirmed: true } }),
   jira: (auth: Auth) => request<{ enabled: boolean; reminders: Reminder[] }>('/v1/tasks/jira', auth),
   calendar: (auth: Auth) => request<{ data?: { items?: CalendarEvent[] } }>('/v1/calendar/reminders', auth),
-  deadlines: (key: string) => request<{ notifications: (Reminder & { kind: string })[] }>('/v1/deadline-notifications', { key }),
+  deadlines: (auth: Auth) => request<{ notifications: (Reminder & { kind: string })[] }>('/v1/deadline-notifications', auth),
 };
 
 export function errorText(error: unknown, fallback: string) {

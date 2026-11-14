@@ -25,7 +25,7 @@ const access = {
 };
 const answer = '### Ваш первый шаг\nПосмотрите задачи проекта в [Jira](https://example.atlassian.net/browse/DEMO-5).\nСверьте рабочий процесс с [Playbook](https://github.com/avito-tech/playbook).\n[Заполнить заявку](/forms/access-request)';
 
-async function fixtures(page, { deadline = false } = {}) {
+async function fixtures(page, { deadline = false, beforeSession = async () => {} } = {}) {
   let submits = 0;
   let committed;
   let serial = 0;
@@ -50,8 +50,13 @@ async function fixtures(page, { deadline = false } = {}) {
     const body = request.postDataJSON();
     const respond = (json, status = 200) => route.fulfill({ json, status });
     if (path === '/v1/demo/role') { role = body.role; return respond({ role }); }
-    if (path === '/v1/team-access/session') { sessions.push(role); return respond({ access_token: 'demo-' + role, role, expires_in: 3600 }); }
+    if (path === '/v1/team-access/session') {
+      await beforeSession();
+      sessions.push(role);
+      return respond({ access_token: 'demo-' + role, role, expires_in: 3600 });
+    }
     if (path === '/v1/scenarios/login') { loginRequests++; return respond({ error: 'Unexpected login' }, 500); }
+    assert.equal(request.headers().authorization, 'Bearer demo-' + role, path);
     if (path === '/v1/chat/history') return respond({ turns: [...jobs].reverse() });
     if (path === '/v1/deadline-notifications') return respond({ notifications: deadline ? [{
       id: 'deadline-1', kind: 'intern_deadline', key: 'DEMO-5', summary: 'Тестовый срок',
@@ -83,10 +88,7 @@ async function fixtures(page, { deadline = false } = {}) {
       return respond({ ...job, status: 'queued', answer: undefined }, 202);
     }
     if (path.startsWith('/v1/jobs/')) assert.fail('Job updates must use WebSocket');
-    if (path === '/v1/forms') {
-      assert.equal(request.headers().authorization, 'Bearer demo-' + role);
-      return respond({ forms: [access] });
-    }
+    if (path === '/v1/forms') return respond({ forms: [access] });
     if (path === '/v1/form-resources') return respond({ resources: [baseScenario.widget.resource] });
     if (path === '/v1/forms/access-request') return respond(access);
     if (path === '/v1/forms/access-request/access-request') return respond({ receipt: committed ?? null });
@@ -147,6 +149,19 @@ try {
   const launch = { headless: true, args: ['--no-sandbox'] };
   if (process.env.BOBBY_CHROME) launch.executablePath = process.env.BOBBY_CHROME;
   browser = await chromium.launch(launch);
+  {
+    const page = await browser.newPage();
+    const session = Promise.withResolvers();
+    await fixtures(page, { beforeSession: () => session.promise });
+    await page.goto(base);
+    await page.getByText('Подключаем демо-сессию…').waitFor();
+    assert.equal(await page.getByRole('textbox', { name: 'Ваш вопрос' }).count(), 0);
+    assert.equal(await page.getByRole('button', { name: 'Мини-чат с Бобби' }).isDisabled(), true);
+    session.resolve();
+    await page.getByRole('button', { name: 'С чего начать?' }).click();
+    await page.getByRole('heading', { name: 'Ваш первый шаг' }).waitFor();
+    await page.close();
+  }
   {
     const page = await browser.newPage();
     const errors = [];

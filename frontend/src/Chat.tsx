@@ -64,7 +64,7 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
   useEffect(() => {
     let active = true;
     setHistoryError('');
-    void api.history(apiKey).then(({ turns }) => {
+    void api.history({ token, key: apiKey }).then(({ turns }) => {
       if (active) setJobs(current => {
         const latest = new Map([...turns].reverse().filter(job => !replaced.current.has(job.id)).map(job => [job.id, job]));
         current.forEach(job => {
@@ -77,7 +77,7 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
       if (active && !(err instanceof ApiError && err.status === 404)) setHistoryError(errorText(err, 'История чата временно недоступна.'));
     });
     return () => { active = false; };
-  }, [apiKey, reload]);
+  }, [apiKey, token, reload]);
 
   useEffect(() => {
     const active = watchers.current;
@@ -111,7 +111,7 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
   useEffect(() => {
     if (!token) return;
     let active = true;
-    const refresh = () => void api.deadlines(apiKey).then(({ notifications }) => {
+    const refresh = () => void api.deadlines({ token, key: apiKey }).then(({ notifications }) => {
       if (active) setDeadlines(notifications.filter(item =>
         Date.parse(item.due_at) > Date.now() &&
         !dismissedDeadlines.current.has(item.id) &&
