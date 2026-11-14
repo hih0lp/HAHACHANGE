@@ -18,12 +18,13 @@ import (
 )
 
 type Config struct {
-	QdrantURL      string
-	EmbeddingsURL  string
-	DocumentsPath  string
-	CollectionName string
-	ChunkSize      int
-	ChunkOverlap   int
+	QdrantURL            string
+	EmbeddingsURL        string
+	DocumentsPath        string
+	CollectionName       string
+	MemoryCollectionName string
+	ChunkSize            int
+	ChunkOverlap         int
 }
 
 type Service struct {

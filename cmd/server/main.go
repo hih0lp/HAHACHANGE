@@ -176,12 +176,13 @@ func loadConfig() config {
 		Jira:           jiraConfig{Mode: env("JIRA_MODE", "off"), BaseURL: env("JIRA_BASE_URL", "http://mock-jira:8080"), ProjectKey: os.Getenv("JIRA_PROJECT_KEY")},
 		Reminder:       reminderConfig{InternAccountID: os.Getenv("REMINDER_INTERN_ACCOUNT_ID"), HoursBefore: envInt("REMINDER_HOURS_BEFORE", 24), InternMinutesBefore: envInt("REMINDER_INTERN_MINUTES_BEFORE", 0), MentorMinutesBefore: envInt("REMINDER_MENTOR_MINUTES_BEFORE", 0), TimeZone: env("REMINDER_TIMEZONE", "Europe/Moscow")},
 		RAG: rag.Config{
-			QdrantURL:      env("QDRANT_URL", "http://qdrant:6333"),
-			EmbeddingsURL:  env("EMBEDDINGS_URL", "http://embeddings:80"),
-			DocumentsPath:  env("DOCUMENTS_PATH", "/data/playbook"),
-			CollectionName: env("COLLECTION_NAME", "avito_playbook"),
-			ChunkSize:      envInt("CHUNK_SIZE", 1100),
-			ChunkOverlap:   envInt("CHUNK_OVERLAP", 180),
+			QdrantURL:            env("QDRANT_URL", "http://qdrant:6333"),
+			EmbeddingsURL:        env("EMBEDDINGS_URL", "http://embeddings:80"),
+			DocumentsPath:        env("DOCUMENTS_PATH", "/data/playbook"),
+			CollectionName:       env("COLLECTION_NAME", "avito_playbook"),
+			MemoryCollectionName: env("CHAT_MEMORY_COLLECTION", "bobby_chat_memory"),
+			ChunkSize:            envInt("CHUNK_SIZE", 1100),
+			ChunkOverlap:         envInt("CHUNK_OVERLAP", 180),
 		},
 	}
 }
