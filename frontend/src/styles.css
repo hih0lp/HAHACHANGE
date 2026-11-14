@@ -270,7 +270,7 @@
     }
     @keyframes bobby-breathe {
       0%, 100% { transform: translateY(0) scale(1); }
-      50% { transform: translateY(-13%) scale(1.06, 1.11); }
+      50% { transform: translateY(-4%) scale(1.015, 1.035); }
     }
     @keyframes bobby-nod {
       0%, 100% { rotate: 0deg; translate: 0 0; }

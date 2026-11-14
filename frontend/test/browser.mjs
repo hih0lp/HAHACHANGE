@@ -265,7 +265,7 @@ try {
         const peak = bottom - body.getBoundingClientRect().bottom;
         motion.currentTime = midpoint * 1.5;
         const descent = bottom - body.getBoundingClientRect().bottom;
-        if (peak < 5 || ascent < 1 || descent < 1 || ascent >= peak || descent >= peak) {
+        if (peak < 1 || peak > 3 || ascent <= 0 || descent <= 0 || ascent >= peak || descent >= peak) {
           throw new Error(`Unexpected breathing path: ${ascent}, ${peak}, ${descent}`);
         }
       } finally {
@@ -395,7 +395,10 @@ try {
         breath.currentTime = 0;
         const bottom = body.getBoundingClientRect().bottom;
         breath.currentTime = breath.effect.getTiming().duration / 2;
-        assertMotion(bottom - body.getBoundingClientRect().bottom >= 5, 'Breathing is too subtle in the chat');
+        const frame = body.getBoundingClientRect();
+        const icon = avatar.getBoundingClientRect();
+        assertMotion(bottom - frame.bottom >= 1, 'Bobby does not breathe in the chat');
+        assertMotion(frame.top >= icon.top && frame.bottom <= icon.bottom, 'Bobby breathes outside the avatar box');
         blink.currentTime = 0;
         assertMotion(getComputedStyle(eyelids).opacity === '0', 'Eyelids cover open eyes');
         blink.currentTime = blink.effect.getTiming().duration * .29;
