@@ -111,6 +111,59 @@ func TestPerUserTokenBinding(t *testing.T) {
 	}
 }
 
+func TestMockImplementsEveryGitLabTool(t *testing.T) {
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/me" {
+			if r.Header.Get("Authorization") != "Bearer demo" {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			fmt.Fprint(w, `{"id":"intern"}`)
+			return
+		}
+		mockGitLab(w, r)
+	}))
+	defer provider.Close()
+	app := httptest.NewServer(bridge{gitlab: provider.URL, directory: provider.URL, mock: true, client: provider.Client()}.handler())
+	defer app.Close()
+	ctx := context.Background()
+	client := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "1"}, nil)
+	if denied, err := client.Connect(ctx, &mcp.StreamableClientTransport{Endpoint: app.URL}, nil); err == nil {
+		denied.Close()
+		t.Fatal("anonymous session connected")
+	}
+	session, err := client.Connect(ctx, &mcp.StreamableClientTransport{Endpoint: app.URL, HTTPClient: &http.Client{Transport: bearerTransport{"demo"}}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	tools, err := session.ListTools(ctx, nil)
+	if err != nil || len(tools.Tools) != len(operations) {
+		t.Fatalf("tools/list: %v", err)
+	}
+	for _, tool := range tools.Tools {
+		args := map[string]any{"project": mockPath}
+		switch tool.Name {
+		case "gitlab_file":
+			args["path"], args["ref"] = "README.md", "main"
+		case "gitlab_commit_diff":
+			args["id"] = mockSHA
+		case "gitlab_merge_request", "gitlab_merge_request_notes", "gitlab_merge_request_diff", "gitlab_approval_state":
+			args["id"] = "1"
+		}
+		result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: tool.Name, Arguments: args})
+		if err != nil || result.IsError {
+			t.Fatalf("%s: %v, %v", tool.Name, result, err)
+		}
+		if tool.Name == "gitlab_review_reminders" {
+			data := result.StructuredContent.(map[string]any)
+			if reminders, ok := data["reminders"].([]any); !ok || len(reminders) != 1 {
+				t.Fatalf("expected a demo review reminder, got %v", data)
+			}
+		}
+	}
+}
+
 type bearerTransport struct{ token string }
 
 func (b bearerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
