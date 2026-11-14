@@ -64,7 +64,7 @@ async function fixtures(page) {
       assert.equal(request.headers().authorization, 'Bearer demo-' + role);
       return respond({ forms: [access] });
     }
-    if (path === '/v1/forms/resources') return respond({ resources: [baseScenario.widget.resource] });
+    if (path === '/v1/form-resources') return respond({ resources: [baseScenario.widget.resource] });
     if (path === '/v1/forms/access-request') return respond(access);
     if (path.endsWith('/validate')) return respond(body.values.reason.length < 5 ? { error: 'invalid form values' } : { valid: true }, body.values.reason.length < 5 ? 400 : 200);
     if (path.endsWith('/submit')) {

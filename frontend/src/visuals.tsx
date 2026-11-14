@@ -28,22 +28,24 @@ export function Icon({ name, ...props }: SVGProps<SVGSVGElement> & { name: IconN
 type BobbyState = 'idle' | 'thinking' | 'answering' | 'listening' | 'waiting-form';
 
 export function Bobby({ className, state = 'idle' }: { className?: string; state?: BobbyState }) {
-  return <svg className={className} data-bobby-state={state} viewBox={state === 'idle' ? '174 119 935 996' : '30 75 1240 1040'} aria-hidden="true">
-    <g stroke="var(--bobby-ink)" strokeWidth="24" strokeLinecap="round" strokeLinejoin="round">
-      <path fill="var(--bobby-blue)" d="M463 907c-12 28-20 56-43 78-24 17-48 44-35 74 12 29 49 28 77 26 58-3 96-10 105-60l15-93Zm222 21c-8 30-19 64-17 92 2 52 48 61 104 61 54 0 108-6 107-47-1-37-33-58-60-68l16-54Z"/>
-      <path fill="white" d="M288 794c-48-52-76-106-77-170-9-202 179-400 397-453 178-44 317 10 398 142 80 130 95 292 8 430-121 196-390 266-607 166-55 35-106 54-145 52-37-2-54-28-38-59 18-36 47-66 64-108Z"/>
+  return <svg className={className} data-bobby-state={state} viewBox="30 10 1240 1170" aria-hidden="true">
+    <g className="bobby-body">
+      <g stroke="var(--bobby-ink)" strokeWidth="24" strokeLinecap="round" strokeLinejoin="round">
+        <path fill="var(--bobby-blue)" d="M463 907c-12 28-20 56-43 78-24 17-48 44-35 74 12 29 49 28 77 26 58-3 96-10 105-60l15-93Zm222 21c-8 30-19 64-17 92 2 52 48 61 104 61 54 0 108-6 107-47-1-37-33-58-60-68l16-54Z"/>
+        <path fill="white" d="M288 794c-48-52-76-106-77-170-9-202 179-400 397-453 178-44 317 10 398 142 80 130 95 292 8 430-121 196-390 266-607 166-55 35-106 54-145 52-37-2-54-28-38-59 18-36 47-66 64-108Z"/>
+      </g>
+      <ellipse cx="885" cy="315" rx="84" ry="54" fill="var(--bobby-blue)" transform="rotate(42 885 315)"/>
+      <g fill="var(--bobby-ink)">
+        <ellipse cx="572" cy="550" rx="53" ry="56" transform="rotate(12 572 550)"/>
+        <ellipse cx="865" cy="482" rx="50" ry="54" transform="rotate(12 865 482)"/>
+      </g>
+      <g fill="white" transform={state === 'thinking' ? 'translate(4 -9)' : state === 'listening' ? 'translate(-29 7)' : undefined}>
+        <circle cx="586" cy="519" r="14"/><circle cx="877" cy="454" r="14"/>
+      </g>
+      <path d={state === 'answering' ? 'M690 573l94-19c4 88-77 107-94 19Z' : state === 'listening' ? 'M709 585l49-10' : 'M695 581c28 23 68 10 80-22'}
+        fill={state === 'answering' ? 'var(--bobby-blue)' : 'none'} stroke="var(--bobby-ink)" strokeWidth="25" strokeLinecap="round" strokeLinejoin="round"/>
     </g>
-    <ellipse cx="885" cy="315" rx="84" ry="54" fill="var(--bobby-blue)" transform="rotate(42 885 315)"/>
-    <g fill="var(--bobby-ink)">
-      <ellipse cx="572" cy="550" rx="53" ry="56" transform="rotate(12 572 550)"/>
-      <ellipse cx="865" cy="482" rx="50" ry="54" transform="rotate(12 865 482)"/>
-    </g>
-    <g fill="white" transform={state === 'thinking' ? 'translate(4 -9)' : state === 'listening' ? 'translate(-29 7)' : undefined}>
-      <circle cx="586" cy="519" r="14"/><circle cx="877" cy="454" r="14"/>
-    </g>
-    <path d={state === 'answering' ? 'M690 573l94-19c4 88-77 107-94 19Z' : state === 'listening' ? 'M709 585l49-10' : 'M695 581c28 23 68 10 80-22'}
-      fill={state === 'answering' ? 'var(--bobby-blue)' : 'none'} stroke="var(--bobby-ink)" strokeWidth="25" strokeLinecap="round" strokeLinejoin="round"/>
-    {state === 'thinking' && <g fill="var(--bobby-blue)"><circle cx="1000" cy="231" r="20"/><circle cx="1066" cy="189" r="29"/><circle cx="1130" cy="120" r="40"/></g>}
+    {state === 'thinking' && <g fill="var(--bobby-blue)"><circle cx="856" cy="176" r="20"/><circle cx="923" cy="126" r="29"/><circle cx="1003" cy="65" r="40"/></g>}
     {state === 'answering' && <path d="m1117 517 84-38m-84 109 90 27" fill="none" stroke="var(--bobby-blue)" strokeWidth="27" strokeLinecap="round"/>}
     {state === 'listening' && <path d="M173 512q-57 71-14 145M114 471Q32 572 92 682" fill="none" stroke="var(--bobby-blue)" strokeWidth="26" strokeLinecap="round"/>}
     {state === 'waiting-form' && <g fill="none" stroke="var(--bobby-blue)" strokeWidth="30" strokeLinecap="round">
