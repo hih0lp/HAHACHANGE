@@ -212,7 +212,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 			}
 		}
 		{
-			plan, planErr := a.planCalendar(ctx, question, time.Now().In(moscow), forms)
+			plan, planErr := a.planWithTools(ctx, question, time.Now().In(moscow), forms, teamTools)
 			if planErr != nil {
 				prompt += "\nПериод календаря не удалось определить; не делай утверждений о расписании без проверки."
 			} else {
@@ -228,7 +228,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 					if resourceErr != nil {
 						directParts = append(directParts, "Не удалось проверить каталог ресурсов и ваши права в учебном прототипе.")
 					} else {
-						selection, selectionErr := a.planCalendar(ctx, question, time.Now().In(moscow), forms, resources...)
+						selection, selectionErr := a.planWithTools(ctx, question, time.Now().In(moscow), forms, teamTools, resources...)
 						if selectionErr == nil {
 							plan.ResourceID, plan.Capability = selection.ResourceID, selection.Capability
 						}

@@ -80,7 +80,7 @@ func TestAccessCheckUsesSelectedCatalogueResource(t *testing.T) {
 
 func TestGitLabOverviewUsesProjectsMCP(t *testing.T) {
 	gitlab := mcp.NewServer(&mcp.Implementation{Name: "test-gitlab", Version: "1"}, nil)
-	mcp.AddTool(gitlab, &mcp.Tool{Name: "gitlab_projects"}, func(_ context.Context, _ *mcp.CallToolRequest, _ struct {
+	mcp.AddTool(gitlab, &mcp.Tool{Name: "gitlab_projects", Description: "List projects visible to the current account"}, func(_ context.Context, _ *mcp.CallToolRequest, _ struct {
 		Project string `json:"project"`
 	}) (*mcp.CallToolResult, map[string]any, error) {
 		return nil, map[string]any{"data": []any{map[string]string{"name": "Demo Project", "path_with_namespace": "demo/project"}}}, nil
@@ -92,8 +92,9 @@ func TestGitLabOverviewUsesProjectsMCP(t *testing.T) {
 			Messages []struct{ Content string }
 		}
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil || len(request.Messages) < 2 ||
-			!strings.Contains(request.Messages[0].Content, "The verb 'check' alone does not ask about permissions") {
-			t.Error("model did not receive the GitLab intent distinction")
+			!strings.Contains(request.Messages[1].Content, "List projects visible to the current account") ||
+			strings.Contains(request.Messages[0].Content, "проверь") {
+			t.Error("planner should receive the tool description without a canned query")
 		}
 		fmt.Fprint(w, `{"choices":[{"message":{"content":"{\"needs_gitlab_projects\":true}"}}]}`)
 	}))
