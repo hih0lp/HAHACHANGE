@@ -115,6 +115,7 @@
   .page-intro p { margin-top: var(--space-3); color: var(--muted); }
   .page-symbol { display: grid; place-items: center; width: 56px; height: 56px; border-radius: var(--radius-m); margin-bottom: var(--space-5); }
   .chat-page { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  .deadline-notices { max-height: 35dvh; overflow-y: auto; padding-inline: var(--space-8); }
   .chat-scroll { display: flex; flex-direction: column; overflow-y: auto; min-height: 0; flex: 1; padding: var(--space-6) var(--space-8); }
   .chat-inner { width: 100%; max-width: var(--content); margin: auto auto 0; }
   .chat-scroll:has(.welcome) .chat-inner { margin-block: auto 0; }
@@ -246,7 +247,7 @@
     .sidebar, .topbar-icon { display: none; }
     .topbar .mobile-menu { display: inline-flex; }
     .topbar { min-height: 60px; padding: var(--space-2) var(--space-4); }
-    .section-page, .chat-scroll, .chat-footer { padding-inline: var(--space-4); }
+    .section-page, .chat-scroll, .chat-footer, .deadline-notices { padding-inline: var(--space-4); }
   }
   @media (max-width: 520px) {
     .topbar-title { gap: var(--space-1); }

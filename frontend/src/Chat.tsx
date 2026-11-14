@@ -32,6 +32,15 @@ export function Chat({ token, apiKey, identity, formID, catalog, draft, onDraft,
   const [historyError, setHistoryError] = useState('');
   const [reload, setReload] = useState(0);
   const [deadlines, setDeadlines] = useState<Awaited<ReturnType<typeof api.deadlines>>['notifications']>([]);
+  const dismissedDeadlines = useRef(new Set<string>());
+  const deadlineStorageKey = (id: string) => 'bobby:deadline:dismissed:' + identity + ':' + id;
+
+  function dismissDeadline(id: string) {
+    dismissedDeadlines.current.add(id);
+    localStorage.setItem(deadlineStorageKey(id), '1');
+    setDeadlines(current => current.filter(item => item.id !== id));
+  }
+
   const watchers = useRef(new Map<string, () => void>());
   const retired = useRef(new Set<string>());
   const lock = useRef(false);
@@ -82,15 +91,20 @@ export function Chat({ token, apiKey, identity, formID, catalog, draft, onDraft,
   }, [jobs, apiKey]);
 
   useEffect(() => {
+    setDeadlines([]);
     if (!token) return;
     let active = true;
     const refresh = () => void api.deadlines(apiKey).then(({ notifications }) => {
-      if (active) setDeadlines(notifications.filter(item => Date.parse(item.due_at) > Date.now()));
+      if (active) setDeadlines(notifications.filter(item =>
+        Date.parse(item.due_at) > Date.now() &&
+        !dismissedDeadlines.current.has(item.id) &&
+        !localStorage.getItem(deadlineStorageKey(item.id)),
+      ));
     }).catch(() => {});
     refresh();
     const timer = setInterval(refresh, 15_000);
     return () => { active = false; clearInterval(timer); };
-  }, [apiKey, token]);
+  }, [apiKey, token, identity]);
 
   useEffect(() => {
     if (!jobs.length || !scroll.current) return;
@@ -183,10 +197,20 @@ export function Chat({ token, apiKey, identity, formID, catalog, draft, onDraft,
   }
 
   const auth = { token, key: apiKey };
-  const hasMessages = jobs.length > 0 || !!formID || catalog || deadlines.length > 0;
+  const hasMessages = jobs.length > 0 || !!formID || catalog;
   const composerState = sending ? 'thinking' : draft.trim() ? 'listening' : 'idle';
 
   return <div className={'chat-page' + (hasMessages ? ' has-messages' : '')}>
+    {deadlines.length > 0 && <div className="deadline-notices">
+      <div className="chat-inner">
+        {deadlines.map(item => <Notice key={item.id} error action={
+          <button className="text-button" onClick={() => dismissDeadline(item.id)}>Закрыть уведомление</button>
+        }>
+          <strong>{item.kind === 'mentor_deadline' ? 'Помогите стажёру' : 'Скоро дедлайн'}</strong>
+          <br/><External href={item.url}>{item.key} · {item.summary}</External> · {timeText(item.due_at)}
+        </Notice>)}
+      </div>
+    </div>}
     <div className="chat-scroll" ref={scroll}>
       <div className="chat-inner">
         {historyError && <Notice error action={<button className="text-button" onClick={() => setReload(value => value + 1)}>Повторить</button>}>{historyError}</Notice>}
@@ -196,10 +220,6 @@ export function Chat({ token, apiKey, identity, formID, catalog, draft, onDraft,
           <p>Помогу освоиться в команде и разобраться с первыми задачами.</p>
         </div>}
         {hasMessages && <div className="messages" aria-label="Сообщения чата">
-          {deadlines.map(item => <Notice key={item.id}>
-            <strong>{item.kind === 'mentor_24h' ? 'Помогите стажёру' : 'Скоро дедлайн'}</strong>
-            <br/><External href={item.url}>{item.key} · {item.summary}</External> · {timeText(new Date(Date.parse(item.due_at) - 1).toISOString(), true)}
-          </Notice>)}
           {jobs.map(job => <div key={job.id} className="turn">
             <div className="user-message">
               {editing === job.id ? <form className="message-edit" onSubmit={event => { event.preventDefault(); void saveEdit(job); }}>
