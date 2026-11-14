@@ -43,6 +43,9 @@ func runDistributed(cfg config) error {
 	if _, err := pool.Exec(ctx, `ALTER TABLE ai_jobs ADD COLUMN IF NOT EXISTS team_context jsonb`); err != nil {
 		return fmt.Errorf("team context schema: %w", err)
 	}
+	if _, err := pool.Exec(ctx, `ALTER TABLE ai_jobs ADD COLUMN IF NOT EXISTS memory_indexed_at timestamptz`); err != nil {
+		return fmt.Errorf("chat memory schema: %w", err)
+	}
 	if _, err := pool.Exec(ctx, `CREATE TABLE IF NOT EXISTS ai_scenario_events (event_id text PRIMARY KEY, received_at timestamptz NOT NULL DEFAULT now())`); err != nil {
 		return fmt.Errorf("scenario events schema: %w", err)
 	}
@@ -68,6 +71,7 @@ func runDistributed(cfg config) error {
 		return fmt.Errorf("dependencies: %w", err)
 	}
 	if os.Getenv("APP_ROLE") == "worker" {
+		go runChatMemoryIndexer(ctx, pool, service)
 		reader := kafka.NewReader(kafka.ReaderConfig{Brokers: brokers, Topic: topic, GroupID: env("KAFKA_GROUP", "ai-buddy-workers"), StartOffset: kafka.FirstOffset, MinBytes: 1, MaxBytes: 10e6})
 		defer reader.Close()
 		system.Reader = reader

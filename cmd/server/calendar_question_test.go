@@ -103,3 +103,15 @@ func TestPlannerClassifiesGitLabWithoutNameMatchingInGo(t *testing.T) {
 		t.Fatalf("plan=%+v err=%v", plan, err)
 	}
 }
+
+func TestPlannerCanRequestOldChatMemory(t *testing.T) {
+	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"choices":[{"message":{"content":"{\"needs_chat_memory\":true}"}}]}`)
+	}))
+	defer model.Close()
+	a := answerer{url: model.URL, model: "test", client: model.Client()}
+	plan, err := a.planCalendar(context.Background(), "Что мы решили раньше?", time.Now(), nil)
+	if err != nil || !plan.NeedsChatMemory {
+		t.Fatalf("plan=%+v err=%v", plan, err)
+	}
+}

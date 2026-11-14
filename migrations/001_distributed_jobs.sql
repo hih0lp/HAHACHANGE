@@ -12,7 +12,8 @@ CREATE TABLE IF NOT EXISTS ai_jobs (
     lease_until timestamptz,
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
-    completed_at timestamptz
+    completed_at timestamptz,
+    memory_indexed_at timestamptz
 );
 
 CREATE INDEX IF NOT EXISTS ai_jobs_owner_created_idx ON ai_jobs (owner_id, created_at DESC);

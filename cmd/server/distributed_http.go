@@ -35,16 +35,18 @@ func demoSession(secret string, next http.Handler) http.Handler {
 				}
 			}
 		}
-		if owner == "" && r.Method == http.MethodGet && (r.URL.Path == "/" || strings.HasPrefix(r.URL.Path, "/forms/")) {
-			id, err := distributed.NewID()
-			if err != nil {
-				writeError(w, 500, err)
-				return
+		if r.Method == http.MethodGet && (r.URL.Path == "/" || strings.HasPrefix(r.URL.Path, "/forms/")) {
+			if owner == "" {
+				id, err := distributed.NewID()
+				if err != nil {
+					writeError(w, 500, err)
+					return
+				}
+				owner = id
 			}
-			owner = id
 			mac := hmac.New(sha256.New, []byte(secret))
-			mac.Write([]byte(id))
-			http.SetCookie(w, &http.Cookie{Name: "ai_demo_session", Value: id + "." + hex.EncodeToString(mac.Sum(nil)), Path: "/", HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteLaxMode, MaxAge: 86400})
+			mac.Write([]byte(owner))
+			http.SetCookie(w, &http.Cookie{Name: "ai_demo_session", Value: owner + "." + hex.EncodeToString(mac.Sum(nil)), Path: "/", HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteLaxMode, MaxAge: 90 * 86400})
 		}
 		if owner == "" && !internalJiraMCP {
 			writeError(w, 401, errText("open the application to start a demo session"))
