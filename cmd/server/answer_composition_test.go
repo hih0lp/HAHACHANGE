@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -74,6 +75,32 @@ func TestAccessCheckUsesSelectedCatalogueResource(t *testing.T) {
 	answer := a.plannedAccessAnswer(context.Background(), "session", calendarPlan{ResourceID: "chosen-resource"}, []resourceChoice{{ID: "chosen-resource", Name: "Ресурс команды", Capabilities: []string{"read"}}})
 	if !strings.Contains(answer, "Ресурс команды") || !strings.Contains(answer, "в прототипе право не выдано") || strings.Contains(answer, "chosen-resource") {
 		t.Fatalf("wrong access answer: %q", answer)
+	}
+}
+
+func TestGitLabOverviewUsesProjectsMCP(t *testing.T) {
+	gitlab := mcp.NewServer(&mcp.Implementation{Name: "test-gitlab", Version: "1"}, nil)
+	mcp.AddTool(gitlab, &mcp.Tool{Name: "gitlab_projects"}, func(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, map[string]any, error) {
+		return nil, map[string]any{"data": []any{map[string]string{"name": "Demo Project", "path_with_namespace": "demo/project"}}}, nil
+	})
+	mcpHTTP := testMCPServer(t, gitlab)
+	defer mcpHTTP.Close()
+	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			Messages []struct{ Content string }
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil || len(request.Messages) < 2 ||
+			!strings.Contains(request.Messages[0].Content, "The verb 'check' alone does not ask about permissions") {
+			t.Error("model did not receive the GitLab intent distinction")
+		}
+		fmt.Fprint(w, `{"choices":[{"message":{"content":"{\"needs_gitlab_projects\":true}"}}]}`)
+	}))
+	defer model.Close()
+	service := rag.New(rag.Config{EmbeddingsURL: "http://127.0.0.1:1", QdrantURL: "http://127.0.0.1:1"})
+	a := answerer{service: service, url: model.URL, model: "test", jiraMode: "mock", mcpURL: mcpHTTP.URL, gitLabMCPURL: mcpHTTP.URL}
+	answer, _, err := a.Ask(distributed.WithTeamToken(context.Background(), "session"), "проверь что у меня в гит лабе")
+	if err != nil || !strings.Contains(answer, "Demo Project (demo/project)") || strings.Contains(answer, "проверки доступа") {
+		t.Fatalf("wrong GitLab answer: %q, %v", answer, err)
 	}
 }
 
