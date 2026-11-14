@@ -170,7 +170,7 @@ export function Chat({ token, apiKey, identity, formID, catalog, draft, onDraft,
                 </Notice>}
                 {!completed(job) && (waiting[job.id] === 'timeout'
                   ? <Notice error action={<button className="text-button" onClick={() => { watchers.current.delete(job.id); setJobs([...jobs]); }}>Проверить ответ</button>}>Ответ пока не получен.</Notice>
-                  : <p className="muted"><span className="loading-dot"/>{waiting[job.id] === 'reconnect' ? 'Проверяем статус…' : job.status === 'queued' ? 'Вопрос в очереди…' : 'Готовлю ответ…'}</p>)}
+                  : <p className="message-status muted"><span className="loading-dot"/>{waiting[job.id] === 'reconnect' ? 'Проверяем статус…' : job.status === 'queued' ? 'Вопрос в очереди…' : 'Готовлю ответ…'}</p>)}
                 {completed(job) && <Stamp value={job.completed_at || job.created_at}/>}
               </div>
             </div>
