@@ -39,7 +39,8 @@ async function fixtures(page) {
     if (job?.query.includes('Начать')) {
       socket.send(JSON.stringify({ ...job, status: 'running' }));
       setTimeout(() => socket.send(JSON.stringify(job)), 100);
-    } else socket.close();
+    } else if (job) socket.send(JSON.stringify(job));
+    else socket.close();
   });
   await page.route('**/v1/**', async route => {
     const request = route.request();
@@ -59,7 +60,7 @@ async function fixtures(page) {
       jobs.push(job);
       return respond({ ...job, status: 'queued', answer: undefined }, 202);
     }
-    if (path.startsWith('/v1/jobs/')) return respond(jobs.find(job => job.id === path.split('/').at(-1)));
+    if (path.startsWith('/v1/jobs/')) assert.fail('Job updates must use WebSocket');
     if (path === '/v1/forms') {
       assert.equal(request.headers().authorization, 'Bearer demo-' + role);
       return respond({ forms: [access] });
@@ -146,6 +147,8 @@ try {
     await page.getByRole('button', { name: 'С чего начать?' }).click();
     await page.getByRole('link', { name: 'Данные Jira Jira' }).waitFor();
     await page.getByRole('link', { name: 'Материалы Playbook' }).waitFor();
+    assert.equal(await page.locator('.answer-reveal').count(), 1);
+    assert.equal(await page.locator('.message-avatar [data-bobby-state="answering"]').count(), 1);
     await shot(page, 'answer', width);
     const formTrigger = page.getByRole('button', { name: 'Заполнить заявку' });
     await formTrigger.click();
@@ -176,12 +179,14 @@ try {
     await input.fill('Пустой ответ');
     await input.press('Enter');
     await page.getByText('Ответ пуст.', { exact: false }).waitFor();
+    assert.equal(await page.locator('.message-avatar [data-bobby-state="answering"]').count(), 0);
     await input.fill('Проверка тайм-аута');
     await input.press('Enter');
     await page.getByText('Время ожидания ответа истекло.').waitFor();
     await page.reload();
     await page.getByText('С чего начать адаптацию в команде?', { exact: true }).waitFor();
     await page.getByText('Время ожидания ответа истекло.').waitFor();
+    assert.equal(await page.locator('.answer-reveal').count(), 0);
     assert.equal(await page.getByRole('button', { name: 'Новый чат' }).count(), 0);
     assert.equal(await page.getByRole('combobox', { name: 'Открыть беседу' }).count(), 0);
 

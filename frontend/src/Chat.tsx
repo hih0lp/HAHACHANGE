@@ -23,6 +23,7 @@ type Props = {
 
 export function Chat({ token, apiKey, identity, formID, catalog, draft, onDraft, onForm, onCloseForm, onCatalog }: Props) {
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [revealedAnswers, setRevealedAnswers] = useState<Set<string>>(() => new Set());
   const [waiting, setWaiting] = useState<Record<string, 'reconnect' | 'timeout'>>({});
   const [sending, setSending] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
@@ -78,6 +79,9 @@ export function Chat({ token, apiKey, identity, formID, catalog, draft, onDraft,
       if (completed(job) || watchers.current.has(job.id)) continue;
       const stop = watchJob(job.id, { key: apiKey }, update => {
         if (retired.current.has(update.id)) return;
+        if (update.status === 'completed' && update.answer?.trim()) {
+          setRevealedAnswers(previous => new Set(previous).add(update.id));
+        }
         setJobs(previous => upsert(previous, update));
         setWaiting(previous => {
           if (!previous[update.id]) return previous;
@@ -129,6 +133,7 @@ export function Chat({ token, apiKey, identity, formID, catalog, draft, onDraft,
     setError('');
     try {
       const job = await api.ask(query, { token, key: apiKey });
+      if (job.status === 'completed' && job.answer?.trim()) setRevealedAnswers(previous => new Set(previous).add(job.id));
       setJobs(current => upsert(current, { ...job, query, created_at: job.created_at || new Date().toISOString() }));
       onDraft('');
       input.current?.focus();
@@ -220,7 +225,7 @@ export function Chat({ token, apiKey, identity, formID, catalog, draft, onDraft,
           <p>Помогу освоиться в команде и разобраться с первыми задачами.</p>
         </div>}
         {hasMessages && <div className="messages" aria-label="Сообщения чата">
-          {jobs.map(job => <div key={job.id} className="turn">
+          {jobs.map((job, index) => <div key={job.id} className="turn">
             <div className="user-message">
               {editing === job.id ? <form className="message-edit" onSubmit={event => { event.preventDefault(); void saveEdit(job); }}>
                 <textarea aria-label="Изменённый вопрос" value={editedQuery} onChange={event => setEditedQuery(event.target.value)} rows={3} autoFocus/>
@@ -228,10 +233,10 @@ export function Chat({ token, apiKey, identity, formID, catalog, draft, onDraft,
               </form> : <><p>{job.query}</p><div className="message-actions"><button className="message-action" aria-label="Изменить вопрос" title="Изменить вопрос" disabled={!!changing} onClick={() => { setEditing(job.id); setEditedQuery(job.query); }}><Icon name="edit"/></button>{!completed(job) && <button className="message-action" aria-label="Остановить ответ" title="Остановить ответ" disabled={!!changing} onClick={() => void stopJob(job)}><Icon name="stop"/></button>}</div><Stamp value={job.created_at}/></>}
             </div>
             <div className="assistant-message" aria-live="polite">
-              <span className="message-avatar"><Bobby state={job.status === 'completed' && job.answer?.trim() ? 'answering' : !completed(job) && !waiting[job.id] ? 'thinking' : 'idle'}/></span>
+              <span className="message-avatar"><Bobby state={index < jobs.length - 1 ? 'idle' : job.status === 'completed' && job.answer?.trim() ? 'answering' : !completed(job) && !waiting[job.id] ? 'thinking' : 'idle'}/></span>
+              <strong className="message-name">Бобби</strong>
               <div className="message-body">
-                <strong className="message-name">Бобби</strong>
-                {job.status === 'completed' && (job.answer?.trim() ? <Answer text={job.answer} onForm={openForm}/> : <p>Ответ пуст. Уточните вопрос или попробуйте снова.</p>)}
+                {job.status === 'completed' && (job.answer?.trim() ? <Answer text={job.answer} onForm={openForm} reveal={revealedAnswers.has(job.id)}/> : <p>Ответ пуст. Уточните вопрос или попробуйте снова.</p>)}
                 {job.status === 'failed' && (job.error === 'Остановлено пользователем' ? <p className="muted">Ответ остановлен.</p> : <Notice error action={<button className="text-button" onClick={() => { onDraft(job.query); input.current?.focus(); }}>Повторить</button>}>
                   {job.error?.toLowerCase().match(/timeout|deadline exceeded/) ? 'Время ожидания ответа истекло.' : 'Не удалось получить ответ.'}
                 </Notice>)}
