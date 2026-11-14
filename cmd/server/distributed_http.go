@@ -66,7 +66,10 @@ func ownerFrom(r *http.Request) string {
 
 func registerDistributedJobRoutes(mux *http.ServeMux, jobs *distributed.System, apiKey string) {
 	mux.Handle("POST /v1/jobs", authorize(apiKey, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var input struct{ Query, Scenario string }
+		var input struct {
+			Query, Scenario string
+			ThreadID        string `json:"thread_id"`
+		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&input); err != nil {
 			writeError(w, 400, err)
 			return
@@ -85,6 +88,10 @@ func registerDistributedJobRoutes(mux *http.ServeMux, jobs *distributed.System, 
 			writeError(w, 400, errText("unknown scenario"))
 			return
 		}
+		if input.ThreadID != "" && input.ThreadID != "legacy" {
+			writeError(w, 400, errText("only the original chat is available"))
+			return
+		}
 		teamToken := ""
 		if endpoint := os.Getenv("TEAM_ACCESS_URL"); endpoint != "" {
 			if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
@@ -97,13 +104,9 @@ func registerDistributedJobRoutes(mux *http.ServeMux, jobs *distributed.System, 
 				}
 			}
 		}
-		job, err := jobs.Submit(r.Context(), ownerFrom(r), input.Scenario, input.Query)
+		job, err := jobs.SubmitChat(r.Context(), ownerFrom(r), input.Scenario, input.Query, teamToken)
 		if err != nil {
 			writeError(w, 503, errText("request storage is unavailable"))
-			return
-		}
-		if err = jobs.StoreTeamToken(r.Context(), job.ID, teamToken); err != nil {
-			writeError(w, 503, errText("team access tools are temporarily unavailable"))
 			return
 		}
 		w.Header().Set("Location", "/v1/jobs/"+job.ID)

@@ -24,8 +24,12 @@ func registerHistoryRoutes(mux *http.ServeMux, apiKey string, jobs *distributed.
 			writeError(w, http.StatusUnauthorized, errText("chat session is required"))
 			return
 		}
+		if thread := r.URL.Query().Get("thread_id"); thread != "" && thread != "legacy" {
+			writeError(w, http.StatusNotFound, errText("chat not found"))
+			return
+		}
 		rows, err := jobs.DB.Query(r.Context(), `SELECT id::text, query, status, COALESCE(answer,''), COALESCE(error,''), created_at, completed_at
-			FROM ai_jobs WHERE owner_id=$1 ORDER BY created_at DESC, id DESC LIMIT 100`, owner)
+			FROM ai_jobs WHERE owner_id=$1 AND thread_id IS NULL ORDER BY created_at DESC, id DESC LIMIT 100`, owner)
 		if err != nil {
 			writeError(w, http.StatusServiceUnavailable, errText("chat history is unavailable"))
 			return

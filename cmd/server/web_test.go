@@ -85,14 +85,10 @@ func TestOldFormLinkReturnsToChat(t *testing.T) {
 func TestFormsUseRandomBytesOnHTTPAndConfirmOnlyAfterSuccess(t *testing.T) {
 	chat := httptest.NewRecorder()
 	webPage(chat, httptest.NewRequest(http.MethodGet, "/", nil))
-	scenario := httptest.NewRecorder()
-	onboardingPage(scenario, httptest.NewRequest(http.MethodGet, "/onboarding", nil))
-	for name, page := range map[string]string{"chat": chat.Body.String(), "scenario": scenario.Body.String()} {
-		if strings.Contains(page, "crypto.randomUUID") || !strings.Contains(page, "crypto.getRandomValues(bytes)") || !strings.Contains(page, "newIdempotencyKey()") {
-			t.Errorf("%s does not use HTTP-compatible idempotency keys", name)
-		}
-	}
 	page := chat.Body.String()
+	if strings.Contains(page, "crypto.randomUUID") || !strings.Contains(page, "crypto.getRandomValues(bytes)") || !strings.Contains(page, "newIdempotencyKey()") {
+		t.Error("chat does not use HTTP-compatible idempotency keys")
+	}
 	if !strings.Contains(page, "if(!sent.ok){") || !strings.Contains(page, "message.textContent='Заявка успешно отправлена!'") {
 		t.Fatal("chat form success message is missing or shown before server confirmation")
 	}

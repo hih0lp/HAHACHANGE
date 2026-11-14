@@ -51,6 +51,14 @@ func (s *System) Submit(ctx context.Context, owner, scenario, query string) (Job
 }
 
 func (s *System) SubmitWithContext(ctx context.Context, owner, scenario, query string, teamContext json.RawMessage) (Job, error) {
+	return s.submit(ctx, owner, scenario, query, teamContext, "")
+}
+
+func (s *System) SubmitChat(ctx context.Context, owner, scenario, query, token string) (Job, error) {
+	return s.submit(ctx, owner, scenario, query, nil, token)
+}
+
+func (s *System) submit(ctx context.Context, owner, scenario, query string, teamContext json.RawMessage, token string) (Job, error) {
 	id, err := NewID()
 	if err != nil {
 		return Job{}, err
@@ -61,12 +69,16 @@ func (s *System) SubmitWithContext(ctx context.Context, owner, scenario, query s
 	}
 	defer tx.Rollback(ctx)
 	var createdAt time.Time
-	err = tx.QueryRow(ctx, `INSERT INTO ai_jobs(id,owner_id,scenario,query,status,team_context) VALUES($1,$2,$3,$4,'queued',$5) RETURNING created_at`, id, owner, scenario, query, teamContext).Scan(&createdAt)
+	err = tx.QueryRow(ctx, `INSERT INTO ai_jobs(id,owner_id,scenario,query,status,team_context)
+		VALUES($1,$2,$3,$4,'queued',$5) RETURNING created_at`, id, owner, scenario, query, teamContext).Scan(&createdAt)
 	if err != nil {
 		return Job{}, err
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO ai_job_outbox(job_id,event_type) VALUES($1,'requested')`, id)
 	if err != nil {
+		return Job{}, err
+	}
+	if err := s.StoreTeamToken(ctx, id, token); err != nil {
 		return Job{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {

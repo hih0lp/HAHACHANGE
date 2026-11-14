@@ -76,10 +76,13 @@ func runChatMemoryIndexer(ctx context.Context, db *pgxpool.Pool, service *rag.Se
 
 func oldChatMemory(ctx context.Context, db *pgxpool.Pool, service *rag.Service, owner, jobID, query string) ([]oldChatTurn, error) {
 	var cutoff *time.Time
-	err := db.QueryRow(ctx, `SELECT MIN(created_at) FROM (
-		SELECT created_at FROM ai_jobs WHERE owner_id=$1 AND status='completed'
-		AND created_at < (SELECT created_at FROM ai_jobs WHERE id=$2 AND owner_id=$1)
-		ORDER BY created_at DESC, id DESC LIMIT 8) recent`, owner, jobID).Scan(&cutoff)
+	err := db.QueryRow(ctx, `SELECT MIN(previous.created_at) FROM (
+		SELECT previous.created_at FROM ai_jobs AS previous JOIN ai_jobs AS current_job
+		  ON previous.owner_id=current_job.owner_id
+		  AND previous.thread_id IS NOT DISTINCT FROM current_job.thread_id
+		WHERE current_job.id=$2 AND current_job.owner_id=$1 AND previous.status='completed'
+		  AND (previous.created_at, previous.id) < (current_job.created_at, current_job.id)
+		ORDER BY previous.created_at DESC, previous.id DESC LIMIT 8) previous`, owner, jobID).Scan(&cutoff)
 	if err != nil {
 		return nil, err
 	}
@@ -96,12 +99,17 @@ func oldChatMemory(ctx context.Context, db *pgxpool.Pool, service *rag.Service, 
 			break
 		}
 		var turn oldChatTurn
-		err := db.QueryRow(ctx, `SELECT created_at, left(query,1000), left(answer,2000)
-			FROM ai_jobs WHERE id=$1 AND owner_id=$2 AND status='completed'
-			AND created_at < (SELECT created_at FROM ai_jobs WHERE id=$3 AND owner_id=$2)
-			AND id NOT IN (SELECT id FROM ai_jobs WHERE owner_id=$2 AND status='completed'
-				AND created_at < (SELECT created_at FROM ai_jobs WHERE id=$3 AND owner_id=$2)
-				ORDER BY created_at DESC, id DESC LIMIT 8)`, hit.JobID, owner, jobID).
+		err := db.QueryRow(ctx, `SELECT previous.created_at, left(previous.query,1000), left(previous.answer,2000)
+			FROM ai_jobs AS previous JOIN ai_jobs AS current_job
+			  ON previous.owner_id=current_job.owner_id
+			  AND previous.thread_id IS NOT DISTINCT FROM current_job.thread_id
+			WHERE previous.id=$1 AND current_job.id=$3 AND current_job.owner_id=$2 AND previous.status='completed'
+			  AND (previous.created_at, previous.id) < (current_job.created_at, current_job.id)
+			  AND previous.id NOT IN (SELECT recent.id FROM ai_jobs AS recent
+				WHERE recent.owner_id=$2 AND recent.thread_id IS NOT DISTINCT FROM current_job.thread_id
+				  AND recent.status='completed'
+				  AND (recent.created_at, recent.id) < (current_job.created_at, current_job.id)
+				ORDER BY recent.created_at DESC, recent.id DESC LIMIT 8)`, hit.JobID, owner, jobID).
 			Scan(&turn.AskedAt, &turn.Question, &turn.Answer)
 		if err == nil {
 			turns = append(turns, turn)

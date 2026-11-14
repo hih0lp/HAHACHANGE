@@ -46,6 +46,9 @@ func runDistributed(cfg config) error {
 	if _, err := pool.Exec(ctx, `ALTER TABLE ai_jobs ADD COLUMN IF NOT EXISTS memory_indexed_at timestamptz`); err != nil {
 		return fmt.Errorf("chat memory schema: %w", err)
 	}
+	if err := distributed.EnsureChatSchema(ctx, pool); err != nil {
+		return fmt.Errorf("chat schema: %w", err)
+	}
 	if _, err := pool.Exec(ctx, `CREATE TABLE IF NOT EXISTS ai_scenario_events (event_id text PRIMARY KEY, received_at timestamptz NOT NULL DEFAULT now())`); err != nil {
 		return fmt.Errorf("scenario events schema: %w", err)
 	}
