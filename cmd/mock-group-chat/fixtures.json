@@ -1,0 +1,12 @@
+[
+  {"key":"general-1","group":"product","author":"approver","days_ago":1,"hour":10,"minute":0,"text":"По новому ранжированию каталога: предлагаю начать с 10% трафика и следить за долей пустых результатов."},
+  {"key":"general-2","group":"product","author":"intern","days_ago":1,"hour":10,"minute":3,"text":"Дашборд для сравнения старого и нового порядка карточек готов. Порог отката ещё обсуждаем."},
+  {"key":"general-3","group":"product","author":"approver","days_ago":1,"hour":10,"minute":5,"text":"Согласовано: начинаем в понедельник."},
+  {"key":"general-4","group":"product","author":"intern2","days_ago":1,"hour":15,"minute":0,"text":"По напоминаниям о доставке решили добавить ссылку на заказ в уведомление."},
+  {"key":"general-5","group":"product","author":"approver","days_ago":2,"hour":11,"minute":0,"text":"Первый эксперимент с поисковой выдачей предлагаю провести на 5% трафика."},
+  {"key":"general-6","group":"product","author":"intern2","days_ago":0,"hour":9,"minute":0,"text":"Сегодня уточнили план по поисковой выдаче, ждём проверки метрик."},
+  {"key":"catalog-1","group":"catalog","author":"approver","days_ago":1,"hour":12,"minute":0,"text":"Для эксперимента с ранжированием каталога закроем задачу CAT-128 после проверки мобильной выдачи."},
+  {"key":"catalog-2","group":"catalog","author":"intern","days_ago":1,"hour":12,"minute":3,"text":"Возьму проверку на Android."},
+  {"key":"search-1","group":"search","author":"approver","days_ago":1,"hour":12,"minute":0,"text":"Для обновления ранжирования поисковой выдачи снимем метрики задержки на отдельном стенде по задаче SEARCH-42."},
+  {"key":"search-2","group":"search","author":"intern2","days_ago":1,"hour":12,"minute":2,"text":"Подготовлю график задержек."}
+]

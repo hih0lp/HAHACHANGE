@@ -1,0 +1,12 @@
+FROM golang:1.23-alpine AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+COPY cmd/mock-group-chat ./cmd/mock-group-chat
+COPY internal/scenario ./internal/scenario
+RUN CGO_ENABLED=0 go build -trimpath -o /mock-group-chat ./cmd/mock-group-chat
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates
+COPY --from=build /mock-group-chat /usr/local/bin/mock-group-chat
+USER 10001
+EXPOSE 8080
+ENTRYPOINT ["/usr/local/bin/mock-group-chat"]
