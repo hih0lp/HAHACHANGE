@@ -62,6 +62,32 @@ func TestGitLabToolsRespectSubjectAndReadCommitFile(t *testing.T) {
 	}
 }
 
+func TestGitLabProjectsNeedsNoProjectArgument(t *testing.T) {
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/me":
+			fmt.Fprint(w, `{"id":"intern"}`)
+		case "/api/v4/projects":
+			fmt.Fprint(w, `[{"id":2,"name":"Demo"}]`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer provider.Close()
+	app := httptest.NewServer(bridge{gitlab: provider.URL, directory: provider.URL, mock: true, client: provider.Client()}.handler())
+	defer app.Close()
+	client := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "1"}, nil)
+	session, err := client.Connect(context.Background(), &mcp.StreamableClientTransport{Endpoint: app.URL, HTTPClient: &http.Client{Transport: bearerTransport{"demo"}}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "gitlab_projects", Arguments: map[string]any{}})
+	if err != nil || result.IsError {
+		t.Fatalf("project list: result=%+v err=%v", result, err)
+	}
+}
+
 func TestReviewRemindersSkipDraftsAndDoNotAssumeApprovals(t *testing.T) {
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v4/user" {

@@ -17,7 +17,7 @@ import (
 )
 
 type query struct {
-	Project string `json:"project" jsonschema:"GitLab numeric project ID or full namespace/project"`
+	Project string `json:"project,omitempty" jsonschema:"GitLab numeric project ID or full namespace/project; required for project-specific tools"`
 	Ref     string `json:"ref,omitempty" jsonschema:"branch, tag or commit SHA"`
 	Path    string `json:"path,omitempty" jsonschema:"repository-relative file or directory"`
 	ID      string `json:"id,omitempty" jsonschema:"commit SHA or merge request IID as required by this tool"`
