@@ -49,7 +49,7 @@ async function openInlineForm(container,formId){
       event.preventDefault();result.replaceChildren();
       try{
         const values={};for(const field of inlineForm.querySelectorAll('[data-name]')){let value=field.type==='checkbox'?field.checked:field.value;if(field.dataset.type==='integer'||field.dataset.type==='number')value=Number(value);if(field.dataset.type==='object'||field.dataset.type==='array')value=JSON.parse(value);values[field.dataset.name]=value}
-        const preview=document.createElement('pre');preview.textContent=JSON.stringify(values,null,2);result.append(preview);
+        const notice=document.createElement('p');notice.textContent='Подтвердите отправку заявки.';result.append(notice);
         const confirmButton=document.createElement('button');confirmButton.type='button';confirmButton.textContent='Подтвердить отправку';result.append(confirmButton);
         const idem=newIdempotencyKey();
         confirmButton.onclick=async()=>{
@@ -57,9 +57,9 @@ async function openInlineForm(container,formId){
           try{
             const headers={...authHeaders,'Content-Type':'application/json','Idempotency-Key':idem};
             const sent=await fetch('/v1/forms/'+encodeURIComponent(formId)+'/submit',{method:'POST',headers,body:JSON.stringify({version:definition.version,values,confirmed:true})});
-            const data=await sent.json();if(!sent.ok)throw Error(typeof data.error==='string'?data.error:'Не удалось отправить заявку. Проверьте значения полей.');
+            if(!sent.ok){const data=await sent.json().catch(()=>({}));const failure=Error(typeof data.error==='string'?data.error:'Не удалось отправить заявку. Проверьте поля или попробуйте позже.');failure.status=sent.status;throw failure}
             result.replaceChildren();const message=document.createElement('p');message.textContent='Заявка успешно отправлена!';result.append(message);inlineForm.remove();
-          }catch(error){confirmButton.disabled=false;const message=document.createElement('p');message.className='error';message.textContent=error.message;result.append(message)}
+          }catch(error){confirmButton.disabled=false;const message=document.createElement('p');if(error.status!==409)message.className='error';message.textContent=error.message;result.append(message)}
         };
       }catch(error){result.textContent='Проверьте значения полей: '+error.message;result.className='error'}
     };

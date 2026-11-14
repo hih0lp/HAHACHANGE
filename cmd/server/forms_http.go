@@ -79,7 +79,21 @@ func registerFormRoutes(mux *http.ServeMux, key string, teamURL string) {
 		})
 		result, ok := v.(map[string]any)
 		if err != nil || !ok || result["id"] == nil {
-			writeError(w, 400, errText("form could not be submitted: verify fields and access"))
+			resourceID, hasResource := in.Values["resource_id"].(string)
+			capability, hasCapability := in.Values["capability"].(string)
+			if hasResource && hasCapability && resourceID != "" && capability != "" {
+				if current, checkErr := client.Check(r.Context(), token, resourceID, capability); checkErr == nil {
+					switch current.State {
+					case "pending":
+						writeError(w, 409, errText("Заявка на этот доступ уже отправлена и ожидает решения."))
+						return
+					case "granted":
+						writeError(w, 409, errText("У вас уже есть этот доступ."))
+						return
+					}
+				}
+			}
+			writeError(w, 400, errText("Не удалось отправить заявку. Проверьте поля или попробуйте позже."))
 			return
 		}
 		writeJSON(w, 201, result)

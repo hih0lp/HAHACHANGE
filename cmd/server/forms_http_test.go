@@ -38,3 +38,25 @@ func TestFormResourcesComeFromCurrentTeam(t *testing.T) {
 		t.Fatalf("resource catalogue: %d %s", response.Code, response.Body.String())
 	}
 }
+
+func TestAccessFormReportsAlreadyPendingRequest(t *testing.T) {
+	rights := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/access/check" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"state":"pending"}`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer rights.Close()
+	t.Setenv("RIGHTS_URL", rights.URL)
+	mux := http.NewServeMux()
+	registerFormRoutes(mux, "", rights.URL)
+	request := httptest.NewRequest(http.MethodPost, "/v1/forms/access-request/submit", strings.NewReader(`{"version":1,"values":{"resource_id":"resource-from-schema","capability":"capability-from-schema"},"confirmed":true}`))
+	request.Header.Set("Authorization", "Bearer test-session")
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, request)
+	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "Заявка на этот доступ уже отправлена и ожидает решения.") {
+		t.Fatalf("status %d, body %s", response.Code, response.Body.String())
+	}
+}
