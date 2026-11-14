@@ -11,6 +11,7 @@ const icons = {
   user: <><circle cx="12" cy="8" r="3.5"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/></>,
   menu: <path d="M4 6h16M4 12h16M4 18h16"/>,
   close: <path d="m6 6 12 12M18 6 6 18"/>,
+  minimize: <path d="M5 12h14"/>,
   external: <path d="M13 4h7v7m0-7-9 9m7 1v6H4V6h6"/>,
   widget: <><rect x="3" y="5" width="18" height="14" rx="3"/><rect x="11" y="11" width="7" height="5" rx="1"/></>,
   key: <><circle cx="8.5" cy="10.5" r="4"/><path d="m11.4 13.3 6.6 6.7 2-2-2-2 1.5-1.5"/></>,

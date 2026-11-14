@@ -190,7 +190,6 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
 
   function composer(compact = false) {
     return <form className="composer" onSubmit={event => submit(event, compact)}>
-      {!compact && hasMessages && composerState !== 'idle' && <Bobby className="composer-bobby" state={composerState}/>}
       <textarea ref={compact ? undefined : input} value={draft} readOnly={sending} onChange={event => onDraft(event.target.value)} onKeyDown={event => {
         if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
           event.preventDefault();
@@ -216,7 +215,11 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
             <br/><External href={item.url}>{item.key} · {item.summary}</External> · {timeText(new Date(Date.parse(item.due_at) - 1).toISOString(), true)}
           </Notice>)}
           {jobs.map((job, index) => <div key={job.id} className="turn">
-            <div className="user-message"><p>{job.query}</p><Stamp value={job.created_at}/></div>
+            <div className="user-message">
+              <p>{job.query}</p><Stamp value={job.created_at}/>
+              {job.id === latest?.id && composerState === 'listening' &&
+                <Bobby className="user-message-bobby" state="listening"/>}
+            </div>
             <div className="assistant-message" aria-live="polite">
               <span className="message-avatar"><Bobby state={index < jobs.length - 1 ? 'idle' : job.status === 'completed' && job.answer?.trim() ? 'answering' : !completed(job) && !waiting[job.id] ? 'thinking' : 'idle'}/></span>
               <strong className="message-name">Бобби</strong>

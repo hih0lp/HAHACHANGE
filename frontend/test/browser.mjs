@@ -133,6 +133,16 @@ try {
       await page.evaluate(() => window.documentPictureInPicture.window.document.querySelector('.send-button').click());
       await page.waitForFunction(() => window.documentPictureInPicture.window?.document.querySelector('.answer h3')?.textContent === 'Ваш первый шаг');
       assert.equal(await page.locator('.chat-page .user-message p').textContent(), 'Бобби, ты здесь?');
+      await page.evaluate(() => window.documentPictureInPicture.window.document.querySelector('[aria-label="Свернуть мини-чат"]').click());
+      await page.waitForFunction(() => {
+        const floating = window.documentPictureInPicture.window;
+        return floating.document.querySelector('.bobby-widget-only-pet') && floating.document.querySelector('.bobby-widget-compose').hidden;
+      });
+      await page.evaluate(() => window.documentPictureInPicture.window.document.querySelector('.bobby-widget-only-pet').click());
+      await page.waitForFunction(() => {
+        const floating = window.documentPictureInPicture.window;
+        return !floating.document.querySelector('.bobby-widget-compose').hidden;
+      });
       await page.evaluate(() => window.documentPictureInPicture.window.close());
       await page.waitForFunction(() => !document.querySelector('.widget-trigger[aria-pressed="true"]'));
       console.log('Passed native picture-in-picture send, reply, and close checks');
@@ -148,11 +158,22 @@ try {
     await input.fill('Начать работу через мини-чат');
     await widget.getByText('Слушаю').waitFor();
     assert.equal(await page.locator('.chat-page textarea').inputValue(), 'Начать работу через мини-чат');
+    await widget.getByRole('button', { name: 'Свернуть мини-чат' }).click();
+    const pet = widget.getByRole('button', { name: 'Развернуть мини-чат' });
+    await pet.locator('[data-bobby-state="listening"]').waitFor();
+    assert.equal(await input.isVisible(), false);
+    await pet.click();
+    assert.equal(await input.inputValue(), 'Начать работу через мини-чат');
     await page.getByRole('link', { name: 'Мои задачи' }).click();
     await input.press('Enter');
     await widget.getByText('Думаю').waitFor();
     await widget.getByText('Ответ готов').waitFor();
     await widget.getByRole('heading', { name: 'Ваш первый шаг' }).waitFor();
+    await input.fill('Следующий вопрос');
+    await widget.locator('.bobby-widget-query [data-bobby-state="listening"]').waitFor();
+    assert.equal(await page.locator('.user-message [data-bobby-state="listening"]').count(), 1);
+    assert.equal(await page.locator('.composer [data-bobby-state="listening"]').count(), 0);
+    await input.clear();
     await widget.getByRole('button', { name: 'Заполнить заявку' }).click();
     await widget.waitFor({ state: 'hidden' });
     await page.getByLabel('Ресурс').waitFor();

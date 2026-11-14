@@ -150,7 +150,6 @@
   .suggestion-arrow { margin-left: auto; width: 15px; height: 15px; color: var(--muted); }
   .composer { display: flex; align-items: center; gap: var(--space-2); min-height: 64px; padding: var(--space-2); border: 1px solid var(--control-line); border-radius: var(--radius-l); }
   .composer:focus-within { border-color: var(--action); }
-  .composer-bobby { width: 34px; height: 34px; flex: none; }
   .composer textarea { resize: none; min-width: 0; min-height: var(--control); flex: 1; border: 0; padding: 10px var(--space-2); background: transparent; }
   .composer textarea:focus-visible { outline: 0; }
   .send-button { flex: none; width: var(--control); height: var(--control); border-radius: var(--radius-m); padding: 0; }
@@ -169,6 +168,19 @@
     box-shadow: var(--shadow);
   }
   .bobby-widget-window > .bobby-widget { height: 100dvh; }
+  body:not(.bobby-widget-window) > .bobby-widget.is-collapsed { width: 136px; height: 136px; }
+  .bobby-widget.is-collapsed { background: var(--hero-blue); }
+  .bobby-widget-only-pet {
+    display: grid;
+    place-items: center;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    padding: 0;
+    background: transparent;
+  }
+  .bobby-widget-only-pet:focus-visible { outline-offset: -4px; }
+  .bobby-widget-only-pet .bobby-widget-pet { width: min(116px, 100%); height: min(116px, 100%); }
   .bobby-widget-header {
     display: flex;
     align-items: center;
@@ -203,6 +215,7 @@
   .messages, .turn { display: grid; gap: var(--space-6); min-width: 0; }
   .messages { padding-top: var(--space-3); }
   .user-message { justify-self: end; max-width: min(85%, 530px); background: var(--neutral); border-radius: var(--radius-l) var(--radius-l) var(--space-2) var(--radius-l); padding: var(--space-3) var(--space-4); white-space: pre-wrap; }
+  .user-message-bobby { display: block; width: 100px; height: 92px; margin: var(--space-1) 0 0 auto; }
   .assistant-message { display: grid; grid-template-columns: 38px minmax(0, 1fr); column-gap: var(--space-3); }
   .message-avatar { grid-area: 2 / 1; width: 38px; height: 38px; display: grid; place-items: center; }
   .message-avatar svg { width: 34px; height: 32px; }
