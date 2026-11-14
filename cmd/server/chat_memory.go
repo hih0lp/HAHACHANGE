@@ -21,7 +21,7 @@ type oldChatTurn struct {
 
 func indexPendingChatMemory(ctx context.Context, db *pgxpool.Pool, service *rag.Service) error {
 	rows, err := db.Query(ctx, `SELECT id::text, owner_id, created_at, left(query,1000), left(answer,3000)
-		FROM ai_jobs WHERE status='completed' AND memory_indexed_at IS NULL AND answer IS NOT NULL
+		FROM ai_jobs WHERE status='completed' AND superseded_at IS NULL AND memory_indexed_at IS NULL AND answer IS NOT NULL
 		ORDER BY completed_at, id LIMIT 4`)
 	if err != nil {
 		return err
@@ -80,7 +80,7 @@ func oldChatMemory(ctx context.Context, db *pgxpool.Pool, service *rag.Service, 
 		SELECT previous.created_at FROM ai_jobs AS previous JOIN ai_jobs AS current_job
 		  ON previous.owner_id=current_job.owner_id
 		  AND previous.thread_id IS NOT DISTINCT FROM current_job.thread_id
-		WHERE current_job.id=$2 AND current_job.owner_id=$1 AND previous.status='completed'
+		WHERE current_job.id=$2 AND current_job.owner_id=$1 AND previous.status='completed' AND previous.superseded_at IS NULL
 		  AND (previous.created_at, previous.id) < (current_job.created_at, current_job.id)
 		ORDER BY previous.created_at DESC, previous.id DESC LIMIT 8) previous`, owner, jobID).Scan(&cutoff)
 	if err != nil {
@@ -103,11 +103,11 @@ func oldChatMemory(ctx context.Context, db *pgxpool.Pool, service *rag.Service, 
 			FROM ai_jobs AS previous JOIN ai_jobs AS current_job
 			  ON previous.owner_id=current_job.owner_id
 			  AND previous.thread_id IS NOT DISTINCT FROM current_job.thread_id
-			WHERE previous.id=$1 AND current_job.id=$3 AND current_job.owner_id=$2 AND previous.status='completed'
+			WHERE previous.id=$1 AND current_job.id=$3 AND current_job.owner_id=$2 AND previous.status='completed' AND previous.superseded_at IS NULL
 			  AND (previous.created_at, previous.id) < (current_job.created_at, current_job.id)
 			  AND previous.id NOT IN (SELECT recent.id FROM ai_jobs AS recent
 				WHERE recent.owner_id=$2 AND recent.thread_id IS NOT DISTINCT FROM current_job.thread_id
-				  AND recent.status='completed'
+				  AND recent.status='completed' AND recent.superseded_at IS NULL
 				  AND (recent.created_at, recent.id) < (current_job.created_at, current_job.id)
 				ORDER BY recent.created_at DESC, recent.id DESC LIMIT 8)`, hit.JobID, owner, jobID).
 			Scan(&turn.AskedAt, &turn.Question, &turn.Answer)
