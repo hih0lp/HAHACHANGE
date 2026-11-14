@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"html"
-	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -72,7 +71,6 @@ func formatCalendarEvents(result any) (string, error) {
 			Items []struct {
 				Summary     string `json:"summary"`
 				Description string `json:"description"`
-				HTMLLink    string `json:"htmlLink"`
 				Start       struct {
 					DateTime string `json:"dateTime"`
 				} `json:"start"`
@@ -111,13 +109,6 @@ func formatCalendarEvents(result any) (string, error) {
 		line := fmt.Sprintf("- %s %s–%s МСК — %s", start.Format("02.01.2006"), start.Format("15:04"), end.Format("15:04"), event.Summary)
 		if event.Description != "" {
 			line += ". " + strings.TrimSpace(html.UnescapeString(calendarHTMLTag.ReplaceAllString(event.Description, "")))
-		}
-		if event.HTMLLink != "" {
-			link, parseErr := url.Parse(event.HTMLLink)
-			if parseErr != nil || link.Scheme != "https" || link.Host == "" {
-				return "", errors.New("invalid calendar event link")
-			}
-			line += " [Открыть событие](" + event.HTMLLink + ")"
 		}
 		lines = append(lines, line)
 	}

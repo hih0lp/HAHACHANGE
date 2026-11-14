@@ -28,7 +28,7 @@ func TestFormatCalendarEventsUsesReturnedTimes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(answer, "19.11.2026 16:00–17:00 МСК — Ревью. Обсуждение & разбор") || strings.Contains(answer, "13:00") || !strings.Contains(answer, "[Открыть событие](https://www.google.com/calendar/event?eid=demo)") {
+	if !strings.Contains(answer, "19.11.2026 16:00–17:00 МСК — Ревью. Обсуждение & разбор") || strings.Contains(answer, "13:00") || strings.Contains(answer, "google.com/calendar") || strings.Contains(answer, "Открыть событие") {
 		t.Fatalf("unexpected event answer: %q", answer)
 	}
 }

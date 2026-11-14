@@ -26,8 +26,7 @@ type event struct {
 		DateTime string `json:"dateTime"`
 		TimeZone string `json:"timeZone,omitempty"`
 	} `json:"end"`
-	HTMLLink string `json:"htmlLink,omitempty"`
-	Status   string `json:"status,omitempty"`
+	Status string `json:"status,omitempty"`
 }
 type fixture struct {
 	CalendarID string  `json:"calendar_id"`

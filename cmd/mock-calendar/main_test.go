@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -30,5 +32,24 @@ func TestEditableCalendarAndRange(t *testing.T) {
 	}
 	if _, _, e = rangeQuery(query{TimeMin: "bad", TimeMax: b.Format(time.RFC3339)}); e == nil {
 		t.Fatal("invalid range accepted")
+	}
+}
+
+func TestCalendarDoesNotPublishEventLinks(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "calendar.json")
+	raw := `{"calendar_id":"mentor","time_zone":"Europe/Moscow","events":[{"id":"slot","summary":"1:1","htmlLink":"https://calendar.example/event","start":{"dateTime":"2026-11-17T15:30:00+03:00"},"end":{"dateTime":"2026-11-17T16:00:00+03:00"}}]}`
+	if err := os.WriteFile(path, []byte(raw), 0600); err != nil {
+		t.Fatal(err)
+	}
+	f, err := load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(f.Events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "htmlLink") || strings.Contains(string(data), "calendar.example") {
+		t.Fatalf("calendar response exposes a link: %s", data)
 	}
 }
