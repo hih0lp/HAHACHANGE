@@ -25,7 +25,7 @@ const access = {
 };
 const answer = '### Ваш первый шаг\nПосмотрите задачи проекта в [Jira](https://example.atlassian.net/browse/DEMO-5).\nСверьте рабочий процесс с [Playbook](https://github.com/avito-tech/playbook).\n[Заполнить заявку](/forms/access-request)';
 
-async function fixtures(page) {
+async function fixtures(page, { deadline = false } = {}) {
   let submits = 0;
   let committed;
   let serial = 0;
@@ -53,7 +53,10 @@ async function fixtures(page) {
     if (path === '/v1/team-access/session') { sessions.push(role); return respond({ access_token: 'demo-' + role, role, expires_in: 3600 }); }
     if (path === '/v1/scenarios/login') { loginRequests++; return respond({ error: 'Unexpected login' }, 500); }
     if (path === '/v1/chat/history') return respond({ turns: [...jobs].reverse() });
-    if (path === '/v1/deadline-notifications') return respond({ notifications: [] });
+    if (path === '/v1/deadline-notifications') return respond({ notifications: deadline ? [{
+      id: 'deadline-1', kind: 'intern_deadline', key: 'DEMO-5', summary: 'Тестовый срок',
+      url: 'https://example.atlassian.net/browse/DEMO-5', due_at: new Date(Date.now() + 60_000).toISOString(),
+    }] : [] });
     const action = /^\/v1\/jobs\/([^/]+)\/(edit|stop)$/.exec(path);
     if (action) {
       const index = jobs.findIndex(job => job.id === action[1]);
@@ -144,7 +147,7 @@ try {
     const page = await browser.newPage();
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
-    await fixtures(page);
+    await fixtures(page, { deadline: true });
     await page.addInitScript(() => {
       window.SpeechRecognition = class {
         start() { window.currentRecognition = this; }
@@ -161,6 +164,8 @@ try {
       }, text);
     };
     await page.goto(base);
+    await page.getByRole('button', { name: 'Закрыть уведомление' }).click();
+    await page.locator('.deadline-notices').waitFor({ state: 'hidden' });
     const trigger = page.getByRole('button', { name: 'Мини-чат с Бобби' });
     if (await page.evaluate(() => !!window.documentPictureInPicture)) {
       await trigger.click();
@@ -212,6 +217,7 @@ try {
     }
     await page.addInitScript(() => Object.defineProperty(window, 'documentPictureInPicture', { value: undefined }));
     await page.reload();
+    await page.locator('.deadline-notices').waitFor({ state: 'hidden' });
     await page.locator('.chat-page').getByRole('button', { name: 'Голосовой ввод' }).click();
     await finishDictation('Черновик из чата');
     assert.equal(await page.locator('.chat-page textarea').inputValue(), 'Черновик из чата');
@@ -325,6 +331,7 @@ try {
     await main.getByRole('button', { name: 'Отправить вопрос' }).waitFor();
     assert.equal(await main.getByRole('textbox', { name: 'Ваш вопрос' }).inputValue(), 'Следующий черновик');
     await main.locator('.turn').last().getByRole('button', { name: 'Изменить вопрос' }).waitFor();
+    assert.equal(await page.locator('.deadline-notices').count(), 0);
     await page.emulateMedia({ reducedMotion: 'reduce' });
     assert.equal(await main.locator('.bobby-body').last().evaluate(element => getComputedStyle(element).transitionDuration), '0s');
     assert.deepEqual(errors, []);

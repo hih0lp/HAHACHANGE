@@ -42,6 +42,8 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
   const [historyError, setHistoryError] = useState('');
   const [reload, setReload] = useState(0);
   const [deadlines, setDeadlines] = useState<Awaited<ReturnType<typeof api.deadlines>>['notifications']>([]);
+  const dismissedDeadlines = useRef(new Set<string>());
+  const deadlineStoragePrefix = 'bobby:deadline:dismissed:' + identity + ':';
   const watchers = useRef(new Map<string, () => void>());
   const editMessage = useRef<HTMLElement | null>(null);
   const replaced = useRef(new Set<string>());
@@ -106,12 +108,22 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
     if (!token) return;
     let active = true;
     const refresh = () => void api.deadlines(apiKey).then(({ notifications }) => {
-      if (active) setDeadlines(notifications.filter(item => Date.parse(item.due_at) > Date.now()));
+      if (active) setDeadlines(notifications.filter(item =>
+        Date.parse(item.due_at) > Date.now() &&
+        !dismissedDeadlines.current.has(item.id) &&
+        !localStorage.getItem(deadlineStoragePrefix + item.id),
+      ));
     }).catch(() => {});
     refresh();
-    const timer = setInterval(refresh, 60_000);
+    const timer = setInterval(refresh, 15_000);
     return () => { active = false; clearInterval(timer); };
-  }, [apiKey, token]);
+  }, [apiKey, token, deadlineStoragePrefix]);
+
+  function dismissDeadline(id: string) {
+    dismissedDeadlines.current.add(id);
+    localStorage.setItem(deadlineStoragePrefix + id, '1');
+    setDeadlines(current => current.filter(item => item.id !== id));
+  }
 
   useEffect(() => {
     if (hidden || !jobs.length || !scroll.current) return;
@@ -235,7 +247,7 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
   }
 
   const auth = { token, key: apiKey };
-  const hasMessages = jobs.length > 0 || !!formID || catalog || deadlines.length > 0;
+  const hasMessages = jobs.length > 0 || !!formID || catalog;
   const composerState = sending ? 'thinking' : dictation.active || draft.trim() ? 'listening' : 'idle';
   const latest = jobs.at(-1);
   const activeJob = [...jobs].reverse().find(job => !completed(job));
@@ -347,6 +359,16 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
   }
 
   return <><div className={'chat-page' + (hasMessages ? ' has-messages' : '')} hidden={hidden}>
+    {deadlines.length > 0 && <div className="deadline-notices">
+      <div className="chat-inner">
+        {deadlines.map(item => <Notice key={item.id} error action={
+          <button type="button" className="text-button" onClick={() => dismissDeadline(item.id)}>Закрыть уведомление</button>
+        }>
+          <strong>{item.kind === 'mentor_deadline' || item.kind === 'mentor_24h' ? 'Помогите стажёру' : 'Скоро дедлайн'}</strong>
+          <br/><External href={item.url}>{item.key} · {item.summary}</External> · {timeText(item.due_at)}
+        </Notice>)}
+      </div>
+    </div>}
     <div className="chat-scroll" ref={scroll} onScroll={event => {
       const viewport = event.currentTarget;
       followLatest.current = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 64;
@@ -360,10 +382,6 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
         </div>}
         {hasMessages && <AnswerSelection active={!hidden} disabled={sending} onQuote={text => addReplyContext('quote', text, false)}>
         <div className="messages" aria-label="Сообщения чата">
-          {deadlines.map(item => <Notice key={item.id}>
-            <strong>{item.kind === 'mentor_24h' ? 'Помогите стажёру' : 'Скоро дедлайн'}</strong>
-            <br/><External href={item.url}>{item.key} · {item.summary}</External> · {timeText(new Date(Date.parse(item.due_at) - 1).toISOString(), true)}
-          </Notice>)}
           {jobs.map((job, index) => <div key={job.id} className="turn" ref={job.id === latest?.id ? latestTurn : undefined}>
             <div className="user-message">
               <p>{job.query}</p>
