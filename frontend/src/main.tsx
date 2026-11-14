@@ -20,13 +20,12 @@ const readForm = () => {
   const value = new URLSearchParams(location.search).get('form') || '';
   return /^[a-zA-Z0-9_-]+$/.test(value) ? value : '';
 };
-const DEV = import.meta.env.DEV;
 
 function App() {
   const [view, setView] = useState(readView);
   const [demo, setDemo] = useState<Session>();
   const [demoError, setDemoError] = useState('');
-  const [sessionReady, setSessionReady] = useState(!DEV);
+  const [sessionReady, setSessionReady] = useState(false);
   const [apiKey, setApiKey] = useState(() => sessionStorage.getItem('bobby-api-key') || '');
   const [profile, setProfile] = useState(false);
   const [menu, setMenu] = useState(false);
@@ -39,8 +38,7 @@ function App() {
   const content = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    if (!DEV) return;
-    void fetch('/session/bootstrap').catch(() => {}).finally(() => setSessionReady(true));
+    void fetch('/session/bootstrap', { cache: 'no-store' }).catch(() => {}).finally(() => setSessionReady(true));
   }, []);
 
   useEffect(() => {
