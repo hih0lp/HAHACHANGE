@@ -31,6 +31,15 @@ func TestCalendarPlannerValidatesModelRange(t *testing.T) {
 	}
 }
 
+func TestCalendarPlannerDefaultsUnboundedUpcomingRequest(t *testing.T) {
+	loc, _ := time.LoadLocation("Europe/Moscow")
+	now := time.Date(2026, 11, 14, 15, 0, 0, 0, loc)
+	plan, err := normalizeCalendarPlan(calendarPlan{NeedsEvents: true, NeedsJiraIssue: true, JiraIssueKeys: []string{"TASK-7"}}, now)
+	if err != nil || plan.TimeMin != now.Format(time.RFC3339) || plan.TimeMax != now.Add(30*24*time.Hour).Format(time.RFC3339) || !plan.NeedsJiraIssue {
+		t.Fatalf("plan=%+v err=%v", plan, err)
+	}
+}
+
 func TestPlannerSelectsLiveForm(t *testing.T) {
 	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"choices":[{"message":{"content":"{\"needs_form\":true,\"form_id\":\"access-request\"}"}}]}`)
