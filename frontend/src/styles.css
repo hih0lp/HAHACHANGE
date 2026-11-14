@@ -160,8 +160,7 @@
   .user-message { justify-self: end; max-width: min(85%, 530px); background: var(--neutral); border-radius: var(--radius-l) var(--radius-l) var(--space-2) var(--radius-l); padding: var(--space-3) var(--space-4); white-space: pre-wrap; }
   .assistant-message { display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: var(--space-3); }
   .message-avatar { width: 38px; height: 38px; display: grid; place-items: center; border-radius: var(--radius-round); background: var(--hero-blue); }
-  .message-avatar svg { width: 26px; height: 27px; }
-  .message-avatar svg[data-bobby-state="thinking"], .message-avatar svg[data-bobby-state="answering"] { width: 34px; height: 32px; }
+  .message-avatar svg { width: 34px; height: 32px; }
   .message-name { display: block; margin-bottom: var(--space-1); }
   .message-body { min-width: 0; overflow-wrap: anywhere; }
   .message-body time, .user-message time { display: block; font-size: var(--text-small); margin-top: var(--space-2); }
