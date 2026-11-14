@@ -80,7 +80,9 @@ func TestAccessCheckUsesSelectedCatalogueResource(t *testing.T) {
 
 func TestGitLabOverviewUsesProjectsMCP(t *testing.T) {
 	gitlab := mcp.NewServer(&mcp.Implementation{Name: "test-gitlab", Version: "1"}, nil)
-	mcp.AddTool(gitlab, &mcp.Tool{Name: "gitlab_projects"}, func(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, map[string]any, error) {
+	mcp.AddTool(gitlab, &mcp.Tool{Name: "gitlab_projects"}, func(_ context.Context, _ *mcp.CallToolRequest, _ struct {
+		Project string `json:"project"`
+	}) (*mcp.CallToolResult, map[string]any, error) {
 		return nil, map[string]any{"data": []any{map[string]string{"name": "Demo Project", "path_with_namespace": "demo/project"}}}, nil
 	})
 	mcpHTTP := testMCPServer(t, gitlab)

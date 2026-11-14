@@ -11,7 +11,7 @@ func (a answerer) gitLabProjectsAnswer(ctx context.Context, token string) string
 		return "Войдите в Боббика, чтобы проверить доступные вам проекты GitLab."
 	}
 	const unavailable = "Не удалось получить список проектов GitLab."
-	result, err := mcpTeamTool(ctx, a.gitLabMCPURL, "", token, "gitlab_projects", map[string]any{})
+	result, err := mcpTeamTool(ctx, a.gitLabMCPURL, "", token, "gitlab_projects", map[string]any{"project": ""})
 	if err != nil {
 		return unavailable
 	}
