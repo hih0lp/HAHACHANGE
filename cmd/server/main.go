@@ -174,7 +174,7 @@ func loadConfig() config {
 		APIKey:         os.Getenv("API_KEY"),
 		IndexOnStartup: envBool("INDEX_ON_STARTUP", true),
 		Jira:           jiraConfig{Mode: env("JIRA_MODE", "off"), BaseURL: env("JIRA_BASE_URL", "http://mock-jira:8080"), ProjectKey: os.Getenv("JIRA_PROJECT_KEY")},
-		Reminder:       reminderConfig{InternAccountID: os.Getenv("REMINDER_INTERN_ACCOUNT_ID"), HoursBefore: envInt("REMINDER_HOURS_BEFORE", 24), TimeZone: env("REMINDER_TIMEZONE", "Europe/Moscow")},
+		Reminder:       reminderConfig{InternAccountID: os.Getenv("REMINDER_INTERN_ACCOUNT_ID"), HoursBefore: envInt("REMINDER_HOURS_BEFORE", 24), InternMinutesBefore: envInt("REMINDER_INTERN_MINUTES_BEFORE", 0), MentorMinutesBefore: envInt("REMINDER_MENTOR_MINUTES_BEFORE", 0), TimeZone: env("REMINDER_TIMEZONE", "Europe/Moscow")},
 		RAG: rag.Config{
 			QdrantURL:      env("QDRANT_URL", "http://qdrant:6333"),
 			EmbeddingsURL:  env("EMBEDDINGS_URL", "http://embeddings:80"),
