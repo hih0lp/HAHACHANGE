@@ -68,6 +68,23 @@ test('API client sends demo credentials and the same idempotency key on retry', 
   assert.equal(JSON.parse(String(calls[1].body)).confirmed, true);
 });
 
+test('editing and stopping a turn use owner-authenticated POST requests', async t => {
+  const calls: { url: string; method?: string; headers: Headers; body?: BodyInit | null }[] = [];
+  t.mock.method(globalThis, 'fetch', async (url: string, options: RequestInit) => {
+    calls.push({ url, ...options, headers: new Headers(options.headers) });
+    return Response.json({ id: 'replacement', query: 'Новый вопрос', status: 'queued' });
+  });
+  const auth = { token: 'team-session', key: 'api-key' };
+  await api.edit('old-turn', 'Новый вопрос', auth);
+  await api.stop('replacement', auth);
+  assert.equal(calls[0].url, '/v1/jobs/old-turn/edit');
+  assert.equal(calls[1].url, '/v1/jobs/replacement/stop');
+  assert.deepEqual(calls.map(call => call.method), ['POST', 'POST']);
+  assert.equal(JSON.parse(String(calls[0].body)).query, 'Новый вопрос');
+  assert.equal(calls[0].headers.get('Authorization'), 'Bearer team-session');
+  assert.equal(calls[1].headers.get('X-API-Key'), 'api-key');
+});
+
 test('empty, rejected and timed-out requests have distinct outcomes', async t => {
   const mock = t.mock.method(globalThis, 'fetch', async () => Response.json({ error: 'invalid API key' }, { status: 401 }));
   await assert.rejects(request('/v1/jobs'), (err: unknown) => err instanceof ApiError && /API-ключ/.test(errorText(err, 'fallback')));

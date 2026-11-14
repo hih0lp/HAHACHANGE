@@ -124,6 +124,53 @@ func registerDistributedJobRoutes(mux *http.ServeMux, jobs *distributed.System, 
 		}
 		writeJSON(w, 200, job)
 	})))
+	mux.Handle("POST /v1/jobs/{id}/stop", authorize(apiKey, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		job, err := jobs.Stop(r.Context(), ownerFrom(r), r.PathValue("id"))
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(w, 404, errText("job not found"))
+			return
+		}
+		if err != nil {
+			writeError(w, 503, errText("request storage is unavailable"))
+			return
+		}
+		writeJSON(w, 200, job)
+	})))
+	mux.Handle("POST /v1/jobs/{id}/edit", authorize(apiKey, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var input struct {
+			Query string `json:"query"`
+		}
+		if json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&input) != nil {
+			writeError(w, 400, errText("invalid request"))
+			return
+		}
+		input.Query = strings.TrimSpace(input.Query)
+		if len([]rune(input.Query)) < 2 {
+			writeError(w, 400, errText("query must be at least 2 characters"))
+			return
+		}
+		token := ""
+		if endpoint := os.Getenv("TEAM_ACCESS_URL"); endpoint != "" {
+			if bearer := r.Header.Get("Authorization"); strings.HasPrefix(bearer, "Bearer ") {
+				token = strings.TrimPrefix(bearer, "Bearer ")
+				if _, err := (scenario.Client{BaseURL: endpoint}).Profile(r.Context(), token); err != nil {
+					writeError(w, 503, errText("team access verification failed"))
+					return
+				}
+			}
+		}
+		job, err := jobs.EditChat(r.Context(), ownerFrom(r), r.PathValue("id"), input.Query, token)
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(w, 404, errText("job not found"))
+			return
+		}
+		if err != nil {
+			writeError(w, 503, errText("request storage is unavailable"))
+			return
+		}
+		w.Header().Set("Location", "/v1/jobs/"+job.ID)
+		writeJSON(w, 202, job)
+	})))
 	mux.HandleFunc("GET /v1/jobs/{id}/ws", func(w http.ResponseWriter, r *http.Request) {
 		id, owner := r.PathValue("id"), ownerFrom(r)
 		job, err := jobs.Get(r.Context(), owner, id)

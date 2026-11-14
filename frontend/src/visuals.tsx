@@ -7,6 +7,8 @@ const icons = {
   tasks: <><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M7.5 3.5V7m9-3.5V7M4 10h16m-12 5h3"/></>,
   arrow: <path d="M4.5 12h14m-6-6 6 6-6 6"/>,
   send: <path d="M12 19V5m-6 6 6-6 6 6"/>,
+  edit: <><path d="m4 20 4.5-1 10-10-3.5-3.5-10 10L4 20Z"/><path d="m13.5 7.5 3.5 3.5"/></>,
+  stop: <rect x="6" y="6" width="12" height="12" rx="2"/>,
   chevron: <path d="m9 6 6 6-6 6"/>,
   user: <><circle cx="12" cy="8" r="3.5"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/></>,
   menu: <path d="M4 6h16M4 12h16M4 18h16"/>,

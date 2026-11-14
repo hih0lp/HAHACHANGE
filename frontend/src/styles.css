@@ -158,6 +158,13 @@
   .messages, .turn { display: grid; gap: var(--space-6); min-width: 0; }
   .messages { padding-top: var(--space-3); }
   .user-message { justify-self: end; max-width: min(85%, 530px); background: var(--neutral); border-radius: var(--radius-l) var(--radius-l) var(--space-2) var(--radius-l); padding: var(--space-3) var(--space-4); white-space: pre-wrap; }
+  .message-actions { display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-2); }
+  .message-action { width: 28px; height: 28px; display: inline-grid; place-items: center; border: 0; border-radius: var(--radius-s); color: var(--muted); background: transparent; cursor: pointer; }
+  .message-action:hover:not(:disabled) { color: var(--ink); background: var(--selected); }
+  .message-action:disabled { opacity: .5; cursor: default; }
+  .message-action svg { width: 16px; height: 16px; }
+  .message-edit { display: grid; gap: var(--space-2); }
+  .message-edit textarea { width: 100%; min-width: 220px; min-height: 84px; resize: vertical; border: 1px solid var(--control-line); border-radius: var(--radius-s); padding: var(--space-2); background: var(--white); }
   .assistant-message { display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: var(--space-3); }
   .message-avatar { width: 38px; height: 38px; display: grid; place-items: center; border-radius: var(--radius-round); background: var(--hero-blue); }
   .message-avatar svg { width: 34px; height: 32px; }

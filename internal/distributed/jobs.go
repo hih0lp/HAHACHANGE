@@ -58,6 +58,68 @@ func (s *System) SubmitChat(ctx context.Context, owner, scenario, query, token s
 	return s.submit(ctx, owner, scenario, query, nil, token)
 }
 
+// Stop marks the owner's queued or running job terminal. A running worker
+// observes the status change and cancels its HTTP request to the model.
+func (s *System) Stop(ctx context.Context, owner, id string) (Job, error) {
+	var status string
+	err := s.DB.QueryRow(ctx, `UPDATE ai_jobs SET status='failed', error='Остановлено пользователем',
+		lease_token=NULL, lease_until=NULL, updated_at=now(), completed_at=now()
+		WHERE id=$1 AND owner_id=$2 AND status IN ('queued','running') RETURNING status`, id, owner).Scan(&status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return s.Get(ctx, owner, id)
+	}
+	if err != nil {
+		return Job{}, err
+	}
+	_, _ = s.DB.Exec(ctx, `UPDATE ai_job_outbox SET published_at=now() WHERE job_id=$1 AND published_at IS NULL`, id)
+	s.clearTeamToken(ctx, id)
+	s.cache(ctx, Job{ID: id, Status: status})
+	return s.Get(ctx, owner, id)
+}
+
+// EditChat replaces a visible turn with a newly queued job while retaining
+// the original row for audit. History and memory exclude the old turn.
+func (s *System) EditChat(ctx context.Context, owner, oldID, query, token string) (Job, error) {
+	id, err := NewID()
+	if err != nil {
+		return Job{}, err
+	}
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return Job{}, err
+	}
+	defer tx.Rollback(ctx)
+	var scenario string
+	err = tx.QueryRow(ctx, `UPDATE ai_jobs SET superseded_at=now(), updated_at=now(),
+		status=CASE WHEN status IN ('queued','running') THEN 'failed' ELSE status END,
+		error=CASE WHEN status IN ('queued','running') THEN 'Остановлено пользователем' ELSE error END,
+		lease_token=NULL, lease_until=NULL
+		WHERE id=$1 AND owner_id=$2 AND thread_id IS NULL AND superseded_at IS NULL
+		RETURNING scenario`, oldID, owner).Scan(&scenario)
+	if err != nil {
+		return Job{}, err
+	}
+	var createdAt time.Time
+	err = tx.QueryRow(ctx, `INSERT INTO ai_jobs(id,owner_id,scenario,query,status,thread_id)
+		VALUES($1,$2,$3,$4,'queued',NULL) RETURNING created_at`, id, owner, scenario, query).Scan(&createdAt)
+	if err != nil {
+		return Job{}, err
+	}
+	if _, err = tx.Exec(ctx, `INSERT INTO ai_job_outbox(job_id,event_type) VALUES($1,'requested')`, id); err != nil {
+		return Job{}, err
+	}
+	if err = s.StoreTeamToken(ctx, id, token); err != nil {
+		return Job{}, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return Job{}, err
+	}
+	s.clearTeamToken(ctx, oldID)
+	job := Job{ID: id, Query: query, Scenario: scenario, Status: "queued", CreatedAt: createdAt}
+	s.cache(ctx, job)
+	return job, nil
+}
+
 func (s *System) submit(ctx context.Context, owner, scenario, query string, teamContext json.RawMessage, token string) (Job, error) {
 	id, err := NewID()
 	if err != nil {
@@ -246,12 +308,38 @@ func (s *System) ProcessOne(ctx context.Context, id string, answer AnswerFunc, t
 		return err
 	}
 	s.cache(ctx, Job{ID: id, Status: "running"})
-	workCtx, cancel := context.WithTimeout(ctx, timeout)
-	workCtx = context.WithValue(workCtx, teamContextKey{}, string(teamContext))
+	baseCtx, cancel := context.WithTimeout(ctx, timeout)
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		ticker := time.NewTicker(300 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-baseCtx.Done():
+				return
+			case <-ticker.C:
+				var active bool
+				if err := s.DB.QueryRow(baseCtx, `SELECT EXISTS(SELECT 1 FROM ai_jobs WHERE id=$1 AND status='running' AND lease_token=$2)`, id, lease).Scan(&active); err == nil && !active {
+					cancel()
+					return
+				}
+			}
+		}
+	}()
+	workCtx := context.WithValue(baseCtx, teamContextKey{}, string(teamContext))
 	workCtx = WithTeamToken(workCtx, s.teamToken(ctx, id))
 	workCtx = context.WithValue(workCtx, chatJobKey{}, [2]string{owner, id})
 	answerText, sources, workErr := answer(workCtx, query)
 	cancel()
+	<-finished
+	var stillActive bool
+	if err = s.DB.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM ai_jobs WHERE id=$1 AND status='running' AND lease_token=$2)`, id, lease).Scan(&stillActive); err != nil {
+		return err
+	}
+	if !stillActive {
+		return nil
+	}
 	if workErr != nil {
 		if tries < s.MaxTries {
 			_, err = s.DB.Exec(ctx, `WITH reset AS (
