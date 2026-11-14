@@ -126,6 +126,7 @@ services:
         done
         psql -v ON_ERROR_STOP=1 -d aibuddy_teams -f /migrations/001_team.sql
         psql -v ON_ERROR_STOP=1 -d aibuddy_rights -f /migrations/001_rights.sql
+        psql -v ON_ERROR_STOP=1 -d "$$LEGACY_DB" -f /migrations/005_deadline_kinds.sql
         if [ "$$(psql -d "$$LEGACY_DB" -tAc "SELECT to_regclass('public.ta_users')")" = ta_users ]; then
           for table in ta_users ta_teams ta_memberships; do
             pg_dump -d "$$LEGACY_DB" --data-only --column-inserts --on-conflict-do-nothing -t "$$table" -f "/tmp/$$table.sql"
@@ -139,6 +140,7 @@ services:
     volumes:
       - ./migrations/team_access/001_team.sql:/migrations/001_team.sql:ro
       - ./migrations/team_access/001_rights.sql:/migrations/001_rights.sql:ro
+      - ./migrations/005_deadline_kinds.sql:/migrations/005_deadline_kinds.sql:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -227,7 +229,6 @@ services:
       TEAM_DIRECTORY_URL: http://team-access:8080
       TEAM_ACCESS_MIGRATION: /app/migrations/001_rights.sql
       TEAM_ACCESS_KEY_FILE: /data/keys/private.pem
-      TEAM_ACCESS_SEED_JIRA_URL: ${TEAM_ACCESS_SEED_JIRA_URL:-}
       KAFKA_BROKERS: kafka:9092
     volumes:
       - team-access-keys:/data/keys:ro

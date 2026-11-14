@@ -14,9 +14,11 @@ import (
 )
 
 type reminderConfig struct {
-	InternAccountID string
-	HoursBefore     int
-	TimeZone        string
+	InternAccountID     string
+	HoursBefore         int
+	InternMinutesBefore int
+	MentorMinutesBefore int
+	TimeZone            string
 }
 
 type reminder struct {
@@ -44,6 +46,10 @@ func reminderDueAt(date string, zone *time.Location) (time.Time, error) {
 }
 
 func loadReminders(ctx context.Context, jira jiraConfig, cfg reminderConfig, now time.Time) (reminderSnapshot, error) {
+	return loadRemindersWindow(ctx, jira, cfg, now, time.Duration(cfg.HoursBefore)*time.Hour)
+}
+
+func loadRemindersWindow(ctx context.Context, jira jiraConfig, cfg reminderConfig, now time.Time, window time.Duration) (reminderSnapshot, error) {
 	result := reminderSnapshot{Reminders: []reminder{}}
 	if jira.Mode != "mock" || strings.TrimSpace(cfg.InternAccountID) == "" {
 		result.Message = "Напоминания выключены: укажите Jira accountId стажёра и подключите мок Jira."
@@ -58,6 +64,7 @@ func loadReminders(ctx context.Context, jira jiraConfig, cfg reminderConfig, now
 	var raw struct {
 		Issues []struct {
 			Key    string `json:"key"`
+			URL    string `json:"url"`
 			Fields struct {
 				Summary  string `json:"summary"`
 				DueDate  string `json:"duedate"`
@@ -80,12 +87,20 @@ func loadReminders(ctx context.Context, jira jiraConfig, cfg reminderConfig, now
 			continue
 		}
 		due, err := reminderDueAt(issue.Fields.DueDate, zone)
-		if err != nil || !now.Before(due) || now.Before(due.Add(-time.Duration(cfg.HoursBefore)*time.Hour)) {
+		if err != nil || !deadlineWindow(now, due, window) {
 			continue
 		}
-		result.Reminders = append(result.Reminders, reminder{ID: issue.Key + ":" + issue.Fields.DueDate, Key: issue.Key, Summary: issue.Fields.Summary, DueAt: due, URL: jira.BaseURL + "/browse/" + url.PathEscape(issue.Key)})
+		issueURL := issue.URL
+		if !strings.HasPrefix(issueURL, "https://") {
+			issueURL = ""
+		}
+		result.Reminders = append(result.Reminders, reminder{ID: issue.Key + ":" + issue.Fields.DueDate, Key: issue.Key, Summary: issue.Fields.Summary, DueAt: due, URL: issueURL})
 	}
 	return result, nil
+}
+
+func deadlineWindow(now, due time.Time, window time.Duration) bool {
+	return window > 0 && !now.Before(due.Add(-window)) && now.Before(due)
 }
 
 func registerReminderRoutes(mux *http.ServeMux, apiKey string, jira jiraConfig, cfg reminderConfig) {

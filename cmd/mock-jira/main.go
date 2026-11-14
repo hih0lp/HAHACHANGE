@@ -204,7 +204,7 @@ func main() {
 			if account != "" && v.AssigneeAccountID != account {
 				continue
 			}
-			items = append(items, map[string]any{"key": v.Key, "fields": map[string]any{"summary": v.Summary, "duedate": v.DueDate, "assignee": map[string]string{"accountId": v.AssigneeAccountID, "displayName": v.AssigneeName}, "status": map[string]any{"name": v.Status, "statusCategory": map[string]string{"key": v.StatusCategory}}}})
+			items = append(items, map[string]any{"key": v.Key, "url": v.URL, "fields": map[string]any{"summary": v.Summary, "duedate": v.DueDate, "assignee": map[string]string{"accountId": v.AssigneeAccountID, "displayName": v.AssigneeName}, "status": map[string]any{"name": v.Status, "statusCategory": map[string]string{"key": v.StatusCategory}}}})
 		}
 		sort.SliceStable(items, func(i, j int) bool {
 			return items[i].(map[string]any)["key"].(string) < items[j].(map[string]any)["key"].(string)

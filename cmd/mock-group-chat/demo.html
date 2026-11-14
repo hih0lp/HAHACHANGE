@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Корпоративные группы · Демо</title>
+<style>
+  body { margin: 0; padding: 3rem 1rem; background: #f5f7fb; color: #17243a; font: 1rem/1.5 system-ui, sans-serif; }
+  main { max-width: 36rem; margin: auto; background: white; padding: clamp(1.2rem, 4vw, 2.3rem); border: 1px solid #d6deea; border-radius: 1rem; }
+  h1 { line-height: 1.15; margin-top: 0; }
+  label { display: block; margin-top: 1rem; font-weight: 600; }
+  input, select, textarea, button { box-sizing: border-box; font: inherit; }
+  input, select, textarea { display: block; width: 100%; padding: .55rem; border: 1px solid #8b99ad; border-radius: .45rem; }
+  textarea { resize: vertical; }
+  button { margin-top: 1.25rem; padding: .6rem 1rem; background: #1749a1; color: white; border: 0; border-radius: .45rem; cursor: pointer; }
+  .success { color: #145737; background: #e9f7ee; padding: .65rem; border-radius: .45rem; }
+</style>
+<main>
+  <h1>Добавить сообщение в группу</h1>
+  <p>Демо корпоративного чата. Используйте тестовые данные.</p>
+  {{if .Added}}<p class="success" role="status">Сообщение №{{.Added}} сохранено.</p>{{end}}
+  <form action="/messages" method="post">
+    <label for="author">Группа и автор</label>
+    <select id="author" name="author" required>
+      <option value="">Выберите группу и автора</option>
+      {{range .Authors}}<option value="{{.Value}}">{{.Label}}</option>{{end}}
+    </select>
+    <label for="text">Текст сообщения</label>
+    <textarea id="text" name="text" rows="5" maxlength="1000" required></textarea>
+    <label for="sent_at">Время отправки по Москве</label>
+    <input id="sent_at" name="sent_at" type="datetime-local" aria-describedby="time-hint">
+    <small id="time-hint">По умолчанию используется текущее время.</small>
+    <br><button type="submit">Добавить сообщение</button>
+  </form>
+</main>
+</html>

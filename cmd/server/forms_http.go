@@ -31,6 +31,23 @@ func registerFormRoutes(mux *http.ServeMux, key string, teamURL string) {
 		}
 		writeJSON(w, 200, map[string]any{"forms": v})
 	})))
+	mux.Handle("GET /v1/form-resources", authorize(key, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token := withToken(w, r)
+		if token == "" {
+			return
+		}
+		profile, err := client.Profile(r.Context(), token)
+		if err != nil || profile.CurrentTeamID == "" {
+			writeError(w, 503, errText("team profile unavailable"))
+			return
+		}
+		resources, err := client.Resources(r.Context(), token, profile.CurrentTeamID)
+		if err != nil {
+			writeError(w, 503, errText("resource catalogue unavailable"))
+			return
+		}
+		writeJSON(w, 200, map[string]any{"resources": resources})
+	})))
 	mux.Handle("GET /v1/forms/{id}", authorize(key, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := withToken(w, r)
 		if token == "" {
@@ -62,7 +79,21 @@ func registerFormRoutes(mux *http.ServeMux, key string, teamURL string) {
 		})
 		result, ok := v.(map[string]any)
 		if err != nil || !ok || result["id"] == nil {
-			writeError(w, 400, errText("form could not be submitted: verify fields and access"))
+			resourceID, hasResource := in.Values["resource_id"].(string)
+			capability, hasCapability := in.Values["capability"].(string)
+			if hasResource && hasCapability && resourceID != "" && capability != "" {
+				if current, checkErr := client.Check(r.Context(), token, resourceID, capability); checkErr == nil {
+					switch current.State {
+					case "pending":
+						writeError(w, 409, errText("Заявка на этот доступ уже отправлена и ожидает решения."))
+						return
+					case "granted":
+						writeError(w, 409, errText("У вас уже есть этот доступ."))
+						return
+					}
+				}
+			}
+			writeError(w, 400, errText("Не удалось отправить заявку. Проверьте поля или попробуйте позже."))
 			return
 		}
 		writeJSON(w, 201, result)

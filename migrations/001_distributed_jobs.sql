@@ -32,7 +32,7 @@ CREATE INDEX IF NOT EXISTS ai_job_outbox_pending_idx ON ai_job_outbox (id) WHERE
 CREATE TABLE IF NOT EXISTS ai_deadline_notifications (
     id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     recipient_id text NOT NULL,
-    kind text NOT NULL CHECK (kind IN ('intern_48h', 'mentor_24h')),
+    kind text NOT NULL CHECK (kind IN ('intern_48h', 'mentor_24h', 'intern_deadline', 'mentor_deadline')),
     issue_key text NOT NULL,
     summary text NOT NULL,
     due_at timestamptz NOT NULL,

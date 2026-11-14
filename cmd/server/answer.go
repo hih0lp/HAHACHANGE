@@ -250,6 +250,13 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 					if callErr != nil {
 						return "Не удалось проверить состав команды через сервис команды. Попробуйте ещё раз позже.", hits, nil
 					}
+					if !plan.NeedsRecommendation && !plan.NeedsJiraIssue && !plan.NeedsMyJiraIssues && !plan.NeedsEvents && !plan.NeedsAvailability && !plan.NeedsForm && !plan.NeedsGitLab {
+						answer, err := formatTeamMembers(members)
+						if err != nil {
+							return "Не удалось прочитать состав команды из ответа сервиса команды.", hits, nil
+						}
+						return answer, hits, nil
+					}
 					if data, err := json.Marshal(withoutTeamProfileLinks(members)); err == nil {
 						prompt += "\nПроверенный состав текущей команды: " + string(data) + ". Отвечай только по этим данным; не приписывай людям роли или отношения, которых здесь нет."
 					}

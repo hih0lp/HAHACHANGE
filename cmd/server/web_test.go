@@ -81,3 +81,24 @@ func TestOldFormLinkReturnsToChat(t *testing.T) {
 		t.Fatalf("status %d, location %q", response.Code, response.Header().Get("Location"))
 	}
 }
+
+func TestFormsUseRandomBytesOnHTTPAndConfirmOnlyAfterSuccess(t *testing.T) {
+	chat := httptest.NewRecorder()
+	webPage(chat, httptest.NewRequest(http.MethodGet, "/", nil))
+	page := chat.Body.String()
+	if strings.Contains(page, "crypto.randomUUID") || !strings.Contains(page, "crypto.getRandomValues(bytes)") || !strings.Contains(page, "newIdempotencyKey()") {
+		t.Error("chat does not use HTTP-compatible idempotency keys")
+	}
+	if !strings.Contains(page, "if(!sent.ok){") || !strings.Contains(page, "message.textContent='Заявка успешно отправлена!'") {
+		t.Fatal("chat form success message is missing or shown before server confirmation")
+	}
+	if !strings.Contains(page, "fetch('/v1/form-resources'") || !strings.Contains(page, "resourceField.addEventListener('change',updateCapabilities)") {
+		t.Fatal("access form does not use the live resource and capability catalogue")
+	}
+	if strings.Contains(page, "JSON.stringify(values,null,2)") || !strings.Contains(page, "Подтвердите отправку заявки.") {
+		t.Fatal("access form exposes request JSON or lacks a plain confirmation")
+	}
+	if !strings.Contains(page, "if(error.status!==409)message.className='error'") {
+		t.Fatal("duplicate access request is rendered as a red generic error")
+	}
+}
