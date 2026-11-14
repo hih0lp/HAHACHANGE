@@ -344,33 +344,21 @@
   .message-body time, .user-message time { display: block; font-size: var(--text-small); margin-top: var(--space-2); }
   .message-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-1); }
   .message-actions time { margin: 0; }
-  .user-message.is-editing {
-    width: 100%;
-    max-width: 100%;
-    border-radius: var(--radius-l);
-    padding: var(--space-4);
-  }
-  .message-edit { display: grid; gap: var(--space-3); }
-  .message-edit textarea {
-    display: block;
-    width: 100%;
-    min-width: 0;
-    max-height: 36dvh;
-    field-sizing: content;
-    min-height: 52px;
-    resize: none;
-    border: 0;
+  .composer-edit-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    margin: var(--space-2) var(--space-2) 0;
+    padding-inline: var(--space-2) var(--space-1);
     border-radius: var(--radius-s);
-    padding: var(--space-2) 0;
-    background: transparent;
+    background: var(--neutral);
+    color: var(--muted);
+    font-size: var(--text-small);
   }
-  .message-edit textarea:focus-visible { outline-offset: 0; outline-color: var(--control-line); }
-  .message-edit-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); }
-  .message-edit-actions .button { border-radius: var(--radius-round); }
-  .message-edit-actions .secondary { background: var(--white); border-color: var(--line); }
-  .message-edit-actions .secondary:hover:not(:disabled) { background: var(--hover); }
-  .message-edit-actions .primary { background: var(--ink); }
-  .message-edit-actions .primary:hover:not(:disabled) { background: #373737; }
+  .composer-edit-header .answer-action:hover:not(:disabled) { background: var(--hover); }
+  .compose-panel.is-editing .composer { align-items: flex-end; }
+  .compose-panel.is-editing textarea { field-sizing: content; max-height: 28dvh; }
   .answer > * { margin-block: 0 var(--space-2); }
   .answer ul, .answer ol { padding-left: var(--space-6); }
   .answer-source, .external { display: inline; overflow-wrap: anywhere; }

@@ -170,7 +170,12 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
 
   function submit(event: FormEvent<HTMLFormElement>, fromWidget: boolean) {
     event.preventDefault();
-    void send(draft, fromWidget);
+    if (edit) {
+      const job = jobs.find(item => item.id === edit.id);
+      if (job) void changeJob(job, edit.query.trim());
+    } else {
+      void send(draft, fromWidget);
+    }
   }
 
   async function changeJob(job: Job, query?: string) {
@@ -208,9 +213,12 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
     }
   }
 
-  function cancelEdit() {
+  function cancelEdit(compact = false) {
     setEdit(null);
-    requestAnimationFrame(() => editMessage.current?.querySelector<HTMLButtonElement>('.answer-action')?.focus({ preventScroll: true }));
+    requestAnimationFrame(() => {
+      const target = compact ? widgetInput.current : editMessage.current?.querySelector<HTMLButtonElement>('.answer-action');
+      target?.focus({ preventScroll: true });
+    });
   }
 
   function openForm(id: string) {
@@ -279,9 +287,22 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
 
   function composer(compact = false) {
     const surface = compact ? 'widget' : 'chat';
+    const value = edit?.query ?? draft;
     return <>{dictation.message?.surface === surface && <Notice error>{dictation.message.text}</Notice>}
-    <form className="compose-panel" onSubmit={event => submit(event, compact)}>
-      {!!replyContext.length && <ul className="reply-context" aria-label="Контекст ответа">
+    <form className={edit ? 'compose-panel is-editing' : 'compose-panel'} onSubmit={event => submit(event, compact)}
+      onKeyDown={event => {
+        if (edit && event.key === 'Escape' && !changing && !event.nativeEvent.isComposing) {
+          event.preventDefault();
+          event.stopPropagation();
+          cancelEdit(compact);
+        }
+      }}>
+      {edit && <div className="composer-edit-header">
+        <span role="status">Редактирование вопроса</span>
+        <button type="button" className="answer-action" aria-label="Отменить редактирование" title="Отменить редактирование"
+          disabled={changing} onClick={() => cancelEdit(compact)}><Icon name="close"/></button>
+      </div>}
+      {!edit && !!replyContext.length && <ul className="reply-context" aria-label="Контекст ответа">
         {replyContext.map(({ id, kind, text }) => {
           const removeLabel = kind === 'reply' ? 'Убрать ответ' : 'Убрать цитату';
           return <li key={id}>
@@ -295,18 +316,21 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
         })}
       </ul>}
       <div className="composer">
-        <textarea ref={compact ? widgetInput : input} value={draft} readOnly={sending} onChange={event => onDraft(event.target.value)} onKeyDown={event => {
+        <textarea ref={compact ? widgetInput : input} value={value} readOnly={sending || !!edit && changing} onChange={event => {
+          if (edit) setEdit({ ...edit, query: event.target.value });
+          else onDraft(event.target.value);
+        }} onKeyDown={event => {
           if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
             event.preventDefault();
-            void send(draft, compact);
+            event.currentTarget.form?.requestSubmit();
           }
-        }} aria-label="Ваш вопрос" placeholder="Напишите вопрос Бобби" rows={1}/>
-        {microphone(surface)}
-        {activeJob
-          ? <button type="button" className="send-button stop-button" aria-label="Остановить ответ" title="Остановить ответ"
-              disabled={sending || changing} onClick={() => void changeJob(activeJob)}><Icon name="stop"/></button>
-          : <button key="send" className="send-button" aria-label={sending ? 'Отправляем вопрос' : 'Отправить вопрос'}
-              title="Отправить вопрос" disabled={sending || changing || [...draft.trim()].length < 2}><Icon name="send"/></button>}
+        }} aria-label={edit ? 'Изменённый вопрос' : 'Ваш вопрос'} placeholder="Напишите вопрос Бобби" rows={1}/>
+        {!edit && microphone(surface)}
+        {activeJob && <button type="button" className="send-button stop-button" aria-label="Остановить ответ" title="Остановить ответ"
+          disabled={sending || changing} onClick={() => void changeJob(activeJob)}><Icon name="stop"/></button>}
+        {(!activeJob || edit) && <button className="send-button" aria-label={edit ? 'Отправить изменённый вопрос' : sending ? 'Отправляем вопрос' : 'Отправить вопрос'}
+              title={edit ? 'Отправить изменённый вопрос' : 'Отправить вопрос'}
+              disabled={sending || changing || [...value.trim()].length < 2}><Icon name="send"/></button>}
       </div>
     </form></>;
   }
@@ -315,7 +339,7 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
     const recording = dictation.active === surface;
     const label = recording ? 'Остановить диктовку' : 'Голосовой ввод';
     return <button type="button" className="icon-button mic-button" title={label} aria-label={label}
-      aria-pressed={recording} disabled={sending || !!dictation.active && !recording}
+      aria-pressed={recording} disabled={!!edit || sending || !!dictation.active && !recording}
       onClick={() => {
         reveal?.();
         dictation.toggle(surface);
@@ -341,32 +365,18 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
             <br/><External href={item.url}>{item.key} · {item.summary}</External> · {timeText(new Date(Date.parse(item.due_at) - 1).toISOString(), true)}
           </Notice>)}
           {jobs.map((job, index) => <div key={job.id} className="turn" ref={job.id === latest?.id ? latestTurn : undefined}>
-            <div className={edit?.id === job.id ? 'user-message is-editing' : 'user-message'}>
-              {edit?.id === job.id ? <form className="message-edit" onSubmit={event => {
-                event.preventDefault();
-                void changeJob(job, edit.query.trim());
-              }} onKeyDown={event => {
-                if (event.key === 'Escape' && !changing && !event.nativeEvent.isComposing) {
-                  event.preventDefault();
-                  cancelEdit();
-                }
-              }}>
-                <textarea aria-label="Изменённый вопрос" rows={3} autoFocus readOnly={changing}
-                  value={edit.query} onChange={event => setEdit({ id: job.id, query: event.target.value })}/>
-                <div className="message-edit-actions">
-                  <button type="button" className="button secondary" disabled={changing} onClick={cancelEdit}>Отмена</button>
-                  <button className="button primary" disabled={sending || changing || [...edit.query.trim()].length < 2}>Отправить</button>
-                </div>
-              </form> : <><p>{job.query}</p>
-                <div className="message-actions">
-                  <Stamp value={job.created_at}/>
-                  <button type="button" className="answer-action" aria-label="Изменить вопрос" title="Изменить вопрос"
-                    disabled={sending || changing} onClick={event => {
-                      editMessage.current = event.currentTarget.closest('.user-message');
-                      setEdit({ id: job.id, query: job.query });
-                    }}><Icon name="edit"/></button>
-                </div>
-              </>}
+            <div className="user-message">
+              <p>{job.query}</p>
+              <div className="message-actions">
+                <Stamp value={job.created_at}/>
+                <button type="button" className="answer-action" aria-label="Изменить вопрос" title="Изменить вопрос"
+                  disabled={sending || changing} onClick={event => {
+                    dictation.cancel();
+                    editMessage.current = event.currentTarget.closest('.user-message');
+                    if (edit?.id !== job.id) setEdit({ id: job.id, query: job.query });
+                    input.current?.focus({ preventScroll: true });
+                  }}><Icon name="edit"/></button>
+              </div>
             </div>
             <div className="assistant-message" aria-live="polite">
               <span className="message-avatar"><Bobby state={index < jobs.length - 1 ? 'idle'
