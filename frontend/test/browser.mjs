@@ -31,6 +31,7 @@ async function fixtures(page) {
   const sessions = [];
   let loginRequests = 0;
   const jobs = [];
+  const threads = [];
   const keys = [];
   await page.route('**/session/bootstrap', route => route.fulfill({ status: 200, body: '' }));
   await page.routeWebSocket('**/v1/jobs/*/ws*', socket => {
@@ -43,16 +44,25 @@ async function fixtures(page) {
   });
   await page.route('**/v1/**', async route => {
     const request = route.request();
-    const path = new URL(request.url()).pathname;
+    const url = new URL(request.url());
+    const path = url.pathname;
     const body = request.postDataJSON();
     const respond = (json, status = 200) => route.fulfill({ json, status });
     if (path === '/v1/demo/role') { role = body.role; return respond({ role }); }
     if (path === '/v1/team-access/session') { sessions.push(role); return respond({ access_token: 'demo-' + role, role, expires_in: 3600 }); }
     if (path === '/v1/scenarios/login') { loginRequests++; return respond({ error: 'Unexpected login' }, 500); }
-    if (path === '/v1/chat/history') return respond({ turns: [...jobs].reverse() });
+    if (path === '/v1/chat/threads') return respond({ threads: threads.filter(item => item.role === role) });
+    if (path === '/v1/chat/history') {
+      const thread = url.searchParams.get('thread_id');
+      return respond({ turns: jobs.filter(job => job.thread_id === thread && job.role === role).reverse() });
+    }
     if (path === '/v1/deadline-notifications') return respond({ notifications: [] });
     if (path === '/v1/jobs' && body) {
-      const job = { id: String(++serial), query: body.query, status: 'completed', created_at: '2026-11-13T10:00:00Z', answer };
+      const id = String(++serial);
+      const thread = body.thread_id === 'new' ? 'thread-' + id : body.thread_id;
+      if (body.thread_id === 'new') threads.unshift({ id: thread, title: body.query, role });
+      else assert.ok(threads.some(item => item.id === thread && item.role === role));
+      const job = { id, thread_id: thread, role, query: body.query, status: 'completed', created_at: '2026-11-13T10:00:00Z', answer };
       if (body.query === 'Пустой ответ') job.answer = '';
       if (body.query === 'Проверка тайм-аута') Object.assign(job, { status: 'failed', answer: '', error: 'context deadline exceeded' });
       jobs.push(job);
@@ -178,6 +188,24 @@ try {
     await input.fill('Проверка тайм-аута');
     await input.press('Enter');
     await page.getByText('Время ожидания ответа истекло.').waitFor();
+
+    const firstQuestion = 'С чего начать адаптацию в команде?';
+    const secondQuestion = 'Вопрос в новой беседе';
+    const messages = page.getByLabel('Сообщения чата');
+    await page.getByRole('button', { name: 'Новый чат' }).click();
+    await page.getByRole('heading', { name: 'Привет, я Бобби!' }).waitFor();
+    assert.equal(await messages.getByText(firstQuestion, { exact: true }).count(), 0);
+    await input.fill(secondQuestion);
+    await input.press('Enter');
+    await messages.getByText(secondQuestion, { exact: true }).waitFor();
+    const chatList = page.getByRole('combobox', { name: 'Открыть беседу' });
+    await chatList.selectOption({ label: firstQuestion });
+    await messages.getByText(firstQuestion, { exact: true }).waitFor();
+    assert.equal(await messages.getByText(secondQuestion, { exact: true }).count(), 0);
+    await page.reload();
+    await messages.getByText(secondQuestion, { exact: true }).waitFor();
+    await chatList.selectOption({ label: firstQuestion });
+    await messages.getByText(firstQuestion, { exact: true }).waitFor();
 
     await navigate(page, 'Мои задачи');
     await page.getByText('DEMO-5 · Настроить окружение').waitFor();

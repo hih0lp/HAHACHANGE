@@ -17,6 +17,7 @@ import (
 
 type Job struct {
 	ID          string          `json:"id"`
+	ThreadID    string          `json:"thread_id,omitempty"`
 	Query       string          `json:"query"`
 	Scenario    string          `json:"scenario"`
 	Status      string          `json:"status"`
@@ -51,6 +52,14 @@ func (s *System) Submit(ctx context.Context, owner, scenario, query string) (Job
 }
 
 func (s *System) SubmitWithContext(ctx context.Context, owner, scenario, query string, teamContext json.RawMessage) (Job, error) {
+	return s.submit(ctx, owner, scenario, query, "", teamContext, "")
+}
+
+func (s *System) SubmitChat(ctx context.Context, owner, scenario, query, thread, token string) (Job, error) {
+	return s.submit(ctx, owner, scenario, query, thread, nil, token)
+}
+
+func (s *System) submit(ctx context.Context, owner, scenario, query, thread string, teamContext json.RawMessage, token string) (Job, error) {
 	id, err := NewID()
 	if err != nil {
 		return Job{}, err
@@ -60,8 +69,22 @@ func (s *System) SubmitWithContext(ctx context.Context, owner, scenario, query s
 		return Job{}, err
 	}
 	defer tx.Rollback(ctx)
+	switch thread {
+	case "new":
+		thread = id
+		_, err = tx.Exec(ctx, `INSERT INTO ai_chat_threads(id, owner_id, title) VALUES($1,$2,left($3,80))`, thread, owner, query)
+	case "", "legacy":
+		thread = ""
+	default:
+		err = tx.QueryRow(ctx, `UPDATE ai_chat_threads SET updated_at=GREATEST(updated_at,now())
+			WHERE id=$1 AND owner_id=$2 RETURNING id::text`, thread, owner).Scan(&thread)
+	}
+	if err != nil {
+		return Job{}, err
+	}
 	var createdAt time.Time
-	err = tx.QueryRow(ctx, `INSERT INTO ai_jobs(id,owner_id,scenario,query,status,team_context) VALUES($1,$2,$3,$4,'queued',$5) RETURNING created_at`, id, owner, scenario, query, teamContext).Scan(&createdAt)
+	err = tx.QueryRow(ctx, `INSERT INTO ai_jobs(id,owner_id,scenario,query,status,team_context,thread_id)
+		VALUES($1,$2,$3,$4,'queued',$5,NULLIF($6,'')::uuid) RETURNING created_at`, id, owner, scenario, query, teamContext, thread).Scan(&createdAt)
 	if err != nil {
 		return Job{}, err
 	}
@@ -69,10 +92,13 @@ func (s *System) SubmitWithContext(ctx context.Context, owner, scenario, query s
 	if err != nil {
 		return Job{}, err
 	}
+	if err := s.StoreTeamToken(ctx, id, token); err != nil {
+		return Job{}, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return Job{}, err
 	}
-	job := Job{ID: id, Query: query, Scenario: scenario, Status: "queued", CreatedAt: createdAt}
+	job := Job{ID: id, ThreadID: thread, Query: query, Scenario: scenario, Status: "queued", CreatedAt: createdAt}
 	s.cache(ctx, job)
 	return job, nil
 }
@@ -80,8 +106,8 @@ func (s *System) SubmitWithContext(ctx context.Context, owner, scenario, query s
 func (s *System) Get(ctx context.Context, owner, id string) (Job, error) {
 	var job Job
 	var sources []byte
-	err := s.DB.QueryRow(ctx, `SELECT id::text, query, scenario, status, COALESCE(answer,''), sources, COALESCE(error,''), created_at, completed_at FROM ai_jobs WHERE id=$1 AND owner_id=$2`, id, owner).
-		Scan(&job.ID, &job.Query, &job.Scenario, &job.Status, &job.Answer, &sources, &job.Error, &job.CreatedAt, &job.CompletedAt)
+	err := s.DB.QueryRow(ctx, `SELECT id::text, COALESCE(thread_id::text,''), query, scenario, status, COALESCE(answer,''), sources, COALESCE(error,''), created_at, completed_at FROM ai_jobs WHERE id=$1 AND owner_id=$2`, id, owner).
+		Scan(&job.ID, &job.ThreadID, &job.Query, &job.Scenario, &job.Status, &job.Answer, &sources, &job.Error, &job.CreatedAt, &job.CompletedAt)
 	if err != nil {
 		return Job{}, err
 	}

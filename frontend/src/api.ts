@@ -1,7 +1,9 @@
 export type Role = 'intern' | 'intern2' | 'mentor';
 export type Session = { access_token: string; expires_in: number; role?: Role };
+export type ChatThread = { id: string; title: string };
 export type Job = {
   id: string;
+  thread_id?: string;
   query: string;
   status: 'queued' | 'running' | 'completed' | 'failed';
   answer?: string;
@@ -73,8 +75,10 @@ const formPath = (id: string) => '/v1/forms/' + encodeURIComponent(id);
 export const api = {
   demo: () => request<Session>('/v1/team-access/session', { body: {} }),
   role: (role: Role) => request('/v1/demo/role', { body: { role } }),
-  history: (key: string) => request<{ turns: Job[] }>('/v1/chat/history', { key }),
-  ask: (query: string, auth: Auth) => request<Job>('/v1/jobs', { ...auth, body: { query, scenario: 'general' } }),
+  threads: (key: string) => request<{ threads: ChatThread[] }>('/v1/chat/threads', { key }),
+  history: (key: string, thread: string) => request<{ turns: Job[] }>('/v1/chat/history?thread_id=' + encodeURIComponent(thread), { key }),
+  ask: (query: string, auth: Auth, thread?: string) =>
+    request<Job>('/v1/jobs', { ...auth, body: { query, scenario: 'general', thread_id: thread } }),
   job: (id: string, auth: Auth, signal: AbortSignal) => request<Job>('/v1/jobs/' + encodeURIComponent(id), { ...auth, account: !!auth.token, signal }),
   forms: (auth: Auth) => request<{ forms: FormDefinition[] | null }>('/v1/forms', auth),
   form: (id: string, auth: Auth) => request<FormDefinition>(formPath(id), auth),

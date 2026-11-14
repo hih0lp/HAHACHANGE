@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { api, ApiError, completed, errorText, watchJob } from './api';
-import type { Job } from './api';
+import type { ChatThread, Job } from './api';
 import { AccessForm } from './AccessForm';
 import { Answer } from './Answer';
 import { timeText, upsert } from './model';
@@ -27,6 +27,11 @@ export function Chat({ token, apiKey, identity, formID, catalog, draft, onDraft,
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [historyError, setHistoryError] = useState('');
+  const [listError, setListError] = useState('');
+  const [threads, setThreads] = useState<ChatThread[]>([]);
+  const [thread, setThread] = useState('');
+  const [threadsReady, setThreadsReady] = useState(false);
+  const [localMode, setLocalMode] = useState(false);
   const [reload, setReload] = useState(0);
   const [deadlines, setDeadlines] = useState<Awaited<ReturnType<typeof api.deadlines>>['notifications']>([]);
   const watchers = useRef(new Map<string, () => void>());
@@ -39,8 +44,27 @@ export function Chat({ token, apiKey, identity, formID, catalog, draft, onDraft,
 
   useEffect(() => {
     let active = true;
+    setListError('');
+    void api.threads(apiKey).then(({ threads }) => {
+      if (!active) return;
+      setThreads(threads);
+      setThread(current => current || threads[0]?.id || 'new');
+      setThreadsReady(true);
+    }).catch(err => {
+      if (!active) return;
+      if (err instanceof ApiError && err.status === 404) {
+        setLocalMode(true);
+        setThreadsReady(true);
+      } else setListError(errorText(err, 'Список бесед временно недоступен.'));
+    });
+    return () => { active = false; };
+  }, [apiKey, reload]);
+
+  useEffect(() => {
+    if (!thread || thread === 'new') return;
+    let active = true;
     setHistoryError('');
-    void api.history(apiKey).then(({ turns }) => {
+    void api.history(apiKey, thread).then(({ turns }) => {
       if (active) setJobs(current => {
         const latest = new Map([...turns].reverse().map(job => [job.id, job]));
         current.forEach(job => {
@@ -50,10 +74,10 @@ export function Chat({ token, apiKey, identity, formID, catalog, draft, onDraft,
         return [...latest.values()];
       });
     }).catch(err => {
-      if (active && !(err instanceof ApiError && err.status === 404)) setHistoryError(errorText(err, 'История чата временно недоступна.'));
+      if (active) setHistoryError(errorText(err, 'История чата временно недоступна.'));
     });
     return () => { active = false; };
-  }, [apiKey, reload]);
+  }, [apiKey, reload, thread]);
 
   useEffect(() => {
     const active = watchers.current;
@@ -104,13 +128,21 @@ export function Chat({ token, apiKey, identity, formID, catalog, draft, onDraft,
 
   async function send(text: string) {
     const query = text.trim();
-    if ([...query].length < 2 || lock.current) return;
+    if ([...query].length < 2 || lock.current || !threadsReady) return;
     lock.current = true;
     setSending(true);
     setError('');
     try {
-      const job = await api.ask(query, { token, key: apiKey });
+      const job = await api.ask(query, { token, key: apiKey }, localMode ? undefined : thread);
       setJobs(current => upsert(current, { ...job, query, created_at: job.created_at || new Date().toISOString() }));
+      if (job.thread_id && thread === 'new') setThread(job.thread_id);
+      if (!localMode) {
+        const id = job.thread_id || thread;
+        setThreads(current => {
+          const item = current.find(entry => entry.id === id) || { id, title: [...query].slice(0, 80).join('') };
+          return [item, ...current.filter(entry => entry.id !== id)];
+        });
+      }
       onDraft('');
       input.current?.focus();
     } catch (err) {
@@ -120,6 +152,20 @@ export function Chat({ token, apiKey, identity, formID, catalog, draft, onDraft,
       setSending(false);
       lock.current = false;
     }
+  }
+
+  function selectThread(id: string) {
+    if (lock.current || id === thread) return;
+    watchers.current.forEach(stop => stop());
+    watchers.current.clear();
+    initialRestore.current = true;
+    setJobs([]);
+    setWaiting({});
+    setError('');
+    setHistoryError('');
+    onDraft('');
+    onCloseForm();
+    setThread(id);
   }
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -141,22 +187,30 @@ export function Chat({ token, apiKey, identity, formID, catalog, draft, onDraft,
   }
 
   const auth = { token, key: apiKey };
-  const hasMessages = jobs.length > 0 || !!formID || catalog || deadlines.length > 0;
+  const hasMessages = jobs.length > 0 || !!formID || catalog;
 
   return <div className={'chat-page' + (hasMessages ? ' has-messages' : '')}>
+    {!localMode && <nav className="chat-history" aria-label="История чатов">
+      <button className="button secondary" disabled={!threadsReady || sending || thread === 'new'} onClick={() => selectThread('new')}>Новый чат</button>
+      {threads.length > 0 && <select aria-label="Открыть беседу" value={thread} disabled={sending} onChange={event => selectThread(event.target.value)}>
+        {thread === 'new' && <option value="new">Новая беседа</option>}
+        {threads.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}
+      </select>}
+      {listError && <Notice error action={<button className="text-button" onClick={() => setReload(value => value + 1)}>Повторить</button>}>{listError}</Notice>}
+    </nav>}
     <div className="chat-scroll" ref={scroll}>
       <div className="chat-inner">
         {historyError && <Notice error action={<button className="text-button" onClick={() => setReload(value => value + 1)}>Повторить</button>}>{historyError}</Notice>}
+        {deadlines.map(item => <Notice key={item.id}>
+          <strong>{item.kind === 'mentor_24h' ? 'Помогите стажёру' : 'Скоро дедлайн'}</strong>
+          <br/><External href={item.url}>{item.key} · {item.summary}</External> · {timeText(new Date(Date.parse(item.due_at) - 1).toISOString(), true)}
+        </Notice>)}
         {!hasMessages && <div className="welcome">
           <Illustration/>
           <h1>Привет, я Бобби!</h1>
           <p>Помогу освоиться в команде и разобраться с первыми задачами.</p>
         </div>}
         {hasMessages && <div className="messages" aria-label="Сообщения чата">
-          {deadlines.map(item => <Notice key={item.id}>
-            <strong>{item.kind === 'mentor_24h' ? 'Помогите стажёру' : 'Скоро дедлайн'}</strong>
-            <br/><External href={item.url}>{item.key} · {item.summary}</External> · {timeText(new Date(Date.parse(item.due_at) - 1).toISOString(), true)}
-          </Notice>)}
           {jobs.map(job => <div key={job.id} className="turn">
             <div className="user-message"><p>{job.query}</p><Stamp value={job.created_at}/></div>
             <div className="assistant-message" aria-live="polite">
@@ -184,10 +238,10 @@ export function Chat({ token, apiKey, identity, formID, catalog, draft, onDraft,
     <div className="chat-footer">
       <div className="chat-inner">
         {!hasMessages && <div className="suggestions">
-          <button className="suggestion" disabled={sending} onClick={() => void send('С чего начать адаптацию в команде?')}>
+          <button className="suggestion" disabled={sending || !threadsReady} onClick={() => void send('С чего начать адаптацию в команде?')}>
             <span className="suggestion-icon mint"><Icon name="route"/></span><span>С чего начать?</span><Icon className="suggestion-arrow" name="chevron"/>
           </button>
-          <button className="suggestion" disabled={sending} onClick={() => void send('Кто мой наставник?')}>
+          <button className="suggestion" disabled={sending || !threadsReady} onClick={() => void send('Кто мой наставник?')}>
             <span className="suggestion-icon lavender"><Icon name="people"/></span><span>Кто мой наставник?</span><Icon className="suggestion-arrow" name="chevron"/>
           </button>
           <button className="suggestion" onClick={onCatalog}>
@@ -199,7 +253,7 @@ export function Chat({ token, apiKey, identity, formID, catalog, draft, onDraft,
           <textarea ref={input} value={draft} onChange={event => onDraft(event.target.value)} onKeyDown={event => {
             if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(draft); }
           }} aria-label="Ваш вопрос" placeholder="Напишите вопрос Бобби" rows={1}/>
-          <button className="send-button" aria-label={sending ? 'Отправляем вопрос' : 'Отправить вопрос'} title="Отправить вопрос" disabled={sending || [...draft.trim()].length < 2}><Icon name="send"/></button>
+          <button className="send-button" aria-label={sending ? 'Отправляем вопрос' : 'Отправить вопрос'} title="Отправить вопрос" disabled={sending || !threadsReady || [...draft.trim()].length < 2}><Icon name="send"/></button>
         </form>
         <p className="composer-hint">Бобби может ошибаться. Проверяйте важное по ссылкам в ответах.</p>
       </div>
