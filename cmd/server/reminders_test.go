@@ -10,7 +10,78 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/hackchange/avito-rag/internal/scenario"
 )
+
+func TestJiraTasksByTeamProfile(t *testing.T) {
+	now := time.Now()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/me":
+			switch r.Header.Get("Authorization") {
+			case "Bearer first":
+				writeJSON(w, 200, scenario.Profile{ID: "intern", JiraAccountID: "demo-placeholder"})
+			case "Bearer second":
+				writeJSON(w, 200, scenario.Profile{ID: "intern2", JiraAccountID: "jira-second"})
+			case "Bearer mentor":
+				writeJSON(w, 200, scenario.Profile{ID: "approver", Teams: []scenario.Team{
+					{ID: "team", MentorID: "approver"}, {ID: "other", MentorID: "someone-else"},
+				}})
+			default:
+				w.WriteHeader(http.StatusUnauthorized)
+			}
+		case "/v1/teams/team/members":
+			if r.Header.Get("Authorization") != "Bearer mentor" {
+				t.Errorf("Unexpected team lookup for %q", r.Header.Get("Authorization"))
+			}
+			writeJSON(w, 200, map[string]any{"members": []scenario.Member{
+				{ID: "intern", Role: "intern", JiraAccountID: "demo-placeholder"},
+				{ID: "intern2", Role: "intern", JiraAccountID: "jira-second"},
+				{ID: "developer", Role: "developer", JiraAccountID: "jira-developer"},
+			}})
+		case "/rest/api/3/search/jql":
+			issues := []map[string]any{}
+			for account, key := range map[string]string{"jira-first": "DEMO-1", "jira-second": "DEMO-2"} {
+				if !strings.Contains(r.URL.Query().Get("jql"), `assignee = "`+account+`"`) {
+					continue
+				}
+				issues = append(issues, map[string]any{"key": key, "fields": map[string]any{
+					"summary": key, "due_at": now.Add(time.Hour).Format(time.RFC3339),
+					"assignee": map[string]string{"accountId": account},
+				}})
+			}
+			writeJSON(w, 200, map[string]any{"issues": issues})
+		default:
+			t.Errorf("Unexpected request: %s", r.URL)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer upstream.Close()
+
+	mux := http.NewServeMux()
+	registerJiraTasks(mux, "", jiraConfig{Mode: "mock", BaseURL: upstream.URL, ProjectKey: "DEMO"},
+		reminderConfig{InternAccountID: "jira-first", HoursBefore: 2, TimeZone: "UTC"}, scenario.Client{BaseURL: upstream.URL})
+	for token, want := range map[string]string{"first": "DEMO-1", "second": "DEMO-2", "mentor": "DEMO-1,DEMO-2"} {
+		t.Run(token, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/v1/tasks/jira", nil)
+			req.Header.Set("Authorization", "Bearer "+token)
+			req.AddCookie(&http.Cookie{Name: "buddy_demo_role", Value: "mentor"})
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+			var result reminderSnapshot
+			if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil || rec.Code != http.StatusOK || !result.Enabled {
+				t.Fatalf("Unexpected response %d: %s", rec.Code, rec.Body.String())
+			}
+			keys := []string{}
+			for _, item := range result.Reminders {
+				keys = append(keys, item.Key)
+			}
+			if got := strings.Join(keys, ","); got != want {
+				t.Errorf("Got %s, want %s", got, want)
+			}
+		})
+	}
+}
 
 func TestRemindersOnlyForAssignedOpenTasksInsideWindow(t *testing.T) {
 	jira := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

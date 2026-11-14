@@ -30,6 +30,7 @@ export type FormDefinition = {
 export type Values = Record<string, unknown>;
 export type Receipt = { id: string; status: string };
 export type Reminder = { id: string; key: string; summary: string; url: string; due_at: string };
+export type DeadlineNotification = Omit<Reminder, 'id'> & { id: number; kind: string };
 export type CalendarEvent = {
   id: string; summary?: string; start?: { dateTime?: string; date?: string };
   htmlLink?: string; status?: string;
@@ -94,7 +95,6 @@ export const api = {
     request<Receipt>(formPath(id) + '/submit', { ...auth, idem, body: { version, values, confirmed: true } }),
   jira: (auth: Auth) => request<{ enabled: boolean; reminders: Reminder[] }>('/v1/tasks/jira', auth),
   calendar: (auth: Auth) => request<{ data?: { items?: CalendarEvent[] } }>('/v1/calendar/reminders', auth),
-  deadlines: (auth: Auth) => request<{ notifications: (Reminder & { kind: string })[] }>('/v1/deadline-notifications', auth),
 };
 
 export function errorText(error: unknown, fallback: string) {
@@ -108,6 +108,53 @@ export function errorText(error: unknown, fallback: string) {
 }
 
 export const completed = (job: Job) => job.status === 'completed' || job.status === 'failed';
+
+export function watchDeadlines(apiKey: string, token: string, onNotifications: (items: DeadlineNotification[]) => void) {
+  const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const url = scheme + '//' + location.host + '/v1/deadline-notifications/ws';
+  let socket: WebSocket;
+  let stopped = false;
+  let retryDelay = 1_000;
+  let retryTimer: ReturnType<typeof setTimeout>;
+  let messageTimer: ReturnType<typeof setTimeout>;
+
+  function connect() {
+    const connection = new WebSocket(url);
+    socket = connection;
+    messageTimer = setTimeout(() => connection.close(), 25_000);
+    connection.onopen = () => connection.send(JSON.stringify({ api_key: apiKey, access_token: token }));
+    connection.onmessage = ({ data }) => {
+      if (stopped) return;
+      let items: DeadlineNotification[];
+      try {
+        ({ notifications: items } = JSON.parse(data));
+        if (!Array.isArray(items)) throw new Error('Invalid deadline snapshot');
+      } catch {
+        connection.close();
+        return;
+      }
+      retryDelay = 1_000;
+      clearTimeout(messageTimer);
+      messageTimer = setTimeout(() => connection.close(), 75_000);
+      onNotifications(items);
+    };
+    connection.onerror = () => connection.close();
+    connection.onclose = () => {
+      clearTimeout(messageTimer);
+      if (stopped) return;
+      retryTimer = setTimeout(connect, retryDelay);
+      retryDelay = Math.min(retryDelay * 2, 15_000);
+    };
+  }
+  connect();
+
+  return () => {
+    stopped = true;
+    clearTimeout(retryTimer);
+    clearTimeout(messageTimer);
+    socket.close();
+  };
+}
 
 export function watchJob(id: string, auth: Auth, onJob: (job: Job) => void, onState: (state: 'reconnect' | 'timeout') => void) {
   let stopped = false;

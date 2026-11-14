@@ -63,8 +63,24 @@ function showCalendarReminders(data){for(const item of data.data?.items||[]){con
 async function pollCalendarReminders(){try{const token=await teamSessionReady;if(token){const response=await fetch('/v1/calendar/reminders',{headers:{Authorization:'Bearer '+token}});if(response.ok)showCalendarReminders(await response.json())}}catch(error){}setTimeout(pollCalendarReminders,60000)}
 pollCalendarReminders();
 const seenDeadlineNotifications=new Set();
-async function loadDeadlineNotifications(){try{await teamSessionReady;const headers={},key=document.getElementById('key').value;if(key)headers['X-API-Key']=key;const response=await fetch('/v1/deadline-notifications',{headers});if(response.ok){const data=await response.json();for(const item of (data.notifications||[]).reverse()){if(seenDeadlineNotifications.has(item.id))continue;seenDeadlineNotifications.add(item.id);const card=document.createElement('article');card.className='bubble assistant deadline';const title=document.createElement('h2');title.textContent=item.kind==='mentor_deadline'?'Помогите стажёру':'Скоро дедлайн';const body=document.createElement('p');body.append(document.createTextNode(item.kind==='mentor_deadline'?'Срок задачи стажёра скоро истекает. Пожалуйста, помогите ему: ':'Скоро срок вашей задачи: '));const label=item.key+' · '+item.summary;if(item.url&&item.url.startsWith('https://')){const link=document.createElement('a');link.href=item.url;link.target='_blank';link.rel='noopener noreferrer';link.textContent=label;body.append(link)}else{body.append(document.createTextNode(label))}body.append(document.createTextNode(' — до '+new Date(item.due_at).toLocaleString()));card.append(title,body);messageTime(card,item.created_at);results.append(card)}}}catch(error){}setTimeout(loadDeadlineNotifications,15000)}
-loadDeadlineNotifications();
+function showDeadlineNotifications(data){for(const item of data.notifications.slice().reverse()){if(seenDeadlineNotifications.has(item.id))continue;seenDeadlineNotifications.add(item.id);const card=document.createElement('article');card.className='bubble assistant deadline';const title=document.createElement('h2');title.textContent=item.kind==='mentor_deadline'?'Помогите стажёру':'Скоро дедлайн';const body=document.createElement('p');body.append(document.createTextNode(item.kind==='mentor_deadline'?'Срок задачи стажёра скоро истекает. Пожалуйста, помогите ему: ':'Скоро срок вашей задачи: '));const label=item.key+' · '+item.summary;if(item.url&&item.url.startsWith('https://')){const link=document.createElement('a');link.href=item.url;link.target='_blank';link.rel='noopener noreferrer';link.textContent=label;body.append(link)}else{body.append(document.createTextNode(label))}body.append(document.createTextNode(' — до '+new Date(item.due_at).toLocaleString()));card.append(title,body);messageTime(card,item.created_at);results.append(card)}}
+async function watchDeadlineNotifications(){
+  const token=await teamSessionReady;if(!token)return;
+  const scheme=location.protocol==='https:'?'wss:':'ws:';
+  const socket=new WebSocket(scheme+'//'+location.host+'/v1/deadline-notifications/ws');
+  let timeout=setTimeout(()=>socket.close(),25000);
+  socket.onopen=()=>socket.send(JSON.stringify({api_key:document.getElementById('key').value,access_token:token}));
+  socket.onmessage=event=>{
+    let data;
+    try{data=JSON.parse(event.data);if(!Array.isArray(data.notifications))throw Error()}catch(error){socket.close();return}
+    clearTimeout(timeout);
+    timeout=setTimeout(()=>socket.close(),75000);
+    showDeadlineNotifications(data);
+  };
+  socket.onerror=()=>socket.close();
+  socket.onclose=()=>{clearTimeout(timeout);setTimeout(watchDeadlineNotifications,5000)};
+}
+watchDeadlineNotifications();
 async function loadHistory(){try{const headers={},key=document.getElementById('key').value;if(key)headers['X-API-Key']=key;const response=await fetch('/v1/chat/history',{headers});if(!response.ok)return;const data=await response.json();for(const item of (data.turns||[]).reverse()){const user=document.createElement('div');user.className='bubble user';user.textContent=item.query;results.append(user);const card=document.createElement('article');card.className='bubble assistant';const title=document.createElement('h2');title.textContent='AI-buddy';const state=document.createElement('div');state.className='meta';state.dataset.state='';const body=document.createElement('div');body.dataset.body='';card.append(title,state,body);results.append(card);showJob(card,item);if(item.status==='queued'||item.status==='running')watchJob(item,card,key)}}catch(error){status.textContent='История чата временно недоступна'}}
 loadHistory();
 </script></body></html>`

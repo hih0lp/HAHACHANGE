@@ -32,9 +32,24 @@ async function fixtures(page, { deadline = false, beforeSession = async () => {}
   let role = 'intern';
   const sessions = [];
   let loginRequests = 0;
+  let deadlineSocket;
+  let extraDeadline = false;
   const jobs = [];
   const keys = [];
   await page.route('**/session/bootstrap', route => route.fulfill({ status: 200, body: '' }));
+  await page.routeWebSocket('**/v1/deadline-notifications/ws', socket => {
+    socket.onMessage(message => {
+      const auth = JSON.parse(message);
+      assert.equal(auth.access_token, 'demo-' + role);
+      deadlineSocket = socket;
+      const notifications = deadline ? [{
+        id: 1, kind: 'intern_deadline', key: 'DEMO-5', summary: 'Тестовый срок',
+        url: 'https://example.atlassian.net/browse/DEMO-5', due_at: new Date(Date.now() + 60_000).toISOString(),
+      }] : [];
+      if (extraDeadline) notifications.push({ ...notifications[0], id: 2, key: 'DEMO-6', summary: 'Новый срок' });
+      socket.send(JSON.stringify({ notifications }));
+    });
+  });
   await page.routeWebSocket('**/v1/jobs/*/ws*', socket => {
     const id = new URL(socket.url()).pathname.split('/')[3];
     const job = jobs.find(job => job.id === id);
@@ -58,10 +73,7 @@ async function fixtures(page, { deadline = false, beforeSession = async () => {}
     if (path === '/v1/scenarios/login') { loginRequests++; return respond({ error: 'Unexpected login' }, 500); }
     assert.equal(request.headers().authorization, 'Bearer demo-' + role, path);
     if (path === '/v1/chat/history') return respond({ turns: [...jobs].reverse() });
-    if (path === '/v1/deadline-notifications') return respond({ notifications: deadline ? [{
-      id: 'deadline-1', kind: 'intern_deadline', key: 'DEMO-5', summary: 'Тестовый срок',
-      url: 'https://example.atlassian.net/browse/DEMO-5', due_at: new Date(Date.now() + 60_000).toISOString(),
-    }] : [] });
+    if (path === '/v1/deadline-notifications') assert.fail('Deadline notifications must use WebSocket');
     const action = /^\/v1\/jobs\/([^/]+)\/(edit|stop)$/.exec(path);
     if (action) {
       const index = jobs.findIndex(job => job.id === action[1]);
@@ -107,6 +119,10 @@ async function fixtures(page, { deadline = false, beforeSession = async () => {}
   });
   return {
     keys, sessions, submits: () => submits, loginRequests: () => loginRequests,
+    reconnectDeadlines: async () => {
+      extraDeadline = true;
+      await deadlineSocket.close();
+    },
     approveAccess: () => { committed = { ...committed, status: 'approved' }; },
   };
 }
@@ -166,7 +182,7 @@ try {
     const page = await browser.newPage();
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
-    await fixtures(page, { deadline: true });
+    const mock = await fixtures(page, { deadline: true });
     await page.addInitScript(() => {
       window.SpeechRecognition = class {
         start() { window.currentRecognition = this; }
@@ -185,6 +201,10 @@ try {
     await page.goto(base);
     await page.getByRole('button', { name: 'Закрыть уведомление' }).click();
     await page.locator('.deadline-notices').waitFor({ state: 'hidden' });
+    await mock.reconnectDeadlines();
+    await page.locator('.deadline-notices').getByText('DEMO-6 · Новый срок').waitFor();
+    assert.equal(await page.locator('.deadline-notices').getByText('DEMO-5 · Тестовый срок').count(), 0);
+    await page.getByRole('button', { name: 'Закрыть уведомление' }).click();
     const trigger = page.getByRole('button', { name: 'Мини-чат с Бобби' });
     if (await page.evaluate(() => !!window.documentPictureInPicture)) {
       await trigger.click();

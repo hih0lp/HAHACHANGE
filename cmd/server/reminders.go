@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 	_ "time/tzdata" // The minimal runtime image does not contain system timezone files.
 
 	"github.com/gorilla/websocket"
+	"github.com/hackchange/avito-rag/internal/scenario"
 )
 
 type reminderConfig struct {
@@ -104,6 +106,72 @@ func loadRemindersWindow(ctx context.Context, jira jiraConfig, cfg reminderConfi
 
 func deadlineWindow(now, due time.Time, window time.Duration) bool {
 	return window > 0 && !now.Before(due.Add(-window)) && now.Before(due)
+}
+
+func reminderAccountID(user, jiraID, fallback string) string {
+	if user == "intern" && fallback != "" && (jiraID == "" || strings.HasPrefix(jiraID, "demo-")) {
+		return fallback
+	}
+	return jiraID
+}
+
+func registerJiraTasks(mux *http.ServeMux, apiKey string, jira jiraConfig, cfg reminderConfig, directory scenario.Client) {
+	mux.Handle("GET /v1/tasks/jira", authorize(apiKey, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if !ok || token == "" {
+			writeError(w, http.StatusUnauthorized, errText("team session required"))
+			return
+		}
+		ctx := r.Context()
+		profile, err := directory.Profile(ctx, token)
+		if err != nil {
+			scenarioError(w, err)
+			return
+		}
+		accounts := map[string]struct{}{}
+		if profile.ID == "intern" || profile.ID == "intern2" {
+			accounts[reminderAccountID(profile.ID, profile.JiraAccountID, cfg.InternAccountID)] = struct{}{}
+		} else {
+			for _, team := range profile.Teams {
+				if team.MentorID != profile.ID {
+					continue
+				}
+				members, err := directory.Members(ctx, token, team.ID)
+				if err != nil {
+					scenarioError(w, err)
+					return
+				}
+				for _, member := range members {
+					if member.Role == "intern" {
+						accounts[reminderAccountID(member.ID, member.JiraAccountID, cfg.InternAccountID)] = struct{}{}
+					}
+				}
+			}
+		}
+		delete(accounts, "")
+		result := reminderSnapshot{Reminders: []reminder{}}
+		now := time.Now()
+		for account := range accounts {
+			taskConfig := cfg
+			taskConfig.InternAccountID = account
+			snapshot, err := loadReminders(ctx, jira, taskConfig, now)
+			if err != nil {
+				writeError(w, http.StatusBadGateway, errText("Не удалось проверить задачи Jira"))
+				return
+			}
+			result.Enabled = snapshot.Enabled
+			result.Reminders = append(result.Reminders, snapshot.Reminders...)
+		}
+		sort.Slice(result.Reminders, func(i, j int) bool {
+			a, b := result.Reminders[i], result.Reminders[j]
+			if a.DueAt.Equal(b.DueAt) {
+				return a.Key < b.Key
+			}
+			return a.DueAt.Before(b.DueAt)
+		})
+		w.Header().Set("Cache-Control", "no-store")
+		writeJSON(w, http.StatusOK, result)
+	})))
 }
 
 func registerReminderRoutes(mux *http.ServeMux, apiKey string, jira jiraConfig, cfg reminderConfig) {

@@ -72,6 +72,7 @@ func newHandler(service *rag.Service, cfg config) http.Handler {
 		registerHistoryRoutes(mux, cfg.APIKey, cfg.Distributed)
 		if endpoint := os.Getenv("TEAM_ACCESS_URL"); endpoint != "" {
 			teamClient := scenario.Client{BaseURL: endpoint, RightsURL: os.Getenv("RIGHTS_URL")}
+			registerJiraTasks(mux, cfg.APIKey, cfg.Jira, cfg.Reminder, teamClient)
 			registerDeadlineNotifications(mux, cfg.Distributed.DB, cfg.APIKey, cfg.Jira, cfg.Reminder, teamClient)
 			registerTeamSessionRoute(mux, teamClient)
 			if os.Getenv("RIGHTS_URL") != "" {

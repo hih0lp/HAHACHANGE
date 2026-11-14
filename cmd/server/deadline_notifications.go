@@ -2,13 +2,15 @@ package main
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"log"
 	"net/http"
-	"strings"
+	"sync"
 	"time"
 
+	"github.com/gorilla/websocket"
 	"github.com/hackchange/avito-rag/internal/scenario"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -52,9 +54,8 @@ func scanInternDeadlineNotifications(ctx context.Context, db *pgxpool.Pool, jira
 	if err != nil {
 		return err
 	}
-	if profile.JiraAccountID != "" && (user == "intern2" || !strings.HasPrefix(profile.JiraAccountID, "demo-") || cfg.InternAccountID == "") {
-		cfg.InternAccountID = profile.JiraAccountID
-	} else if user == "intern2" {
+	cfg.InternAccountID = reminderAccountID(user, profile.JiraAccountID, cfg.InternAccountID)
+	if cfg.InternAccountID == "" {
 		return nil
 	}
 	mentor := ""
@@ -84,6 +85,27 @@ func scanInternDeadlineNotifications(ctx context.Context, db *pgxpool.Pool, jira
 	return nil
 }
 
+func readDeadlineNotifications(ctx context.Context, db *pgxpool.Pool, recipient string) ([]deadlineNotification, error) {
+	kind := "intern_deadline"
+	if recipient == "approver" {
+		kind = "mentor_deadline"
+	}
+	rows, err := db.Query(ctx, `SELECT id,kind,issue_key,summary,due_at,issue_url,created_at FROM ai_deadline_notifications WHERE recipient_id=$1 AND kind=$2 ORDER BY created_at DESC,id DESC LIMIT 100`, recipient, kind)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []deadlineNotification{}
+	for rows.Next() {
+		var item deadlineNotification
+		if err := rows.Scan(&item.ID, &item.Kind, &item.Key, &item.Summary, &item.DueAt, &item.URL, &item.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
 func registerDeadlineNotifications(mux *http.ServeMux, db *pgxpool.Pool, apiKey string, jira jiraConfig, cfg reminderConfig, directory scenario.Client) {
 	mux.Handle("GET /v1/deadline-notifications", authorize(apiKey, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if ownerFrom(r) == "" {
@@ -96,31 +118,69 @@ func registerDeadlineNotifications(mux *http.ServeMux, db *pgxpool.Pool, apiKey 
 		} else if demoRole(r) == "intern2" {
 			recipient = "intern2"
 		}
-		kind := "intern_deadline"
-		if recipient == "approver" {
-			kind = "mentor_deadline"
-		}
-		rows, err := db.Query(r.Context(), `SELECT id,kind,issue_key,summary,due_at,issue_url,created_at FROM ai_deadline_notifications WHERE recipient_id=$1 AND kind=$2 ORDER BY created_at DESC,id DESC LIMIT 100`, recipient, kind)
+		items, err := readDeadlineNotifications(r.Context(), db, recipient)
 		if err != nil {
-			writeError(w, 503, errText("notifications unavailable"))
-			return
-		}
-		defer rows.Close()
-		items := []deadlineNotification{}
-		for rows.Next() {
-			var item deadlineNotification
-			if rows.Scan(&item.ID, &item.Kind, &item.Key, &item.Summary, &item.DueAt, &item.URL, &item.CreatedAt) != nil {
-				writeError(w, 503, errText("notifications unavailable"))
-				return
-			}
-			items = append(items, item)
-		}
-		if rows.Err() != nil {
 			writeError(w, 503, errText("notifications unavailable"))
 			return
 		}
 		writeJSON(w, 200, map[string]any{"notifications": items})
 	})))
+	var mu sync.Mutex
+	scanned := make(chan struct{})
+	mux.HandleFunc("GET /v1/deadline-notifications/ws", func(w http.ResponseWriter, r *http.Request) {
+		if ownerFrom(r) == "" {
+			writeError(w, http.StatusUnauthorized, errText("chat session required"))
+			return
+		}
+		conn, err := (&websocket.Upgrader{}).Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		conn.SetReadLimit(4096)
+		_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+		var auth struct {
+			APIKey      string `json:"api_key"`
+			AccessToken string `json:"access_token"`
+		}
+		if conn.ReadJSON(&auth) != nil || auth.AccessToken == "" ||
+			(apiKey != "" && subtle.ConstantTimeCompare([]byte(auth.APIKey), []byte(apiKey)) != 1) {
+			return
+		}
+		_ = conn.SetReadDeadline(time.Time{})
+		ctx, cancel := context.WithCancel(r.Context())
+		defer cancel()
+		go func() {
+			defer cancel()
+			for {
+				if _, _, err := conn.NextReader(); err != nil {
+					return
+				}
+			}
+		}()
+		profile, err := directory.Profile(ctx, auth.AccessToken)
+		if err != nil || (profile.ID != "intern" && profile.ID != "intern2" && profile.ID != "approver") {
+			return
+		}
+		for {
+			mu.Lock()
+			next := scanned
+			mu.Unlock()
+			items, err := readDeadlineNotifications(ctx, db, profile.ID)
+			if err != nil {
+				return
+			}
+			_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+			if conn.WriteJSON(map[string]any{"notifications": items}) != nil {
+				return
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-next:
+			}
+		}
+	})
 	go func() {
 		ticker := time.NewTicker(15 * time.Second)
 		defer ticker.Stop()
@@ -130,6 +190,10 @@ func registerDeadlineNotifications(mux *http.ServeMux, db *pgxpool.Pool, apiKey 
 				log.Printf("deadline notification scan failed: %v", err)
 			}
 			cancel()
+			mu.Lock()
+			close(scanned)
+			scanned = make(chan struct{})
+			mu.Unlock()
 			<-ticker.C
 		}
 	}()

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Dispatch, FormEvent, SetStateAction } from 'react';
-import { api, ApiError, completed, errorText, watchJob } from './api';
-import type { Job } from './api';
+import { api, ApiError, completed, errorText, watchDeadlines, watchJob } from './api';
+import type { DeadlineNotification, Job } from './api';
 import { AccessForm } from './AccessForm';
 import { Answer } from './Answer';
 import { AnswerActions, AnswerSelection } from './AnswerActions';
@@ -41,8 +41,8 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
   const [error, setError] = useState('');
   const [historyError, setHistoryError] = useState('');
   const [reload, setReload] = useState(0);
-  const [deadlines, setDeadlines] = useState<Awaited<ReturnType<typeof api.deadlines>>['notifications']>([]);
-  const dismissedDeadlines = useRef(new Set<string>());
+  const [deadlines, setDeadlines] = useState<DeadlineNotification[]>([]);
+  const dismissedDeadlines = useRef(new Set<number>());
   const deadlineStoragePrefix = 'bobby:deadline:dismissed:' + identity + ':';
   const watchers = useRef(new Map<string, () => void>());
   const editMessage = useRef<HTMLElement | null>(null);
@@ -110,20 +110,16 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
 
   useEffect(() => {
     if (!token) return;
-    let active = true;
-    const refresh = () => void api.deadlines({ token, key: apiKey }).then(({ notifications }) => {
-      if (active) setDeadlines(notifications.filter(item =>
+    return watchDeadlines(apiKey, token, notifications => {
+      setDeadlines(notifications.filter(item =>
         Date.parse(item.due_at) > Date.now() &&
         !dismissedDeadlines.current.has(item.id) &&
         !localStorage.getItem(deadlineStoragePrefix + item.id),
       ));
-    }).catch(() => {});
-    refresh();
-    const timer = setInterval(refresh, 15_000);
-    return () => { active = false; clearInterval(timer); };
+    });
   }, [apiKey, token, deadlineStoragePrefix]);
 
-  function dismissDeadline(id: string) {
+  function dismissDeadline(id: number) {
     dismissedDeadlines.current.add(id);
     localStorage.setItem(deadlineStoragePrefix + id, '1');
     setDeadlines(current => current.filter(item => item.id !== id));
