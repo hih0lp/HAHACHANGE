@@ -401,7 +401,7 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
               </div>
             </div>
             <div className="assistant-message" aria-live="polite">
-              <span className="message-avatar"><Bobby state={index < jobs.length - 1 ? 'idle'
+              <span className="message-avatar"><Bobby animated={job.id === latest?.id} state={index < jobs.length - 1 ? 'idle'
                 : composerState === 'listening' ? 'listening'
                 : job.status === 'completed' && job.answer?.trim() ? 'answering'
                 : !completed(job) && !waiting[job.id] ? 'thinking' : 'idle'}/></span>

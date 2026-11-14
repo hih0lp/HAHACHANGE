@@ -339,8 +339,13 @@ try {
     assert.equal(await main.getByRole('textbox', { name: 'Ваш вопрос' }).inputValue(), 'Следующий черновик');
     assert.equal(await main.locator('.turn').last().getByRole('button', { name: 'Изменить вопрос' }).count(), 0);
     assert.equal(await page.locator('.deadline-notices').count(), 0);
+    const avatars = main.locator('.message-avatar');
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    assert.equal(await avatars.last().locator('.bobby-eye').first().evaluate(element => getComputedStyle(element).animationName), 'bobby-blink');
+    assert.equal(await avatars.first().locator('.bobby-motion').evaluate(element => getComputedStyle(element).animationName), 'none');
     await page.emulateMedia({ reducedMotion: 'reduce' });
-    assert.equal(await main.locator('.bobby-body').last().evaluate(element => getComputedStyle(element).transitionDuration), '0s');
+    assert.equal(await avatars.last().locator('.bobby-body').evaluate(element => getComputedStyle(element).transitionDuration), '0s');
+    assert.equal(await avatars.last().locator('.bobby-eye').first().evaluate(element => getComputedStyle(element).animationName), 'none');
     assert.deepEqual(errors, []);
     await page.close();
     console.log('Passed Bobby widget checks');

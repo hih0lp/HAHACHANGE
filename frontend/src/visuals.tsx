@@ -35,25 +35,30 @@ export function Icon({ name, ...props }: SVGProps<SVGSVGElement> & { name: IconN
 
 export type BobbyState = 'idle' | 'thinking' | 'answering' | 'listening' | 'waiting-form';
 
-export function Bobby({ className, state = 'idle' }: { className?: string; state?: BobbyState }) {
-  return <svg className={className} data-bobby-state={state} viewBox="30 10 1240 1170" aria-hidden="true">
+export function Bobby({ className, state = 'idle', animated = true }: { className?: string; state?: BobbyState; animated?: boolean }) {
+  return <svg className={className} data-bobby-state={state} data-bobby-animated={animated} viewBox="30 10 1240 1170" aria-hidden="true">
     <g className="bobby-body">
-      <g stroke="var(--bobby-ink)" strokeWidth="24" strokeLinecap="round" strokeLinejoin="round">
-        <path fill="var(--bobby-blue)" d="M463 907c-12 28-20 56-43 78-24 17-48 44-35 74 12 29 49 28 77 26 58-3 96-10 105-60l15-93Zm222 21c-8 30-19 64-17 92 2 52 48 61 104 61 54 0 108-6 107-47-1-37-33-58-60-68l16-54Z"/>
-        <path fill="white" d="M288 794c-48-52-76-106-77-170-9-202 179-400 397-453 178-44 317 10 398 142 80 130 95 292 8 430-121 196-390 266-607 166-55 35-106 54-145 52-37-2-54-28-38-59 18-36 47-66 64-108Z"/>
-      </g>
-      <ellipse cx="885" cy="315" rx="84" ry="54" fill="var(--bobby-blue)" transform="rotate(42 885 315)"/>
-      <g fill="var(--bobby-ink)">
-        <ellipse cx="572" cy="550" rx="53" ry="56" transform="rotate(12 572 550)"/>
-        <ellipse cx="865" cy="482" rx="50" ry="54" transform="rotate(12 865 482)"/>
-      </g>
-      <g className="bobby-gaze" fill="white">
-        <circle cx="586" cy="519" r="14"/><circle cx="877" cy="454" r="14"/>
-      </g>
-      <g fill="none" stroke="var(--bobby-ink)" strokeWidth="25" strokeLinecap="round" strokeLinejoin="round">
-        <path className="bobby-smile" d="M695 581c28 23 68 10 80-22"/>
-        <path data-bobby-expression="listening" d="M709 585l49-10"/>
-        <path data-bobby-expression="answering" d="M690 573l94-19c4 88-77 107-94 19Z" fill="var(--bobby-blue)"/>
+      <g className="bobby-motion">
+        <g stroke="var(--bobby-ink)" strokeWidth="24" strokeLinecap="round" strokeLinejoin="round">
+          <path fill="var(--bobby-blue)" d="M463 907c-12 28-20 56-43 78-24 17-48 44-35 74 12 29 49 28 77 26 58-3 96-10 105-60l15-93Zm222 21c-8 30-19 64-17 92 2 52 48 61 104 61 54 0 108-6 107-47-1-37-33-58-60-68l16-54Z"/>
+          <path fill="white" d="M288 794c-48-52-76-106-77-170-9-202 179-400 397-453 178-44 317 10 398 142 80 130 95 292 8 430-121 196-390 266-607 166-55 35-106 54-145 52-37-2-54-28-38-59 18-36 47-66 64-108Z"/>
+        </g>
+        <ellipse cx="885" cy="315" rx="84" ry="54" fill="var(--bobby-blue)" transform="rotate(42 885 315)"/>
+        <g fill="var(--bobby-ink)">
+          <g className="bobby-eye">
+            <ellipse cx="572" cy="550" rx="53" ry="56" transform="rotate(12 572 550)"/>
+            <circle className="bobby-gaze" cx="586" cy="519" r="14" fill="white"/>
+          </g>
+          <g className="bobby-eye">
+            <ellipse cx="865" cy="482" rx="50" ry="54" transform="rotate(12 865 482)"/>
+            <circle className="bobby-gaze" cx="877" cy="454" r="14" fill="white"/>
+          </g>
+        </g>
+        <g fill="none" stroke="var(--bobby-ink)" strokeWidth="25" strokeLinecap="round" strokeLinejoin="round">
+          <path className="bobby-smile" d="M695 581c28 23 68 10 80-22"/>
+          <path data-bobby-expression="listening" d="M709 585l49-10"/>
+          <path data-bobby-expression="answering" d="M690 573l94-19c4 88-77 107-94 19Z" fill="var(--bobby-blue)"/>
+        </g>
       </g>
     </g>
     <g className="bobby-accent" data-bobby-expression="thinking" fill="var(--bobby-blue)"><circle cx="856" cy="176" r="20"/><circle cx="923" cy="126" r="29"/><circle cx="1003" cy="65" r="40"/></g>
