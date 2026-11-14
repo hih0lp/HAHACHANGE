@@ -40,7 +40,7 @@ Copy-Item .env.example .env
 notepad .env
 ```
 
-Заполните независимыми тестовыми значениями `POSTGRES_PASSWORD`, `SESSION_SECRET`, `TEAM_ACCESS_INTERN_PASSWORD`, `TEAM_ACCESS_INTERN2_PASSWORD`, `TEAM_ACCESS_APPROVER_PASSWORD` (пароли команды не короче 12 символов). Укажите доступные из контейнера `LLM_URL` и `LLM_MODEL`, а также `JIRA_PROJECT_KEY` из `fixtures/mock/jira.json`, `CALENDAR_DEMO_SUBJECT` для тестового пользователя календаря и `TEAM_JIRA_ACCOUNTS_JSON`, связывающий пользователя `intern` с `assignee_account_id` из Jira JSON. Пример формы последнего значения: `{"intern":"<assignee_account_id из jira.json>"}`. Файл `.env` не коммитьте; рабочий `.env` не копируйте.
+Заполните независимыми тестовыми значениями `POSTGRES_PASSWORD`, `SESSION_SECRET`, `TEAM_ACCESS_INTERN_PASSWORD`, `TEAM_ACCESS_INTERN2_PASSWORD`, `TEAM_ACCESS_APPROVER_PASSWORD` (пароли команды не короче 12 символов). Укажите доступные из контейнера `LLM_URL` и `LLM_MODEL`, а также `JIRA_PROJECT_KEY` из `fixtures/mock/jira.json`, `CALENDAR_DEMO_SUBJECT` для тестового пользователя календаря и `TEAM_JIRA_ACCOUNTS_JSON`, связывающий `intern`, `intern2` и `approver` с отдельными Jira accountId. Готовое соответствие для тестового снимка приведено в [SDD-034](specs/034-test-jira-identities.md); `approver` соответствует роли «наставник» в чате. Файл `.env` не коммитьте; рабочий `.env` не копируйте.
 
 Задачи и события находятся в `fixtures/mock/jira.json` и `fixtures/mock/calendar.json`. Исправления этих файлов применяются при следующем запросе без перезапуска сервисов. Формат и ограничения полей описаны в [SDD-029](specs/029-editable-jira-calendar-mocks.md).
 
