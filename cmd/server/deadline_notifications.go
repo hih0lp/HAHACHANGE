@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -104,7 +105,9 @@ func registerDeadlineNotifications(mux *http.ServeMux, db *pgxpool.Pool, apiKey 
 		defer ticker.Stop()
 		for {
 			ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
-			_ = scanDeadlineNotifications(ctx, db, jira, cfg, directory, time.Now())
+			if err := scanDeadlineNotifications(ctx, db, jira, cfg, directory, time.Now()); err != nil {
+				log.Printf("deadline notification scan failed: %v", err)
+			}
 			cancel()
 			<-ticker.C
 		}
