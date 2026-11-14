@@ -1,8 +1,19 @@
 services:
   api:
     image: bobby-mocks-api:local
+    environment:
+      GITLAB_MCP_URL: http://mock-gitlab:8080/mcp
+      GITLAB_REMINDER_PROJECT: "2"
   worker:
     image: bobby-mocks-api:local
+    environment:
+      GITLAB_MCP_URL: http://mock-gitlab:8080/mcp
+  mock-gitlab:
+    build:
+      context: .
+      dockerfile: Dockerfile.gitlab-integration
+    environment:
+      GITLAB_MODE: mock
   team-access:
     image: bobby-mocks-team-access:local
   access-rights:
