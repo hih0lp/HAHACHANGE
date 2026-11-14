@@ -3,6 +3,7 @@ package main
 // Kept in the chat page: the bearer token stays in the same browser tab and
 // every form uses the current server-published JSON Schema.
 const chatFormsJS = `
+function newIdempotencyKey(){const bytes=new Uint8Array(16);crypto.getRandomValues(bytes);return Array.from(bytes,byte=>byte.toString(16).padStart(2,'0')).join('')}
 async function openInlineForm(container,formId){
   if(container.querySelector('[data-inline-form]'))return;
   const panel=document.createElement('section');panel.dataset.inlineForm='';panel.className='card';container.append(panel);
@@ -39,14 +40,14 @@ async function openInlineForm(container,formId){
         const values={};for(const field of inlineForm.querySelectorAll('[data-name]')){let value=field.type==='checkbox'?field.checked:field.value;if(field.dataset.type==='integer'||field.dataset.type==='number')value=Number(value);if(field.dataset.type==='object'||field.dataset.type==='array')value=JSON.parse(value);values[field.dataset.name]=value}
         const preview=document.createElement('pre');preview.textContent=JSON.stringify(values,null,2);result.append(preview);
         const confirmButton=document.createElement('button');confirmButton.type='button';confirmButton.textContent='Подтвердить отправку';result.append(confirmButton);
-        const idem=crypto.randomUUID();
+        const idem=newIdempotencyKey();
         confirmButton.onclick=async()=>{
           confirmButton.disabled=true;
           try{
             const headers={...authHeaders,'Content-Type':'application/json','Idempotency-Key':idem};
             const sent=await fetch('/v1/forms/'+encodeURIComponent(formId)+'/submit',{method:'POST',headers,body:JSON.stringify({version:definition.version,values,confirmed:true})});
             const data=await sent.json();if(!sent.ok)throw Error(typeof data.error==='string'?data.error:'Не удалось отправить заявку. Проверьте значения полей.');
-            result.replaceChildren();const message=document.createElement('p');message.textContent='Заявка отправлена. Номер: '+data.id+'. Статус: '+data.status;result.append(message);inlineForm.remove();
+            result.replaceChildren();const message=document.createElement('p');message.textContent='Заявка успешно отправлена!';result.append(message);inlineForm.remove();
           }catch(error){confirmButton.disabled=false;const message=document.createElement('p');message.className='error';message.textContent=error.message;result.append(message)}
         };
       }catch(error){result.textContent='Проверьте значения полей: '+error.message;result.className='error'}
