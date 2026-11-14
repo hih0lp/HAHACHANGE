@@ -78,7 +78,7 @@ export const api = {
   job: (id: string, auth: Auth, signal: AbortSignal) => request<Job>('/v1/jobs/' + encodeURIComponent(id), { ...auth, account: !!auth.token, signal }),
   forms: (auth: Auth) => request<{ forms: FormDefinition[] | null }>('/v1/forms', auth),
   form: (id: string, auth: Auth) => request<FormDefinition>(formPath(id), auth),
-  resources: (auth: Auth) => request<{ resources: Resource[] | null }>('/v1/forms/resources', auth),
+  resources: (auth: Auth) => request<{ resources: Resource[] | null }>('/v1/form-resources', auth),
   validate: (id: string, version: number, values: Values, auth: Auth) =>
     request<{ valid: boolean }>(formPath(id) + '/validate', { ...auth, body: { version, values } }),
   submit: (id: string, version: number, values: Values, idem: string, auth: Auth) =>
