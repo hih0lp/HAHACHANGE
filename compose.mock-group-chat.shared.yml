@@ -1,0 +1,20 @@
+services:
+  mock-group-chat:
+    build:
+      context: .
+      dockerfile: Dockerfile.mock-group-chat
+    environment:
+      CHAT_DATABASE_URL: postgres://${POSTGRES_USER:-aibuddy}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-aibuddy}?sslmode=disable
+      CHAT_TEAM_ACCESS_URL: http://team-access:8080
+      CHAT_EMBEDDINGS_URL: http://avito-rag-embeddings-1:80
+    ports:
+      - "127.0.0.1:${GROUP_CHAT_LOCAL_PORT:-28084}:8080"
+    networks:
+      - default
+      - shared
+    depends_on:
+      postgres:
+        condition: service_healthy
+      team-access:
+        condition: service_started
+    restart: on-failure
