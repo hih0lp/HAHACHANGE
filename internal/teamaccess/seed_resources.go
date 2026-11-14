@@ -35,7 +35,7 @@ func loadSeedResources(path string) ([]seedResource, error) {
 	}
 	seen := map[string]bool{}
 	for _, resource := range fixture.Resources {
-		if resource.ID == "" || resource.TeamID == "" || resource.Kind == "" || resource.Name == "" || resource.ExternalRef == "" || !strings.HasPrefix(resource.URL, "https://") || resource.ApproverID == "" || len(resource.Capabilities) == 0 || seen[resource.ID] {
+		if resource.ID == "" || resource.TeamID == "" || resource.Kind == "" || resource.Name == "" || resource.ExternalRef == "" || (resource.URL != "" && !strings.HasPrefix(resource.URL, "https://")) || resource.ApproverID == "" || len(resource.Capabilities) == 0 || seen[resource.ID] {
 			return nil, fmt.Errorf("invalid or duplicate resource %q", resource.ID)
 		}
 		seen[resource.ID] = true

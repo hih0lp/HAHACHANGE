@@ -112,7 +112,7 @@ func TestMockJiraMinuteReminderWindow(t *testing.T) {
 		if err != nil || len(result.Reminders) != test.want {
 			t.Fatalf("at %s: %+v, %v", test.at, result, err)
 		}
-		if test.want == 1 && (result.Reminders[0].Key != "TEST-1" || !result.Reminders[0].DueAt.Equal(due) || result.Reminders[0].URL != "https://jira.example/browse/TEST-1") {
+		if test.want == 1 && (result.Reminders[0].Key != "TEST-1" || !result.Reminders[0].DueAt.Equal(due) || result.Reminders[0].URL != "") {
 			t.Fatalf("wrong reminder: %+v", result.Reminders)
 		}
 	}
