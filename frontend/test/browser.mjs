@@ -136,7 +136,7 @@ try {
       await page.evaluate(() => window.documentPictureInPicture.window.document.querySelector('[aria-label="Свернуть мини-чат"]').click());
       await page.waitForFunction(() => {
         const floating = window.documentPictureInPicture.window;
-        return floating.document.querySelector('.bobby-widget-only-pet') && floating.document.querySelector('.bobby-widget-compose').hidden;
+        return floating.document.querySelector('.bobby-widget-only-pet [data-bobby-state="idle"]') && floating.document.querySelector('.bobby-widget-compose').hidden;
       });
       await page.evaluate(() => window.documentPictureInPicture.window.document.querySelector('.bobby-widget-only-pet').click());
       await page.waitForFunction(() => {
@@ -160,12 +160,13 @@ try {
     assert.equal(await page.locator('.chat-page textarea').inputValue(), 'Начать работу через мини-чат');
     await widget.getByRole('button', { name: 'Свернуть мини-чат' }).click();
     const pet = widget.getByRole('button', { name: 'Развернуть мини-чат' });
-    await pet.locator('[data-bobby-state="listening"]').waitFor();
+    await pet.locator('[data-bobby-state="idle"]').waitFor();
     assert.equal(await widget.evaluate(element => getComputedStyle(element).backgroundColor), 'rgba(0, 0, 0, 0)');
     assert.equal(await widget.evaluate(element => getComputedStyle(element).boxShadow), 'none');
     assert.equal(await input.isVisible(), false);
     await pet.click();
     assert.equal(await input.inputValue(), 'Начать работу через мини-чат');
+    await widget.getByText('Слушаю').waitFor();
     await page.getByRole('link', { name: 'Мои задачи' }).click();
     await input.press('Enter');
     await widget.getByText('Думаю').waitFor();

@@ -120,8 +120,8 @@ export function BobbyWidget({ target, fallback, state, query, reply, error, onCl
         }
       }}>
       {collapsed && <button type="button" ref={petButton} className="bobby-widget-only-pet" aria-label="Развернуть мини-чат"
-        title={'Развернуть мини-чат · ' + moods[state]} onClick={toggleCollapsed}>
-        <Bobby className="bobby-widget-pet" state={state}/>
+        title="Развернуть мини-чат" onClick={toggleCollapsed}>
+        <Bobby className="bobby-widget-pet" state="idle"/>
       </button>}
       <header className="bobby-widget-header" hidden={collapsed}>
         <Bobby className="bobby-widget-pet" state={state}/>
