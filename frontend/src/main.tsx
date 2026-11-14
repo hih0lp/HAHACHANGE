@@ -8,6 +8,7 @@ import { Tasks } from './Tasks';
 import { Modal, Notice } from './ui';
 import { Bobby, Icon } from './visuals';
 import type { IconName } from './visuals';
+import avitoAnnouncement from './assets/avito-announcement.jpg';
 import './styles.css';
 
 const roles: Record<Role, string> = { intern: 'Стажёр', intern2: 'Второй стажёр', mentor: 'Наставник' };
@@ -104,13 +105,22 @@ function App() {
       }}><Icon name={item.icon}/>{item.label}</a>);
   }
   function openProfile() { setMenu(false); setProfile(true); }
+  function brand(className: string) {
+    return <a className={'brand ' + className} href="/" onClick={event => {
+      if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+      event.preventDefault();
+      navigate('chat');
+    }}>
+      {/* Cyrillic lockup from Avito's launch announcement: https://t.me/avito/7613 */}
+      <span className="brand-logo"><img src={avitoAnnouncement} alt="Авито" width="800" height="800"/></span>
+      <span className="brand-name">Бобби</span>
+    </a>;
+  }
 
   return <div className="app-shell">
     <a className="skip-link" href="#main">К содержанию</a>
     <aside className="sidebar" aria-label="Разделы">
-      <a className="brand" href="/" onClick={event => { if (!event.ctrlKey && !event.metaKey) { event.preventDefault(); navigate('chat'); } }}>
-        <span className="brand-mark"><i/><i/><i/><i/></span><span>Бобби</span>
-      </a>
+      {brand('sidebar-brand')}
       <nav className="navigation" aria-label="Основная навигация">{links()}</nav>
       <div className="sidebar-foot">
         <button className="profile-button" ref={profileTrigger} onClick={openProfile}>
@@ -123,7 +133,8 @@ function App() {
     <main id="main" className="main-panel" tabIndex={-1} ref={content}>
       <header className="topbar">
         <div className="topbar-title"><button className="icon-button mobile-menu" aria-label="Открыть меню" aria-expanded={menu} onClick={() => setMenu(true)}><Icon name="menu"/></button>
-          <span className="topbar-icon"><Icon name={current.icon}/></span><strong>{current.label}</strong></div>
+          {brand('mobile-brand')}
+          <span className="topbar-icon"><Icon name={current.icon}/></span><strong className="topbar-section">{current.label}</strong></div>
         <div className="topbar-actions">
           <button className="icon-button widget-trigger" ref={widget.trigger} aria-label="Мини-чат с Бобби"
             title="Мини-чат с Бобби" aria-pressed={!!widget.target} disabled={!sessionReady || widget.opening}

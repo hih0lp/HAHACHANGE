@@ -6,6 +6,8 @@
 
 Запуск: сначала `docker compose up -d` для Qdrant и embeddings, затем `docker compose -p avito-rag-distributed -f compose.distributed.yml up -d --build`. Для проверки: `go test ./...` и `scripts/team-access-smoke.ps1`. Подробности интеграции и ограничения локального HTTP — в [SDD-012](specs/012-team-access-client-integration.md).
 
+Для защиты используйте React-интерфейс на порту `18001` в [отдельном тестовом стеке](DEPLOY_MOCK_STACK.md). Инструкция включает сборку интерфейса и запуск с имитацией Jira, календаря и GitLab.
+
 Go-сервис семантического поиска по Markdown-документам из `../playbook` и выдержке из открытого чек-листа в `../knowledge`. Он состоит из контейнеров и запускается на macOS, Linux и Windows с Docker Desktop:
 
 - **Go API** — загрузка документов, разбиение на фрагменты и API для агента;

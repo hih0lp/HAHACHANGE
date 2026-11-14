@@ -103,7 +103,10 @@ async function fixtures(page, { deadline = false } = {}) {
     if (path === '/v1/calendar/reminders') return respond({ data: { items: [{ id: 'meeting', summary: 'Встреча с наставником', start: { dateTime: '2026-11-13T11:00:00Z' }, htmlLink: 'https://calendar.google.com/' }] } });
     return respond({ error: 'unknown fixture: ' + path }, 404);
   });
-  return { keys, sessions, submits: () => submits, loginRequests: () => loginRequests };
+  return {
+    keys, sessions, submits: () => submits, loginRequests: () => loginRequests,
+    approveAccess: () => { committed = { ...committed, status: 'approved' }; },
+  };
 }
 
 async function navigate(page, label) {
@@ -427,6 +430,9 @@ try {
     const form = await fixtures(page);
     await page.goto(base);
     await page.getByRole('heading', { name: 'Привет, я Бобби!' }).waitFor();
+    const brand = page.getByRole('link', { name: 'Авито Бобби' });
+    assert.equal(await brand.getByRole('img').evaluate(img => img.decode().then(() => img.naturalWidth > 0)), true);
+    assert.equal(await page.evaluate(async () => (await document.fonts.load('400 16px Manrope', 'Бобби')).length), 1);
     await shot(page, 'welcome', width);
 
     const profile = page.getByRole('button', { name: 'Открыть профиль' });
@@ -460,6 +466,9 @@ try {
     assert.equal(await page.locator('.answer-reveal').count(), 1);
     assert.equal(await page.locator('.message-avatar [data-bobby-state="answering"]').count(), 1);
     await shot(page, 'answer', width);
+    await page.getByRole('button', { name: 'Запросить доступ' }).click();
+    await page.getByRole('heading', { name: 'Каталог заявок' }).waitFor();
+    await page.getByRole('button', { name: 'Закрыть каталог' }).click();
     const formTrigger = page.getByRole('button', { name: 'Заполнить заявку' });
     await formTrigger.click();
     await page.getByLabel('Ресурс').selectOption('jira-demo');
@@ -470,6 +479,7 @@ try {
     await page.getByLabel('Зачем нужен доступ').fill('Доступ для первой задачи');
     await page.getByRole('button', { name: 'Проверить заявку' }).click();
     await page.getByRole('heading', { name: 'Проверьте перед отправкой' }).waitFor();
+    await page.locator('dd').getByText('Просмотр задач', { exact: true }).waitFor();
     await shot(page, 'confirm', width);
     const confirm = page.getByRole('button', { name: 'Подтвердить отправку' });
     await confirm.evaluate(element => { element.click(); element.click(); });
@@ -478,10 +488,17 @@ try {
     if (width === 360) await page.reload();
     else await confirm.click();
     await page.getByText('Номер заявки request-42').waitFor();
+    await page.getByText('На согласовании', { exact: false }).waitFor();
+    await shot(page, 'receipt', width);
+    form.approveAccess();
+    const statusCheck = page.waitForResponse(response => response.url().endsWith('/v1/forms/access-request/access-request') && response.ok());
+    await page.getByRole('button', { name: 'Проверить статус заявки' }).click();
+    await statusCheck;
+    await page.getByText('Одобрена', { exact: false }).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Проверить статус заявки' }).count(), 0);
     assert.deepEqual(form.keys, width === 360 ? [form.keys[0]] : [form.keys[0], form.keys[0]]);
     assert.equal(form.submits(), 1);
     assert.equal(await page.getByRole('button', { name: 'Заполнить новую заявку' }).count(), 0);
-    await shot(page, 'receipt', width);
     await page.getByRole('button', { name: 'Закрыть форму' }).click();
     await page.getByRole('heading', { name: 'Заявка на доступ' }).waitFor({ state: 'hidden' });
     if (width !== 360) assert.equal(await formTrigger.evaluate(element => document.activeElement === element), true);

@@ -9,6 +9,8 @@ import { Bobby, Icon } from './visuals';
 type Props = { id: string; token: string; apiKey: string; identity: string; onClose: () => void };
 type Review = { version: number; values: Values; idem: string; sent?: boolean; receipt?: Receipt };
 
+const accessCapabilityLabel = (value: string) => value === 'browse_issues' ? 'Просмотр задач' : value;
+
 export function AccessForm({ id, token, apiKey, identity, onClose }: Props) {
   const storageKey = 'bobby-form:' + identity + ':' + id;
   const [form, setForm] = useState<FormDefinition>();
@@ -69,7 +71,9 @@ export function AccessForm({ id, token, apiKey, identity, onClose }: Props) {
   const labels = definition.ui_schema?.labels || {};
   const order = [...new Set([...(definition.ui_schema?.order || []), ...Object.keys(fields)])].filter(name => fields[name]);
   const selected = resources.find(item => item.id === resourceID);
+  const reviewedResource = resources.find(item => item.id === review?.values.resource_id);
   const blocked = definition.kind === 'access' && !receipt && resources.length === 0;
+  const awaitsDecision = receipt?.status === 'pending' || receipt?.status === 'submitted';
 
   async function verify(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -127,6 +131,23 @@ export function AccessForm({ id, token, apiKey, identity, onClose }: Props) {
     }
   }
 
+  async function refreshReceipt() {
+    if (pending.current) return;
+    pending.current = true;
+    setBusy(true);
+    setError('');
+    try {
+      const updated = await api.accessReceipt(id, auth);
+      if (!updated.receipt) throw new Error('Missing receipt');
+      setSavedReceipt(updated.receipt);
+    } catch {
+      setError('Не удалось проверить статус заявки. Попробуйте ещё раз.');
+    } finally {
+      pending.current = false;
+      setBusy(false);
+    }
+  }
+
   function renderField(name: string, field: Field) {
     const required = definition.schema.required?.includes(name);
     const props = { name, required };
@@ -134,7 +155,7 @@ export function AccessForm({ id, token, apiKey, identity, onClose }: Props) {
       <option value="">Выберите ресурс</option>{resources.map(resource => <option key={resource.id} value={resource.id}>{resource.name}</option>)}
     </select>;
     if (definition.kind === 'access' && name === 'capability') return <select key={resourceID} {...props} disabled={!selected} defaultValue="">
-      <option value="">Выберите право</option>{selected?.capabilities.map(value => <option key={value} value={value}>{value === 'browse_issues' ? 'Просмотр задач' : value}</option>)}
+      <option value="">Выберите право</option>{selected?.capabilities.map(value => <option key={value} value={value}>{accessCapabilityLabel(value)}</option>)}
     </select>;
     if (field.enum) return <select {...props} defaultValue=""><option value="">Выберите значение</option>{field.enum.map((value, i) => <option key={i} value={i}>{String(value)}</option>)}</select>;
     if (field.type === 'boolean') return <input type="checkbox" name={name}/>;
@@ -163,7 +184,10 @@ export function AccessForm({ id, token, apiKey, identity, onClose }: Props) {
       {review && !receipt && <>
         <h4>Проверьте перед отправкой</h4>
         <dl className="review-values">{Object.entries(review.values).map(([name, value]) => <div key={name}>
-          <dt>{labels[name] || fields[name]?.title || name}</dt><dd>{name === 'resource_id' && selected ? selected.name : typeof value === 'string' ? value : JSON.stringify(value)}</dd>
+          <dt>{labels[name] || fields[name]?.title || name}</dt>
+          <dd>{definition.kind === 'access' && name === 'resource_id' && reviewedResource ? reviewedResource.name
+            : definition.kind === 'access' && name === 'capability' && typeof value === 'string' ? accessCapabilityLabel(value)
+            : typeof value === 'string' ? value : JSON.stringify(value)}</dd>
         </div>)}</dl>
         <div className="actions">
           <button className="button primary" disabled={busy} onClick={() => void submit()}>{busy ? 'Отправляем…' : 'Подтвердить отправку'}</button>
@@ -172,6 +196,10 @@ export function AccessForm({ id, token, apiKey, identity, onClose }: Props) {
       </>}
       {receipt && <>
         <Notice><strong>Заявка успешно отправлена!</strong><br/>Номер заявки {receipt.id}{definition.kind === 'access' && <><br/>{statusText(receipt.status)}</>}</Notice>
+        {definition.kind === 'access' && awaitsDecision && <div className="receipt-next">
+          <p>Дождитесь решения по заявке. Здесь можно проверить её статус.</p>
+          <button className="button secondary" disabled={busy} onClick={() => void refreshReceipt()}>{busy ? 'Проверяем статус…' : 'Проверить статус заявки'}</button>
+        </div>}
         {definition.kind !== 'access' && <button className="button secondary" onClick={() => remember()}>Заполнить новую заявку</button>}
       </>}
       {error && <Notice error={!conflict}>{error}</Notice>}

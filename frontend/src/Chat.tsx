@@ -432,6 +432,9 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
             <span className="suggestion-icon peach"><Icon name="key"/></span><span>Запросить доступ</span><Icon className="suggestion-arrow" name="chevron"/>
           </button>
         </div>}
+        {jobs.length > 0 && !catalog && !formID && <div className="chat-shortcuts">
+          <button className="button secondary" onClick={onCatalog}><Icon name="key"/>Запросить доступ</button>
+        </div>}
         {error && <Notice error>{error}</Notice>}
         {composer()}
         <p className="composer-hint">Бобби может ошибаться. Проверяйте важное по ссылкам в ответах.</p>

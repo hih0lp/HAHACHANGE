@@ -46,6 +46,15 @@ notepad .env
 
 ## 3. Запустить тестовый стек
 
+Соберите интерфейс перед запуском. Тестовый шлюз читает `frontend/dist`, поэтому сборка должна соответствовать текущему коду. Для сборки нужен Node.js 22.12 или новее.
+
+```powershell
+Push-Location frontend
+npm ci
+npm run build
+Pop-Location
+```
+
 В PowerShell, из каталога клона:
 
 ```powershell
@@ -70,7 +79,7 @@ docker compose -p bobby-mocks -f compose.distributed.yml -f compose.mock.yml log
 
 Страница тестового чата: `http://100.105.236.12:18001/` с компьютера в той же сети Tailscale или `http://127.0.0.1:18001/` на сервере. Ожидается HTTP `200`; в списке сервисов должны быть `api`, `worker`, `mock-jira`, `mock-calendar`, `team-access` и `access-rights`. Контейнера `gitlab-integration` в проекте `bobby-mocks` быть не должно. API и worker получают адреса моков через Compose. В `compose.mock.yml` адрес GitLab MCP задан как `http://mock-gitlab:8080/mcp`.
 
-После обновления кода снова выполните `git pull --ff-only` и команду `up -d --build --remove-orphans` с теми же переменными портов. Для остановки только тестового стека:
+После обновления кода через `git pull --ff-only` пересоберите интерфейс из раздела 3 и выполните `up -d --build --remove-orphans` с теми же переменными портов. На главной странице для защиты должны появиться логотип «Авито», название «Бобби» и заголовок «Привет, я Бобби!» в новой демо-сессии. Для остановки только тестового стека:
 
 ```powershell
 docker compose -p bobby-mocks -f compose.distributed.yml -f compose.mock.yml down
