@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { api, errorText } from './api';
 import type { Role, Session } from './api';
+import { useBobbyWidget } from './BobbyWidget';
 import { Chat } from './Chat';
 import { Tasks } from './Tasks';
 import { Modal, Notice } from './ui';
@@ -36,6 +37,7 @@ function App() {
   const [sessionVersion, setSessionVersion] = useState(0);
   const profileTrigger = useRef<HTMLButtonElement>(null);
   const content = useRef<HTMLElement>(null);
+  const widget = useBobbyWidget();
 
   useEffect(() => {
     void fetch('/session/bootstrap', { cache: 'no-store' }).catch(() => {}).finally(() => setSessionReady(true));
@@ -122,14 +124,20 @@ function App() {
       <header className="topbar">
         <div className="topbar-title"><button className="icon-button mobile-menu" aria-label="Открыть меню" aria-expanded={menu} onClick={() => setMenu(true)}><Icon name="menu"/></button>
           <span className="topbar-icon"><Icon name={current.icon}/></span><strong>{current.label}</strong></div>
-        <button className="topbar-profile" onClick={openProfile} aria-label="Открыть профиль">
-          <span className="account-dot"/><span>{role ? roles[role] : 'Демо-режим'}</span><Icon name="user"/>
-        </button>
+        <div className="topbar-actions">
+          <button className="icon-button widget-trigger" ref={widget.trigger} aria-label="Мини-чат с Бобби"
+            title="Мини-чат с Бобби" aria-pressed={!!widget.target} disabled={!sessionReady || widget.opening}
+            onClick={() => void widget.open()}><Icon name="widget"/></button>
+          <button className="topbar-profile" onClick={openProfile} aria-label="Открыть профиль">
+            <span className="account-dot"/><span>{role ? roles[role] : 'Демо-режим'}</span><Icon name="user"/>
+          </button>
+        </div>
       </header>
       {sessionReady && <div className="view" key={identity + ':' + sessionVersion}>
-        {view === 'chat' && <Chat token={token} apiKey={apiKey} identity={identity} formID={formID}
+        <Chat hidden={view !== 'chat'} token={token} apiKey={apiKey} identity={identity} formID={formID}
           catalog={catalog} draft={draft} onDraft={setDraft} onForm={id => navigate('chat', id)} onCloseForm={() => navigate('chat', '', !!formID && !!history.state?.catalog)}
-          onCatalog={() => { navigate('chat', '', true); }}/>}
+          onCatalog={() => { navigate('chat', '', true); }} widget={widget}
+          onOpenChat={() => { if (view !== 'chat') navigate('chat'); }}/>
         {view === 'tasks' && <Tasks token={token} apiKey={apiKey} onProfile={openProfile}/>}
       </div>}
       {!sessionReady && <div className="section-page"><Notice>Открываем Бобби…</Notice></div>}

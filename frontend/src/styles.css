@@ -105,7 +105,8 @@
   .main-panel { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
   .topbar { padding: var(--space-3) var(--space-8); min-height: 72px; display: flex; gap: var(--space-3); align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); }
   .topbar-title { display: flex; align-items: center; gap: var(--space-3); font-size: var(--text-medium); }
-  .topbar-profile { display: flex; align-items: center; gap: var(--space-2); min-height: var(--control); padding: var(--space-2) var(--space-3); border: 0; border-radius: var(--radius-round); background: var(--neutral); font-size: var(--text-small); font-weight: 600; max-width: 45%; overflow-wrap: anywhere; }
+  .topbar-actions { display: flex; align-items: center; gap: var(--space-2); flex: none; }
+  .topbar-profile { display: flex; align-items: center; gap: var(--space-2); min-height: var(--control); padding: var(--space-2) var(--space-3); border: 0; border-radius: var(--radius-round); background: var(--neutral); font-size: var(--text-small); font-weight: 600; overflow-wrap: anywhere; }
   .topbar-profile:hover { background: var(--hover); }
   .topbar-profile > svg { display: none; }
   .account-dot { border-radius: 50%; width: 7px; height: 7px; flex: none; background: var(--action); }
@@ -155,6 +156,50 @@
   .send-button { flex: none; width: var(--control); height: var(--control); border-radius: var(--radius-m); padding: 0; }
   .send-button:disabled { background: var(--neutral); color: var(--muted); }
   .composer-hint { text-align: center; color: var(--muted); font-size: var(--text-small); margin-top: var(--space-2); }
+  .widget-trigger[aria-pressed="true"] { color: var(--action-hover); background: var(--selected); }
+  .bobby-widget { display: flex; flex-direction: column; color: var(--ink); background: var(--white); overflow: hidden; }
+  body:not(.bobby-widget-window) > .bobby-widget {
+    position: fixed;
+    z-index: 4;
+    inset: auto var(--space-4) var(--space-4) auto;
+    width: min(360px, calc(100% - 2 * var(--space-4)));
+    height: min(410px, calc(100dvh - 88px));
+    border: 1px solid var(--line);
+    border-radius: var(--radius-l);
+    box-shadow: var(--shadow);
+  }
+  .bobby-widget-window > .bobby-widget { height: 100dvh; }
+  .bobby-widget-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    background: var(--hero-blue);
+  }
+  .bobby-widget-pet { width: 64px; height: 64px; }
+  .bobby-widget-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .bobby-widget-name small { display: block; color: var(--muted); font-size: var(--text-small); }
+  .bobby-widget-header .icon-button { background: var(--white); }
+  .bobby-widget-fallback, .bobby-widget-error { padding: var(--space-2) var(--space-3); font-size: var(--text-small); }
+  .bobby-widget-fallback { color: var(--muted); background: var(--canvas); }
+  .bobby-widget-error { color: var(--error-ink); background: var(--error-bg); border-radius: var(--radius-s); margin-bottom: var(--space-2); }
+  .bobby-widget-thread { flex: 1; min-height: 0; overflow: auto; padding: var(--space-3); font-size: 14px; overflow-wrap: anywhere; }
+  .bobby-widget-thread:focus-visible { outline-offset: -2px; }
+  .bobby-widget-query {
+    width: fit-content;
+    max-width: 90%;
+    margin: 0 0 var(--space-3) auto;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-m) var(--radius-m) var(--space-1) var(--radius-m);
+    background: var(--selected);
+    white-space: pre-wrap;
+  }
+  .bobby-widget-compose { padding: var(--space-2) var(--space-3) var(--space-3); }
+  .bobby-widget-compose .composer { min-height: unset; padding: var(--space-1); }
+  @media (prefers-reduced-motion: no-preference) {
+    .bobby-widget-pet { animation: bobby-breathe 3s ease-in-out infinite; }
+    @keyframes bobby-breathe { 50% { transform: translateY(-3px); } }
+  }
   .messages, .turn { display: grid; gap: var(--space-6); min-width: 0; }
   .messages { padding-top: var(--space-3); }
   .user-message { justify-self: end; max-width: min(85%, 530px); background: var(--neutral); border-radius: var(--radius-l) var(--radius-l) var(--space-2) var(--radius-l); padding: var(--space-3) var(--space-4); white-space: pre-wrap; }

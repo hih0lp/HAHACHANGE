@@ -4,11 +4,14 @@ import { api, ApiError, completed, errorText, watchJob } from './api';
 import type { Job } from './api';
 import { AccessForm } from './AccessForm';
 import { Answer } from './Answer';
+import { BobbyWidget } from './BobbyWidget';
+import type { useBobbyWidget } from './BobbyWidget';
 import { timeText, upsert } from './model';
 import { External, Notice, Stamp } from './ui';
 import { Bobby, Icon, Illustration } from './visuals';
 
 type Props = {
+  hidden: boolean;
   token: string;
   apiKey: string;
   identity: string;
@@ -19,9 +22,11 @@ type Props = {
   onForm: (id: string) => void;
   onCloseForm: () => void;
   onCatalog: () => void;
+  widget: ReturnType<typeof useBobbyWidget>;
+  onOpenChat: () => void;
 };
 
-export function Chat({ token, apiKey, identity, formID, catalog, draft, onDraft, onForm, onCloseForm, onCatalog }: Props) {
+export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, onDraft, onForm, onCloseForm, onCatalog, widget, onOpenChat }: Props) {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [revealedAnswers, setRevealedAnswers] = useState<Set<string>>(() => new Set());
   const [waiting, setWaiting] = useState<Record<string, 'reconnect' | 'timeout'>>({});
@@ -92,12 +97,12 @@ export function Chat({ token, apiKey, identity, formID, catalog, draft, onDraft,
   }, [apiKey, token]);
 
   useEffect(() => {
-    if (!jobs.length || !scroll.current) return;
+    if (hidden || !jobs.length || !scroll.current) return;
     if (initialRestore.current || sending || scroll.current.scrollHeight - scroll.current.scrollTop - scroll.current.clientHeight < 200) {
       scroll.current.scrollTop = scroll.current.scrollHeight;
     }
     initialRestore.current = false;
-  }, [jobs, sending]);
+  }, [hidden, jobs, sending]);
 
   useEffect(() => {
     if (formID || catalog) {
@@ -106,7 +111,7 @@ export function Chat({ token, apiKey, identity, formID, catalog, draft, onDraft,
     }
   }, [formID, catalog]);
 
-  async function send(text: string) {
+  async function send(text: string, fromWidget = false) {
     const query = text.trim();
     if ([...query].length < 2 || lock.current) return;
     lock.current = true;
@@ -117,7 +122,7 @@ export function Chat({ token, apiKey, identity, formID, catalog, draft, onDraft,
       if (job.status === 'completed' && job.answer?.trim()) setRevealedAnswers(previous => new Set(previous).add(job.id));
       setJobs(current => upsert(current, { ...job, query, created_at: job.created_at || new Date().toISOString() }));
       onDraft('');
-      input.current?.focus();
+      if (!fromWidget) input.current?.focus();
     } catch (err) {
       onDraft(query);
       setError(errorText(err, 'Не удалось отправить вопрос. Попробуйте ещё раз.'));
@@ -127,9 +132,9 @@ export function Chat({ token, apiKey, identity, formID, catalog, draft, onDraft,
     }
   }
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  function submit(event: FormEvent<HTMLFormElement>, fromWidget: boolean) {
     event.preventDefault();
-    void send(draft);
+    void send(draft, fromWidget);
   }
 
   function openForm(id: string) {
@@ -148,8 +153,55 @@ export function Chat({ token, apiKey, identity, formID, catalog, draft, onDraft,
   const auth = { token, key: apiKey };
   const hasMessages = jobs.length > 0 || !!formID || catalog || deadlines.length > 0;
   const composerState = sending ? 'thinking' : draft.trim() ? 'listening' : 'idle';
+  const latest = jobs.at(-1);
+  const preparingReply = !!latest && !completed(latest) && !waiting[latest.id];
+  const widgetState = sending || preparingReply ? 'thinking'
+    : draft.trim() ? 'listening'
+    : formID || catalog ? 'waiting-form'
+    : latest?.status === 'completed' && latest.answer?.trim() ? 'answering' : 'idle';
 
-  return <div className={'chat-page' + (hasMessages ? ' has-messages' : '')}>
+  function openFromWidget(id?: string) {
+    window.focus();
+    widget.close();
+    if (id) openForm(id);
+    else {
+      onOpenChat();
+      requestAnimationFrame(() => input.current?.focus());
+    }
+  }
+
+  function reply(job: Job, compact = false) {
+    if (job.status === 'completed') return job.answer?.trim()
+      ? <Answer text={job.answer} onForm={compact ? openFromWidget : openForm} reveal={!compact && revealedAnswers.has(job.id)}/>
+      : <p>Ответ пуст. Уточните вопрос или попробуйте снова.</p>;
+    if (job.status === 'failed') return <Notice error action={<button className="text-button" onClick={event => {
+      onDraft(job.query);
+      if (compact) event.currentTarget.closest('.bobby-widget')?.querySelector('textarea')?.focus();
+      else input.current?.focus();
+    }}>Повторить</button>}>
+      {job.error?.toLowerCase().match(/timeout|deadline exceeded/) ? 'Время ожидания ответа истекло.' : 'Не удалось получить ответ.'}
+    </Notice>;
+    if (waiting[job.id] === 'timeout') return <Notice error action={<button className="text-button" onClick={() => {
+      watchers.current.delete(job.id);
+      setJobs(current => [...current]);
+    }}>Проверить ответ</button>}>Ответ пока не получен.</Notice>;
+    return <p className="message-status muted"><span className="loading-dot"/>{waiting[job.id] === 'reconnect' ? 'Проверяем статус…' : job.status === 'queued' ? 'Вопрос в очереди…' : 'Готовлю ответ…'}</p>;
+  }
+
+  function composer(compact = false) {
+    return <form className="composer" onSubmit={event => submit(event, compact)}>
+      {!compact && hasMessages && composerState !== 'idle' && <Bobby className="composer-bobby" state={composerState}/>}
+      <textarea ref={compact ? undefined : input} value={draft} readOnly={sending} onChange={event => onDraft(event.target.value)} onKeyDown={event => {
+        if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+          event.preventDefault();
+          void send(draft, compact);
+        }
+      }} aria-label="Ваш вопрос" placeholder="Напишите вопрос Бобби" rows={1}/>
+      <button className="send-button" aria-label={sending ? 'Отправляем вопрос' : 'Отправить вопрос'} title="Отправить вопрос" disabled={sending || [...draft.trim()].length < 2}><Icon name="send"/></button>
+    </form>;
+  }
+
+  return <><div className={'chat-page' + (hasMessages ? ' has-messages' : '')} hidden={hidden}>
     <div className="chat-scroll" ref={scroll}>
       <div className="chat-inner">
         {historyError && <Notice error action={<button className="text-button" onClick={() => setReload(value => value + 1)}>Повторить</button>}>{historyError}</Notice>}
@@ -169,13 +221,7 @@ export function Chat({ token, apiKey, identity, formID, catalog, draft, onDraft,
               <span className="message-avatar"><Bobby state={index < jobs.length - 1 ? 'idle' : job.status === 'completed' && job.answer?.trim() ? 'answering' : !completed(job) && !waiting[job.id] ? 'thinking' : 'idle'}/></span>
               <strong className="message-name">Бобби</strong>
               <div className="message-body">
-                {job.status === 'completed' && (job.answer?.trim() ? <Answer text={job.answer} onForm={openForm} reveal={revealedAnswers.has(job.id)}/> : <p>Ответ пуст. Уточните вопрос или попробуйте снова.</p>)}
-                {job.status === 'failed' && <Notice error action={<button className="text-button" onClick={() => { onDraft(job.query); input.current?.focus(); }}>Повторить</button>}>
-                  {job.error?.toLowerCase().match(/timeout|deadline exceeded/) ? 'Время ожидания ответа истекло.' : 'Не удалось получить ответ.'}
-                </Notice>}
-                {!completed(job) && (waiting[job.id] === 'timeout'
-                  ? <Notice error action={<button className="text-button" onClick={() => { watchers.current.delete(job.id); setJobs([...jobs]); }}>Проверить ответ</button>}>Ответ пока не получен.</Notice>
-                  : <p className="message-status muted"><span className="loading-dot"/>{waiting[job.id] === 'reconnect' ? 'Проверяем статус…' : job.status === 'queued' ? 'Вопрос в очереди…' : 'Готовлю ответ…'}</p>)}
+                {reply(job)}
                 {completed(job) && <Stamp value={job.completed_at || job.created_at}/>}
               </div>
             </div>
@@ -201,17 +247,16 @@ export function Chat({ token, apiKey, identity, formID, catalog, draft, onDraft,
           </button>
         </div>}
         {error && <Notice error>{error}</Notice>}
-        <form className="composer" onSubmit={submit}>
-          {hasMessages && composerState !== 'idle' && <Bobby className="composer-bobby" state={composerState}/>}
-          <textarea ref={input} value={draft} onChange={event => onDraft(event.target.value)} onKeyDown={event => {
-            if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(draft); }
-          }} aria-label="Ваш вопрос" placeholder="Напишите вопрос Бобби" rows={1}/>
-          <button className="send-button" aria-label={sending ? 'Отправляем вопрос' : 'Отправить вопрос'} title="Отправить вопрос" disabled={sending || [...draft.trim()].length < 2}><Icon name="send"/></button>
-        </form>
+        {composer()}
         <p className="composer-hint">Бобби может ошибаться. Проверяйте важное по ссылкам в ответах.</p>
       </div>
     </div>
-  </div>;
+  </div>
+    {widget.target && <BobbyWidget target={widget.target} fallback={widget.fallback} state={widgetState}
+      query={latest?.query} reply={latest && reply(latest, true)} error={error} onClose={widget.close} onChat={openFromWidget}>
+      {composer(true)}
+    </BobbyWidget>}
+  </>;
 }
 
 function FormCatalog({ token, apiKey, onForm, onClose }: { token: string; apiKey: string; onForm: (id: string) => void; onClose: () => void }) {

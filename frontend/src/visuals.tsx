@@ -12,6 +12,7 @@ const icons = {
   menu: <path d="M4 6h16M4 12h16M4 18h16"/>,
   close: <path d="m6 6 12 12M18 6 6 18"/>,
   external: <path d="M13 4h7v7m0-7-9 9m7 1v6H4V6h6"/>,
+  widget: <><rect x="3" y="5" width="18" height="14" rx="3"/><rect x="11" y="11" width="7" height="5" rx="1"/></>,
   key: <><circle cx="8.5" cy="10.5" r="4"/><path d="m11.4 13.3 6.6 6.7 2-2-2-2 1.5-1.5"/></>,
   book: <path d="M12 6c-3-2-5-2-9-1v14c4-1 6-1 9 1 3-2 5-2 9-1V5c-4-1-6-1-9 1Zm0 0v14"/>,
   check: <path d="m5 12 4 4L19 6"/>,
@@ -25,7 +26,7 @@ export function Icon({ name, ...props }: SVGProps<SVGSVGElement> & { name: IconN
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>{icons[name]}</svg>;
 }
 
-type BobbyState = 'idle' | 'thinking' | 'answering' | 'listening' | 'waiting-form';
+export type BobbyState = 'idle' | 'thinking' | 'answering' | 'listening' | 'waiting-form';
 
 export function Bobby({ className, state = 'idle' }: { className?: string; state?: BobbyState }) {
   return <svg className={className} data-bobby-state={state} viewBox="30 10 1240 1170" aria-hidden="true">

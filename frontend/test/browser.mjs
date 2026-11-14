@@ -108,6 +108,62 @@ try {
   const launch = { headless: true, args: ['--no-sandbox'] };
   if (process.env.BOBBY_CHROME) launch.executablePath = process.env.BOBBY_CHROME;
   browser = await chromium.launch(launch);
+  {
+    const page = await browser.newPage();
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await fixtures(page);
+    await page.goto(base);
+    const trigger = page.getByRole('button', { name: 'Мини-чат с Бобби' });
+    if (await page.evaluate(() => !!window.documentPictureInPicture)) {
+      await trigger.click();
+      await page.waitForFunction(() => window.documentPictureInPicture.window?.document.querySelector('textarea'));
+      assert.equal(await page.evaluate(() => {
+        const floating = window.documentPictureInPicture.window;
+        const pet = floating.document.querySelector('.bobby-widget-pet');
+        return pet.dataset.bobbyState === 'idle' && floating.getComputedStyle(pet).width === '64px';
+      }), true);
+      await page.evaluate(() => {
+        const floating = window.documentPictureInPicture.window;
+        const input = floating.document.querySelector('textarea');
+        Object.getOwnPropertyDescriptor(floating.HTMLTextAreaElement.prototype, 'value').set.call(input, 'Бобби, ты здесь?');
+        input.dispatchEvent(new floating.Event('input', { bubbles: true }));
+      });
+      await page.waitForFunction(() => document.querySelector('.chat-page textarea').value === 'Бобби, ты здесь?');
+      await page.evaluate(() => window.documentPictureInPicture.window.document.querySelector('.send-button').click());
+      await page.waitForFunction(() => window.documentPictureInPicture.window?.document.querySelector('.answer h3')?.textContent === 'Ваш первый шаг');
+      assert.equal(await page.locator('.chat-page .user-message p').textContent(), 'Бобби, ты здесь?');
+      await page.evaluate(() => window.documentPictureInPicture.window.close());
+      await page.waitForFunction(() => !document.querySelector('.widget-trigger[aria-pressed="true"]'));
+      console.log('Passed native picture-in-picture send, reply, and close checks');
+    }
+    await page.addInitScript(() => Object.defineProperty(window, 'documentPictureInPicture', { value: undefined }));
+    await page.reload();
+    await trigger.click();
+    const widget = page.getByRole('region', { name: 'Мини-чат с Бобби' });
+    await widget.waitFor();
+    const input = widget.getByRole('textbox', { name: 'Ваш вопрос' });
+    assert.equal(await input.evaluate(element => document.activeElement === element), true);
+    await input.fill('Начать работу через мини-чат');
+    await widget.getByText('Слушаю').waitFor();
+    assert.equal(await page.locator('.chat-page textarea').inputValue(), 'Начать работу через мини-чат');
+    await page.getByRole('link', { name: 'Мои задачи' }).click();
+    await input.press('Enter');
+    await widget.getByText('Думаю').waitFor();
+    await widget.getByText('Ответ готов').waitFor();
+    await widget.getByRole('heading', { name: 'Ваш первый шаг' }).waitFor();
+    await widget.getByRole('button', { name: 'Заполнить заявку' }).click();
+    await widget.waitFor({ state: 'hidden' });
+    await page.getByLabel('Ресурс').waitFor();
+    await trigger.click();
+    await widget.getByText('Жду заполнения формы').waitFor();
+    await widget.getByRole('textbox').press('Escape');
+    await widget.waitFor({ state: 'hidden' });
+    assert.equal(await trigger.evaluate(element => document.activeElement === element), true);
+    assert.deepEqual(errors, []);
+    await page.close();
+    console.log('Passed Bobby widget checks');
+  }
   for (const width of [360, 768, 1440]) {
     const context = await browser.newContext({ viewport: { width, height: width === 360 ? 780 : 900 } });
     const page = await context.newPage();
