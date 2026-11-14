@@ -82,10 +82,11 @@ type WidgetProps = {
   error?: string;
   onClose: () => void;
   onChat: () => void;
+  renderMicrophone: (reveal: () => void) => ReactNode;
   children: ReactNode;
 };
 
-export function BobbyWidget({ target, fallback, state, jobID, query, reply, error, onClose, onChat, children }: WidgetProps) {
+export function BobbyWidget({ target, fallback, state, jobID, query, reply, error, onClose, onChat, renderMicrophone, children }: WidgetProps) {
   const [collapsed, setCollapsed] = useState(false);
   const panel = useRef<HTMLElement>(null);
   const petButton = useRef<HTMLButtonElement>(null);
@@ -120,10 +121,13 @@ export function BobbyWidget({ target, fallback, state, jobID, query, reply, erro
           onClose();
         }
       }}>
-      {collapsed && <button type="button" ref={petButton} className="bobby-widget-only-pet" aria-label="Развернуть мини-чат"
+      {collapsed && <div className="bobby-widget-compact">
+      <button type="button" ref={petButton} className="bobby-widget-only-pet" aria-label="Развернуть мини-чат"
         title="Развернуть мини-чат" onClick={toggleCollapsed}>
         <Bobby className="bobby-widget-pet" state="idle"/>
-      </button>}
+      </button>
+      {renderMicrophone(toggleCollapsed)}
+      </div>}
       <header className="bobby-widget-header" hidden={collapsed}>
         <Bobby className="bobby-widget-pet" state={state}/>
         <div className="bobby-widget-name"><strong>Бобби</strong><small role="status">{moods[state]}</small></div>

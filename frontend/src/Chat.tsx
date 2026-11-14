@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { FormEvent } from 'react';
+import type { Dispatch, FormEvent, SetStateAction } from 'react';
 import { api, ApiError, completed, errorText, watchJob } from './api';
 import type { Job } from './api';
 import { AccessForm } from './AccessForm';
@@ -8,6 +8,7 @@ import { BobbyWidget } from './BobbyWidget';
 import type { useBobbyWidget } from './BobbyWidget';
 import { timeText, upsert } from './model';
 import { External, Notice, Stamp } from './ui';
+import { useDictation } from './useDictation';
 import { Bobby, Icon, Illustration } from './visuals';
 
 type Props = {
@@ -18,7 +19,7 @@ type Props = {
   formID: string;
   catalog: boolean;
   draft: string;
-  onDraft: (text: string) => void;
+  onDraft: Dispatch<SetStateAction<string>>;
   onForm: (id: string) => void;
   onCloseForm: () => void;
   onCatalog: () => void;
@@ -43,6 +44,7 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
   const initialRestore = useRef(true);
   const scrollAfterSend = useRef(false);
   const sourceButton = useRef<HTMLElement | null>(null);
+  const dictation = useDictation(onDraft, !hidden, !!widget.target);
 
   useEffect(() => {
     let active = true;
@@ -116,6 +118,7 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
   async function send(text: string, fromWidget = false) {
     const query = text.trim();
     if ([...query].length < 2 || lock.current) return;
+    dictation.cancel();
     lock.current = true;
     setSending(true);
     setError('');
@@ -155,11 +158,11 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
 
   const auth = { token, key: apiKey };
   const hasMessages = jobs.length > 0 || !!formID || catalog || deadlines.length > 0;
-  const composerState = sending ? 'thinking' : draft.trim() ? 'listening' : 'idle';
+  const composerState = sending ? 'thinking' : dictation.active || draft.trim() ? 'listening' : 'idle';
   const latest = jobs.at(-1);
   const preparingReply = !!latest && !completed(latest) && !waiting[latest.id];
   const widgetState = sending || preparingReply ? 'thinking'
-    : draft.trim() ? 'listening'
+    : dictation.active || draft.trim() ? 'listening'
     : formID || catalog ? 'waiting-form'
     : latest?.status === 'completed' && latest.answer?.trim() ? 'answering' : 'idle';
 
@@ -192,15 +195,29 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
   }
 
   function composer(compact = false) {
-    return <form className="composer" onSubmit={event => submit(event, compact)}>
+    const surface = compact ? 'widget' : 'chat';
+    return <>{dictation.message?.surface === surface && <Notice error>{dictation.message.text}</Notice>}
+    <form className="composer" onSubmit={event => submit(event, compact)}>
       <textarea ref={compact ? undefined : input} value={draft} readOnly={sending} onChange={event => onDraft(event.target.value)} onKeyDown={event => {
         if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
           event.preventDefault();
           void send(draft, compact);
         }
       }} aria-label="Ваш вопрос" placeholder="Напишите вопрос Бобби" rows={1}/>
+      {microphone(surface)}
       <button className="send-button" aria-label={sending ? 'Отправляем вопрос' : 'Отправить вопрос'} title="Отправить вопрос" disabled={sending || [...draft.trim()].length < 2}><Icon name="send"/></button>
-    </form>;
+    </form></>;
+  }
+
+  function microphone(surface: 'chat' | 'widget', reveal?: () => void) {
+    const recording = dictation.active === surface;
+    const label = recording ? 'Остановить диктовку' : 'Голосовой ввод';
+    return <button type="button" className="icon-button mic-button" title={label} aria-label={label}
+      aria-pressed={recording} disabled={sending || !!dictation.active && !recording}
+      onClick={() => {
+        reveal?.();
+        dictation.toggle(surface);
+      }}><Icon name={recording ? 'stop' : 'mic'}/></button>;
   }
 
   return <><div className={'chat-page' + (hasMessages ? ' has-messages' : '')} hidden={hidden}>
@@ -258,7 +275,8 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
     </div>
   </div>
     {widget.target && <BobbyWidget target={widget.target} fallback={widget.fallback} state={widgetState}
-      jobID={latest?.id} query={latest?.query} reply={latest && reply(latest, true)} error={error} onClose={widget.close} onChat={openFromWidget}>
+      jobID={latest?.id} query={latest?.query} reply={latest && reply(latest, true)} error={error}
+      onClose={widget.close} onChat={openFromWidget} renderMicrophone={reveal => microphone('widget', reveal)}>
       {composer(true)}
     </BobbyWidget>}
   </>;

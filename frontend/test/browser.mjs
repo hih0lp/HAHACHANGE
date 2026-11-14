@@ -113,6 +113,21 @@ try {
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     await fixtures(page);
+    await page.addInitScript(() => {
+      window.SpeechRecognition = class {
+        start() { window.currentRecognition = this; }
+        stop() { this.onend(); }
+        abort() { this.onend(); }
+      };
+    });
+    const finishDictation = async text => {
+      await page.evaluate(transcript => {
+        const recognition = window.currentRecognition;
+        if (recognition.lang !== 'ru-RU') throw new Error('Wrong dictation language');
+        recognition.onresult({ results: [[{ transcript }]] });
+        recognition.onend();
+      }, text);
+    };
     await page.goto(base);
     const trigger = page.getByRole('button', { name: 'Мини-чат с Бобби' });
     if (await page.evaluate(() => !!window.documentPictureInPicture)) {
@@ -123,6 +138,9 @@ try {
         const pet = floating.document.querySelector('.bobby-widget-pet');
         return pet.dataset.bobbyState === 'idle' && floating.getComputedStyle(pet).width === '64px';
       }), true);
+      await page.evaluate(() => window.documentPictureInPicture.window.document.querySelector('.mic-button').click());
+      await finishDictation('Привет');
+      await page.waitForFunction(() => window.documentPictureInPicture.window.document.querySelector('textarea').value === 'Привет');
       await page.evaluate(() => {
         const floating = window.documentPictureInPicture.window;
         const input = floating.document.querySelector('textarea');
@@ -149,6 +167,9 @@ try {
     }
     await page.addInitScript(() => Object.defineProperty(window, 'documentPictureInPicture', { value: undefined }));
     await page.reload();
+    await page.locator('.chat-page').getByRole('button', { name: 'Голосовой ввод' }).click();
+    await finishDictation('Черновик из чата');
+    assert.equal(await page.locator('.chat-page textarea').inputValue(), 'Черновик из чата');
     await trigger.click();
     const widget = page.getByRole('region', { name: 'Мини-чат с Бобби' });
     await widget.waitFor();
@@ -164,8 +185,10 @@ try {
     assert.equal(await widget.evaluate(element => getComputedStyle(element).backgroundColor), 'rgba(0, 0, 0, 0)');
     assert.equal(await widget.evaluate(element => getComputedStyle(element).boxShadow), 'none');
     assert.equal(await input.isVisible(), false);
-    await pet.click();
-    assert.equal(await input.inputValue(), 'Начать работу через мини-чат');
+    await widget.getByRole('button', { name: 'Голосовой ввод' }).click();
+    await widget.getByRole('button', { name: 'Остановить диктовку' }).waitFor();
+    await finishDictation('голосом');
+    assert.equal(await input.inputValue(), 'Начать работу через мини-чат голосом');
     await widget.getByText('Слушаю').waitFor();
     await page.addStyleTag({ content: '.bobby-widget-thread { flex: none; height: 50px; } .bobby-widget-query { min-height: 120px; }' });
     await page.getByRole('link', { name: 'Мои задачи' }).click();
