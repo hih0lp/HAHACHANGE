@@ -5,3 +5,7 @@ coverage.out
 coverage-new.out
 .smbdelete*
 
+
+frontend/node_modules/
+frontend/.vite/
+

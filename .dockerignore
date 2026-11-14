@@ -6,3 +6,7 @@ app
 specs
 coverage.out
 coverage-new.out
+frontend/node_modules
+frontend/.vite
+frontend/dist
+frontend/test

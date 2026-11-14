@@ -1,0 +1,382 @@
+name: bobby-local
+
+services:
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.gateway
+      args:
+        VITE_JOB_WATCH_TIMEOUT_MS: "630000"
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${BOBBY_LOCAL_PORT:-18001}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1/session/bootstrap"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    image: bobby-local-api:local
+    restart: unless-stopped
+    environment:
+      APP_ROLE: api
+      DISTRIBUTED_MODE: "true"
+      LLM_URL: http://ollama:11434
+      LLM_MODEL: ${BOBBY_MODEL:-qwen3:4b}
+      JOB_TIMEOUT_SECONDS: "600"
+      QDRANT_URL: http://qdrant:6333
+      EMBEDDINGS_URL: http://embeddings:80
+      DOCUMENTS_PATH: /data/knowledge
+      JIRA_MODE: mock
+      JIRA_BASE_URL: http://mock-jira:8080
+      JIRA_PROJECT_KEY: SCRUM
+      MCP_URL: http://mock-jira:8080/mcp
+      CALENDAR_MCP_URL: http://mock-calendar:8080/mcp
+      GITLAB_MCP_URL: http://mock-gitlab:8080/mcp
+      GITLAB_REMINDER_PROJECT: "2"
+      REMINDER_INTERN_MINUTES_BEFORE: "10"
+      REMINDER_MENTOR_MINUTES_BEFORE: "5"
+      TEAM_ACCESS_URL: http://team-access:8080
+      SESSION_SECRET: bobby-local-session-only
+      TEAM_ACCESS_INTERN_PASSWORD: bobby-local-intern
+      TEAM_ACCESS_INTERN2_PASSWORD: bobby-local-intern2
+      TEAM_ACCESS_APPROVER_PASSWORD: bobby-local-approver
+      RIGHTS_URL: http://access-rights:8080
+      RIGHTS_MCP_URL: http://access-rights:8080/mcp
+      DATABASE_URL: postgres://aibuddy:bobby-local-postgres@postgres:5432/aibuddy?sslmode=disable
+    volumes:
+      - ./fixtures/knowledge:/data/knowledge:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:8000/"]
+      interval: 5s
+      timeout: 3s
+      retries: 90
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+      team-access:
+        condition: service_healthy
+      access-rights:
+        condition: service_healthy
+      mock-jira:
+        condition: service_started
+      mock-calendar:
+        condition: service_started
+      mock-gitlab:
+        condition: service_healthy
+
+  worker:
+    build: .
+    image: bobby-local-api:local
+    restart: unless-stopped
+    environment:
+      APP_ROLE: worker
+      SESSION_SECRET: bobby-local-session-only
+      DISTRIBUTED_MODE: "true"
+      LLM_URL: http://ollama:11434
+      LLM_MODEL: ${BOBBY_MODEL:-qwen3:4b}
+      JOB_TIMEOUT_SECONDS: "600"
+      QDRANT_URL: http://qdrant:6333
+      EMBEDDINGS_URL: http://embeddings:80
+      JIRA_MODE: mock
+      JIRA_BASE_URL: http://mock-jira:8080
+      JIRA_PROJECT_KEY: SCRUM
+      MCP_URL: http://mock-jira:8080/mcp
+      CALENDAR_MCP_URL: http://mock-calendar:8080/mcp
+      GITLAB_MCP_URL: http://mock-gitlab:8080/mcp
+      GROUP_CHAT_MCP_URL: http://mock-group-chat:8080/mcp
+      RIGHTS_URL: http://access-rights:8080
+      RIGHTS_MCP_URL: http://access-rights:8080/mcp
+      TEAM_MCP_URL: http://team-access:8080/mcp
+      DATABASE_URL: postgres://aibuddy:bobby-local-postgres@postgres:5432/aibuddy?sslmode=disable
+    depends_on:
+      api:
+        condition: service_healthy
+      model-init:
+        condition: service_completed_successfully
+      mock-group-chat:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+      mock-jira:
+        condition: service_started
+      mock-calendar:
+        condition: service_started
+
+  postgres:
+    image: postgres:17.5
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: aibuddy
+      POSTGRES_USER: aibuddy
+      POSTGRES_PASSWORD: bobby-local-postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./migrations/001_distributed_jobs.sql:/docker-entrypoint-initdb.d/001_distributed_jobs.sql:ro
+      - ./migrations/002_scenarios.sql:/docker-entrypoint-initdb.d/002_scenarios.sql:ro
+      - ./migrations/003_team_context.sql:/docker-entrypoint-initdb.d/003_team_context.sql:ro
+      - ./migrations/004_scenario_events.sql:/docker-entrypoint-initdb.d/004_scenario_events.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  service-db-init:
+    image: postgres:17.5
+    environment:
+      PGHOST: postgres
+      PGUSER: aibuddy
+      PGPASSWORD: bobby-local-postgres
+      LEGACY_DB: aibuddy
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        for db in aibuddy_teams aibuddy_rights; do
+          if [ "$$(psql -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='$$db'")" != 1 ]; then
+            createdb -O "$$PGUSER" "$$db"
+          fi
+        done
+        psql -v ON_ERROR_STOP=1 -d aibuddy_teams -f /migrations/001_team.sql
+        psql -v ON_ERROR_STOP=1 -d aibuddy_rights -f /migrations/001_rights.sql
+        psql -v ON_ERROR_STOP=1 -d "$$LEGACY_DB" -f /migrations/005_deadline_kinds.sql
+    volumes:
+      - ./migrations/team_access/001_team.sql:/migrations/001_team.sql:ro
+      - ./migrations/team_access/001_rights.sql:/migrations/001_rights.sql:ro
+      - ./migrations/005_deadline_kinds.sql:/migrations/005_deadline_kinds.sql:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  kafka:
+    image: apache/kafka:4.2.2
+    restart: unless-stopped
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+
+  kafka-init:
+    image: apache/kafka:4.2.2
+    depends_on:
+      - kafka
+    entrypoint: ["/bin/bash", "-ec"]
+    command:
+      - >-
+        until /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list >/dev/null 2>&1;
+        do sleep 2; done;
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092
+        --create --if-not-exists --topic ai-buddy-requests --partitions 6 --replication-factor 1;
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092
+        --create --if-not-exists --topic team-access-events --partitions 3 --replication-factor 1
+
+  team-access:
+    build:
+      context: .
+      dockerfile: Dockerfile.team-access
+    image: bobby-local-team-access:local
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://aibuddy:bobby-local-postgres@postgres:5432/aibuddy_teams?sslmode=disable
+      KAFKA_BROKERS: kafka:9092
+      TEAM_ACCESS_ROLE: team
+      TEAM_ACCESS_INTERN_PASSWORD: bobby-local-intern
+      TEAM_ACCESS_INTERN2_PASSWORD: bobby-local-intern2
+      TEAM_ACCESS_APPROVER_PASSWORD: bobby-local-approver
+      TEAM_JIRA_ACCOUNTS_JSON: '{"intern":"712020:dac8b504-c5af-48c6-961f-501520b7615d"}'
+      JIRA_MODE: mock
+      JIRA_BASE_URL: http://mock-jira:8080
+
+      TEAM_ACCESS_TOKEN_TTL_HOURS: 12
+      TEAM_ACCESS_MIGRATION: /app/migrations/001_team.sql
+      TEAM_ACCESS_KEY_FILE: /data/keys/private.pem
+    volumes:
+      - team-access-keys:/data/keys
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    depends_on:
+      service-db-init:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
+
+  access-rights:
+    build:
+      context: .
+      dockerfile: Dockerfile.team-access
+    image: bobby-local-team-access:local
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://aibuddy:bobby-local-postgres@postgres:5432/aibuddy_rights?sslmode=disable
+      TEAM_ACCESS_ROLE: rights
+      TEAM_ACCESS_SEED_RESOURCES_FILE: /fixtures/resources.json
+      TEAM_DIRECTORY_URL: http://team-access:8080
+      TEAM_ACCESS_MIGRATION: /app/migrations/001_rights.sql
+      TEAM_ACCESS_KEY_FILE: /data/keys/private.pem
+      KAFKA_BROKERS: kafka:9092
+    volumes:
+      - team-access-keys:/data/keys:ro
+      - ./fixtures/mock/resources.json:/fixtures/resources.json:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    depends_on:
+      service-db-init:
+        condition: service_completed_successfully
+      team-access:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+
+  mock-jira:
+    build:
+      context: .
+      dockerfile: Dockerfile.mock-jira
+    restart: unless-stopped
+    environment:
+      MOCK_JIRA_JSON: /fixtures/jira.json
+      MOCK_LISTEN: :8080
+    volumes:
+      - ./fixtures/mock/jira.json:/fixtures/jira.json:ro
+
+  mock-calendar:
+    build:
+      context: .
+      dockerfile: Dockerfile.mock-calendar
+    restart: unless-stopped
+    environment:
+      MOCK_CALENDAR_JSON: /fixtures/calendar.json
+      MOCK_LISTEN: :8080
+      TEAM_DIRECTORY_URL: http://team-access:8080
+      CALENDAR_DEMO_SUBJECT: intern
+    volumes:
+      - ./fixtures/mock/calendar.json:/fixtures/calendar.json:ro
+
+  qdrant:
+    image: qdrant/qdrant:v1.12.6
+    restart: unless-stopped
+    volumes:
+      - qdrant-data:/qdrant/storage
+
+  embeddings:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.6
+    platform: linux/amd64
+    restart: unless-stopped
+    command: ["--model-id", "intfloat/multilingual-e5-small", "--max-client-batch-size", "64"]
+    volumes:
+      - model-cache:/data
+
+  mock-gitlab:
+    build:
+      context: .
+      dockerfile: Dockerfile.gitlab-integration
+    restart: unless-stopped
+    environment:
+      GITLAB_MODE: mock
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  mock-group-chat:
+    build:
+      context: .
+      dockerfile: Dockerfile.mock-group-chat
+    restart: on-failure
+    ports:
+      - "127.0.0.1:${GROUP_CHAT_LOCAL_PORT:-28084}:8080"
+    environment:
+      CHAT_DATABASE_URL: postgres://aibuddy:bobby-local-postgres@postgres:5432/aibuddy?sslmode=disable
+      CHAT_TEAM_ACCESS_URL: http://team-access:8080
+      CHAT_EMBEDDINGS_URL: http://embeddings:80
+    depends_on:
+      postgres:
+        condition: service_healthy
+      team-access:
+        condition: service_healthy
+      embeddings:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 90
+
+  ollama:
+    image: ollama/ollama:0.12.11
+    restart: unless-stopped
+    environment:
+      OLLAMA_CONTEXT_LENGTH: "8192"
+    volumes:
+      - llm-models:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  model-init:
+    image: ollama/ollama:0.12.11
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      BOBBY_MODEL: ${BOBBY_MODEL:-qwen3:4b}
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        if ! ollama show "$$BOBBY_MODEL" >/dev/null 2>&1; then
+          ollama pull "$$BOBBY_MODEL"
+        fi
+        ollama run "$$BOBBY_MODEL" 'Reply with OK.' >/dev/null
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+volumes:
+  llm-models:
+  postgres-data:
+  redis-data:
+  kafka-data:
+  qdrant-data:
+  model-cache:
+  team-access-keys:

@@ -114,7 +114,8 @@ export function watchJob(id: string, auth: Auth, onJob: (job: Job) => void, onSt
   let socket: WebSocket | undefined;
   let retryTimer: ReturnType<typeof setTimeout>;
   let socketTimer: ReturnType<typeof setTimeout>;
-  const deadline = setTimeout(() => { stop(); onState('timeout'); }, 210_000);
+  const timeoutMs = Number(import.meta.env.VITE_JOB_WATCH_TIMEOUT_MS ?? 210_000);
+  const deadline = setTimeout(() => { stop(); onState('timeout'); }, timeoutMs);
   const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const url = scheme + '//' + location.host + '/v1/jobs/' + encodeURIComponent(id) + '/ws' + (auth.token ? '?account=1' : '');
 
