@@ -3,7 +3,7 @@ import type { FormEvent } from 'react';
 import { api, ApiError, errorText } from './api';
 import type { Field, FormDefinition, Receipt, Resource, Values } from './api';
 import { fieldValue, newId } from './model';
-import { Notice, statusText } from './ui';
+import { Notice } from './ui';
 import { Bobby, Icon } from './visuals';
 
 type Props = { id: string; token: string; apiKey: string; identity: string; onClose: () => void };
@@ -162,7 +162,7 @@ export function AccessForm({ id, token, apiKey, identity, onClose }: Props) {
         </div>
       </>}
       {receipt && <>
-        <Notice><strong>{statusText(receipt.status)}</strong><br/>Номер заявки {receipt.id}</Notice>
+        <Notice><strong>Заявка успешно отправлена!</strong><br/>Номер заявки {receipt.id}</Notice>
         <button className="button secondary" onClick={() => remember()}>Заполнить новую заявку</button>
       </>}
       {error && <Notice error={!conflict}>{error}</Notice>}
