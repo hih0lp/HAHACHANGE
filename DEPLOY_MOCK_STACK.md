@@ -1,6 +1,6 @@
 # Клонирование и запуск тестового Бобби с моками
 
-Инструкция рассчитана на PowerShell на Windows-сервере. Стек `bobby-mocks` запускается отдельно от рабочего проекта. Jira и Google Calendar обслуживаются локальными сервисами `mock-jira` и `mock-calendar`; GitLab отключён. Команда запуска сохраняет сервис команды, права, формы, напоминания, чат и поиск.
+Инструкция рассчитана на PowerShell на Windows-сервере. Стек `bobby-mocks` запускается отдельно от рабочего проекта. Jira, Google Calendar и GitLab обслуживаются локальными сервисами `mock-jira`, `mock-calendar` и `mock-gitlab`. Команда запуска сохраняет сервис команды, права, формы, напоминания, чат и поиск.
 
 ## 1. Получить код
 
@@ -65,10 +65,10 @@ docker compose -p bobby-mocks -f compose.distributed.yml -f compose.mock.yml up 
 ```powershell
 docker compose -p bobby-mocks -f compose.distributed.yml -f compose.mock.yml ps
 (Invoke-WebRequest -UseBasicParsing http://127.0.0.1:18001/).StatusCode
-docker compose -p bobby-mocks -f compose.distributed.yml -f compose.mock.yml logs --tail 50 api worker mock-jira mock-calendar
+docker compose -p bobby-mocks -f compose.distributed.yml -f compose.mock.yml logs --tail 50 api worker mock-jira mock-calendar mock-gitlab
 ```
 
-Страница тестового чата: `http://100.105.236.12:18001/` с компьютера в той же сети Tailscale или `http://127.0.0.1:18001/` на сервере. Ожидается HTTP `200`; в списке сервисов должны быть `api`, `worker`, `mock-jira`, `mock-calendar`, `team-access` и `access-rights`. Контейнера `gitlab-integration` в проекте `bobby-mocks` быть не должно. API и worker получают адреса моков и пустой `GITLAB_MCP_URL` непосредственно из `compose.distributed.yml`.
+Страница тестового чата: `http://100.105.236.12:18001/` с компьютера в той же сети Tailscale или `http://127.0.0.1:18001/` на сервере. Ожидается HTTP `200`; в списке сервисов должны быть `api`, `worker`, `mock-jira`, `mock-calendar`, `team-access` и `access-rights`. Контейнера `gitlab-integration` в проекте `bobby-mocks` быть не должно. API и worker получают адреса моков через Compose. В `compose.mock.yml` адрес GitLab MCP задан как `http://mock-gitlab:8080/mcp`.
 
 После обновления кода снова выполните `git pull --ff-only` и команду `up -d --build --remove-orphans` с теми же переменными портов. Для остановки только тестового стека:
 

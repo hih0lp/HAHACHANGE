@@ -49,6 +49,7 @@ type bridge struct {
 	gitlab, directory, subject, token string
 	tokens                            map[string]string
 	client                            *http.Client
+	mock                              bool
 }
 
 func (b bridge) authorize(r *http.Request) (string, bool) {
@@ -71,6 +72,9 @@ func (b bridge) authorize(r *http.Request) (string, bool) {
 	}
 	if resp.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(resp.Body, 65536)).Decode(&profile) != nil {
 		return "", false
+	}
+	if b.mock {
+		return profile.ID, profile.ID != ""
 	}
 	if len(b.tokens) != 0 {
 		token := b.tokens[profile.ID]
@@ -258,6 +262,9 @@ func (b bridge) handler() http.Handler {
 }
 
 func main() {
+	if os.Getenv("GITLAB_MODE") == "mock" {
+		log.Fatal(serveMock())
+	}
 	var tokens map[string]string
 	if path := os.Getenv("GITLAB_DEMO_TOKENS_FILE"); path != "" {
 		data, err := os.ReadFile(path)

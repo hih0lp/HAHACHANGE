@@ -1,0 +1,63 @@
+services:
+  mock-group-chat:
+    build:
+      context: .
+      dockerfile: Dockerfile.mock-group-chat
+    ports:
+      - "${CHAT_HOST_PORT:-18082}:8080"
+    environment:
+      CHAT_DATABASE_URL: "${CHAT_DATABASE_URL:-postgres://chat:local-demo@postgres:5432/chat?sslmode=disable}"
+      CHAT_TEAM_ACCESS_URL: "${CHAT_TEAM_ACCESS_URL:-http://team-access:8080}"
+      CHAT_EMBEDDINGS_URL: "${CHAT_EMBEDDINGS_URL:-http://embeddings:80}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      team-access:
+        condition: service_started
+    restart: on-failure
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: chat
+      POSTGRES_USER: chat
+      POSTGRES_PASSWORD: local-demo
+    volumes:
+      - chat-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chat -d chat"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  team-access:
+    build:
+      context: .
+      dockerfile: Dockerfile.team-access
+    ports:
+      - "127.0.0.1:${CHAT_LOCAL_TEAM_PORT:-18083}:8080"
+    environment:
+      DATABASE_URL: postgres://chat:local-demo@postgres:5432/chat?sslmode=disable
+      TEAM_ACCESS_ROLE: team
+      TEAM_ACCESS_MIGRATION: /app/migrations/001_team.sql
+      TEAM_ACCESS_KEY_FILE: /data/keys/private.pem
+      TEAM_ACCESS_INTERN_PASSWORD: "${TEAM_ACCESS_INTERN_PASSWORD:-chat-demo-intern}"
+      TEAM_ACCESS_INTERN2_PASSWORD: "${TEAM_ACCESS_INTERN2_PASSWORD:-chat-demo-intern2}"
+      TEAM_ACCESS_APPROVER_PASSWORD: "${TEAM_ACCESS_APPROVER_PASSWORD:-chat-demo-approver}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - team-keys:/data/keys
+
+  embeddings:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.6
+    platform: linux/amd64
+    command: ["--model-id", "intfloat/multilingual-e5-small", "--max-client-batch-size", "64"]
+    volumes:
+      - model-cache:/data
+
+volumes:
+  chat-db:
+  team-keys:
+  model-cache:
