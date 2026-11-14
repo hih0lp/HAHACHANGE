@@ -25,8 +25,10 @@ export function Icon({ name, ...props }: SVGProps<SVGSVGElement> & { name: IconN
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>{icons[name]}</svg>;
 }
 
-export function Bobby({ className }: { className?: string }) {
-  return <svg className={className} viewBox="174 119 935 996" aria-hidden="true">
+type BobbyState = 'idle' | 'thinking' | 'answering' | 'listening' | 'waiting-form';
+
+export function Bobby({ className, state = 'idle' }: { className?: string; state?: BobbyState }) {
+  return <svg className={className} data-bobby-state={state} viewBox={state === 'idle' ? '174 119 935 996' : '30 75 1240 1040'} aria-hidden="true">
     <g stroke="var(--bobby-ink)" strokeWidth="24" strokeLinecap="round" strokeLinejoin="round">
       <path fill="var(--bobby-blue)" d="M463 907c-12 28-20 56-43 78-24 17-48 44-35 74 12 29 49 28 77 26 58-3 96-10 105-60l15-93Zm222 21c-8 30-19 64-17 92 2 52 48 61 104 61 54 0 108-6 107-47-1-37-33-58-60-68l16-54Z"/>
       <path fill="white" d="M288 794c-48-52-76-106-77-170-9-202 179-400 397-453 178-44 317 10 398 142 80 130 95 292 8 430-121 196-390 266-607 166-55 35-106 54-145 52-37-2-54-28-38-59 18-36 47-66 64-108Z"/>
@@ -36,12 +38,21 @@ export function Bobby({ className }: { className?: string }) {
       <ellipse cx="572" cy="550" rx="53" ry="56" transform="rotate(12 572 550)"/>
       <ellipse cx="865" cy="482" rx="50" ry="54" transform="rotate(12 865 482)"/>
     </g>
-    <g fill="white"><circle cx="586" cy="519" r="14"/><circle cx="877" cy="454" r="14"/></g>
-    <path d="M695 581c28 23 68 10 80-22" fill="none" stroke="var(--bobby-ink)" strokeWidth="25" strokeLinecap="round"/>
+    <g fill="white" transform={state === 'thinking' ? 'translate(4 -9)' : state === 'listening' ? 'translate(-29 7)' : undefined}>
+      <circle cx="586" cy="519" r="14"/><circle cx="877" cy="454" r="14"/>
+    </g>
+    <path d={state === 'answering' ? 'M690 573l94-19c4 88-77 107-94 19Z' : state === 'listening' ? 'M709 585l49-10' : 'M695 581c28 23 68 10 80-22'}
+      fill={state === 'answering' ? 'var(--bobby-blue)' : 'none'} stroke="var(--bobby-ink)" strokeWidth="25" strokeLinecap="round" strokeLinejoin="round"/>
+    {state === 'thinking' && <g fill="var(--bobby-blue)"><circle cx="1000" cy="231" r="20"/><circle cx="1066" cy="189" r="29"/><circle cx="1130" cy="120" r="40"/></g>}
+    {state === 'answering' && <path d="m1117 517 84-38m-84 109 90 27" fill="none" stroke="var(--bobby-blue)" strokeWidth="27" strokeLinecap="round"/>}
+    {state === 'listening' && <path d="M173 512q-57 71-14 145M114 471Q32 572 92 682" fill="none" stroke="var(--bobby-blue)" strokeWidth="26" strokeLinecap="round"/>}
+    {state === 'waiting-form' && <g fill="none" stroke="var(--bobby-blue)" strokeWidth="30" strokeLinecap="round">
+      <path d="M1090 342c0-75 130-79 130-4 0 54-66 58-66 112"/><circle cx="1154" cy="507" r="16" fill="var(--bobby-blue)" stroke="none"/>
+    </g>}
   </svg>;
 }
 
-export function Illustration() {
+export function Illustration({ state = 'idle' }: { state?: BobbyState }) {
   return <div className="illustration" aria-hidden="true">
     <svg viewBox="0 0 332 216" fill="none">
       <path d="M38 161C13 93 129 18 219 39c93 23 93 118 30 150C174 225 67 210 38 161Z" fill="var(--hero-blue)"/>
@@ -52,6 +63,6 @@ export function Illustration() {
       <circle cx="93" cy="44" r="9" fill="var(--brand-blue)"/>
       <path d="M37 84v16m-8-8h16M288 31v12m-6-6h12" stroke="var(--orbit)" strokeWidth="2" strokeLinecap="round"/>
     </svg>
-    <Bobby className="hero-bobby"/>
+    <Bobby className="hero-bobby" state={state}/>
   </div>;
 }

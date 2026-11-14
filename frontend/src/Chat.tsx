@@ -142,13 +142,14 @@ export function Chat({ token, apiKey, identity, formID, catalog, draft, onDraft,
 
   const auth = { token, key: apiKey };
   const hasMessages = jobs.length > 0 || !!formID || catalog || deadlines.length > 0;
+  const composerState = sending ? 'thinking' : draft.trim() ? 'listening' : 'idle';
 
   return <div className={'chat-page' + (hasMessages ? ' has-messages' : '')}>
     <div className="chat-scroll" ref={scroll}>
       <div className="chat-inner">
         {historyError && <Notice error action={<button className="text-button" onClick={() => setReload(value => value + 1)}>Повторить</button>}>{historyError}</Notice>}
         {!hasMessages && <div className="welcome">
-          <Illustration/>
+          <Illustration state={composerState}/>
           <h1>Привет, я Бобби!</h1>
           <p>Помогу освоиться в команде и разобраться с первыми задачами.</p>
         </div>}
@@ -160,7 +161,7 @@ export function Chat({ token, apiKey, identity, formID, catalog, draft, onDraft,
           {jobs.map(job => <div key={job.id} className="turn">
             <div className="user-message"><p>{job.query}</p><Stamp value={job.created_at}/></div>
             <div className="assistant-message" aria-live="polite">
-              <span className="message-avatar"><Bobby/></span>
+              <span className="message-avatar"><Bobby state={job.status === 'completed' && job.answer?.trim() ? 'answering' : !completed(job) && !waiting[job.id] ? 'thinking' : 'idle'}/></span>
               <div className="message-body">
                 <strong className="message-name">Бобби</strong>
                 {job.status === 'completed' && (job.answer?.trim() ? <Answer text={job.answer} onForm={openForm}/> : <p>Ответ пуст. Уточните вопрос или попробуйте снова.</p>)}
@@ -196,6 +197,7 @@ export function Chat({ token, apiKey, identity, formID, catalog, draft, onDraft,
         </div>}
         {error && <Notice error>{error}</Notice>}
         <form className="composer" onSubmit={submit}>
+          {hasMessages && composerState !== 'idle' && <Bobby className="composer-bobby" state={composerState}/>}
           <textarea ref={input} value={draft} onChange={event => onDraft(event.target.value)} onKeyDown={event => {
             if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(draft); }
           }} aria-label="Ваш вопрос" placeholder="Напишите вопрос Бобби" rows={1}/>

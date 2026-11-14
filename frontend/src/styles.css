@@ -149,6 +149,7 @@
   .suggestion-arrow { margin-left: auto; width: 15px; height: 15px; color: var(--muted); }
   .composer { display: flex; align-items: center; gap: var(--space-2); min-height: 64px; padding: var(--space-2); border: 1px solid var(--control-line); border-radius: var(--radius-l); }
   .composer:focus-within { border-color: var(--action); }
+  .composer-bobby { width: 34px; height: 34px; flex: none; }
   .composer textarea { resize: none; min-width: 0; min-height: var(--control); flex: 1; border: 0; padding: 10px var(--space-2); background: transparent; }
   .composer textarea:focus-visible { outline: 0; }
   .send-button { flex: none; width: var(--control); height: var(--control); border-radius: var(--radius-m); padding: 0; }
@@ -160,6 +161,7 @@
   .assistant-message { display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: var(--space-3); }
   .message-avatar { width: 38px; height: 38px; display: grid; place-items: center; border-radius: var(--radius-round); background: var(--hero-blue); }
   .message-avatar svg { width: 26px; height: 27px; }
+  .message-avatar svg[data-bobby-state="thinking"], .message-avatar svg[data-bobby-state="answering"] { width: 34px; height: 32px; }
   .message-name { display: block; margin-bottom: var(--space-1); }
   .message-body { min-width: 0; overflow-wrap: anywhere; }
   .message-body time, .user-message time { display: block; font-size: var(--text-small); margin-top: var(--space-2); }
@@ -178,6 +180,7 @@
   .inline-form > div, .workflow > div, .workflow > ul { width: 100%; }
   .section-heading, .dialog-heading { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); width: 100%; flex-wrap: wrap; }
   .section-heading h2, .section-heading h3, .dialog-heading h2 { flex: 1; }
+  .form-bobby { width: 58px; height: 48px; flex: none; }
   .notice { width: 100%; display: flex; gap: var(--space-2); align-items: center; justify-content: space-between; flex-wrap: wrap; background: var(--neutral); border-radius: var(--radius-m); padding: var(--space-3) var(--space-4); margin-block: var(--space-1); overflow-wrap: anywhere; }
   .notice > span { min-width: 0; }
   .notice-error { color: var(--error-ink); background: var(--error-bg); }
