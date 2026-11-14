@@ -39,10 +39,13 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
   const watchers = useRef(new Map<string, () => void>());
   const lock = useRef(false);
   const scroll = useRef<HTMLDivElement>(null);
+  const latestTurn = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
   const inlinePanel = useRef<HTMLDivElement>(null);
   const initialRestore = useRef(true);
   const scrollAfterSend = useRef(false);
+  const followLatest = useRef(true);
+  const lastAnimatedReply = useRef('');
   const sourceButton = useRef<HTMLElement | null>(null);
   const dictation = useDictation(onDraft, !hidden, !!widget.target);
 
@@ -101,12 +104,22 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
 
   useEffect(() => {
     if (hidden || !jobs.length || !scroll.current) return;
-    if (initialRestore.current || sending || scrollAfterSend.current || scroll.current.scrollHeight - scroll.current.scrollTop - scroll.current.clientHeight < 200) {
-      scroll.current.scrollTop = scroll.current.scrollHeight;
+    const viewport = scroll.current;
+    const latest = jobs.at(-1);
+    const newReply = latest && revealedAnswers.has(latest.id) && lastAnimatedReply.current !== latest.id;
+    if (initialRestore.current || sending || scrollAfterSend.current || followLatest.current) {
+      viewport.scrollTop = viewport.scrollHeight;
+      if (newReply) {
+        const answer = latestTurn.current?.querySelector('.answer-reveal');
+        if (answer && answer.getBoundingClientRect().top < viewport.getBoundingClientRect().top) {
+          viewport.scrollTop += answer.getBoundingClientRect().top - viewport.getBoundingClientRect().top;
+        }
+      }
     }
+    if (newReply) lastAnimatedReply.current = latest.id;
     initialRestore.current = false;
     if (!sending) scrollAfterSend.current = false;
-  }, [hidden, jobs, sending]);
+  }, [hidden, jobs, revealedAnswers, sending]);
 
   useEffect(() => {
     if (formID || catalog) {
@@ -221,7 +234,10 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
   }
 
   return <><div className={'chat-page' + (hasMessages ? ' has-messages' : '')} hidden={hidden}>
-    <div className="chat-scroll" ref={scroll}>
+    <div className="chat-scroll" ref={scroll} onScroll={event => {
+      const viewport = event.currentTarget;
+      followLatest.current = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 64;
+    }}>
       <div className="chat-inner">
         {historyError && <Notice error action={<button className="text-button" onClick={() => setReload(value => value + 1)}>Повторить</button>}>{historyError}</Notice>}
         {!hasMessages && <div className="welcome">
@@ -234,7 +250,7 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
             <strong>{item.kind === 'mentor_24h' ? 'Помогите стажёру' : 'Скоро дедлайн'}</strong>
             <br/><External href={item.url}>{item.key} · {item.summary}</External> · {timeText(new Date(Date.parse(item.due_at) - 1).toISOString(), true)}
           </Notice>)}
-          {jobs.map((job, index) => <div key={job.id} className="turn">
+          {jobs.map((job, index) => <div key={job.id} className="turn" ref={job.id === latest?.id ? latestTurn : undefined}>
             <div className="user-message"><p>{job.query}</p><Stamp value={job.created_at}/></div>
             <div className="assistant-message" aria-live="polite">
               <span className="message-avatar"><Bobby state={index < jobs.length - 1 ? 'idle'

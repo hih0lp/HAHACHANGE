@@ -238,11 +238,11 @@
   }
   .message-name { grid-area: 1 / 2; margin-bottom: var(--space-1); }
   @media (prefers-reduced-motion: no-preference) {
-    .answer-reveal > * { animation: reveal-answer 480ms ease-out backwards; }
+    .answer-reveal > * { animation: reveal-answer 650ms ease-out backwards; }
     .answer-reveal > :focus-within { animation: none; }
     @keyframes reveal-answer {
-      from { opacity: 0; clip-path: inset(0 100% 0 0); }
-      to { opacity: 1; clip-path: inset(0 -4px 0 -4px); }
+      from { opacity: 0; transform: translateY(5px); clip-path: inset(0 100% 0 0); }
+      to { opacity: 1; transform: translateY(0); clip-path: inset(0 -4px 0 -4px); }
     }
   }
   .message-body { grid-area: 2 / 2; min-width: 0; overflow-wrap: anywhere; }

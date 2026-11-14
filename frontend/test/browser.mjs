@@ -55,6 +55,7 @@ async function fixtures(page) {
     if (path === '/v1/jobs' && body) {
       assert.equal(body.thread_id, undefined);
       const job = { id: String(++serial), query: body.query, status: 'completed', created_at: '2026-11-13T10:00:00Z', answer };
+      if (body.query === 'Проверка длинного ответа') job.answer = '### Начало длинного ответа\n' + 'Длинный абзац для проверки прокрутки.\n'.repeat(60);
       if (body.query === 'Пустой ответ') job.answer = '';
       if (body.query === 'Проверка тайм-аута') Object.assign(job, { status: 'failed', answer: '', error: 'context deadline exceeded' });
       jobs.push(job);
@@ -296,6 +297,27 @@ try {
     await page.getByText('С чего начать адаптацию в команде?', { exact: true }).waitFor();
     await page.getByText('Время ожидания ответа истекло.').waitFor();
     assert.equal(await page.locator('.answer-reveal').count(), 0);
+    if (width === 360) {
+      await page.emulateMedia({ reducedMotion: 'no-preference' });
+      await page.evaluate(() => {
+        document.addEventListener('animationstart', event => {
+          if (event.animationName === 'reveal-answer' && event.target.textContent === 'Начало длинного ответа') {
+            document.body.dataset.answerAnimated = 'true';
+          }
+        });
+      });
+      await input.fill('Проверка длинного ответа');
+      await input.press('Enter');
+      await page.waitForFunction(() => document.body.dataset.answerAnimated === 'true');
+      const heading = page.getByRole('heading', { name: 'Начало длинного ответа' });
+      assert.equal(await heading.evaluate(element => {
+        const viewport = element.closest('.chat-scroll').getBoundingClientRect();
+        const top = element.getBoundingClientRect().top;
+        return top >= viewport.top - 1 && top < viewport.bottom;
+      }), true);
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      assert.equal(await heading.evaluate(element => getComputedStyle(element).animationName), 'none');
+    }
     assert.equal(await page.getByRole('button', { name: 'Новый чат' }).count(), 0);
     assert.equal(await page.getByRole('combobox', { name: 'Открыть беседу' }).count(), 0);
 
