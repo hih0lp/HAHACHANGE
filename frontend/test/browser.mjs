@@ -167,9 +167,11 @@ try {
     await pet.click();
     assert.equal(await input.inputValue(), 'Начать работу через мини-чат');
     await widget.getByText('Слушаю').waitFor();
+    await page.addStyleTag({ content: '.bobby-widget-thread { flex: none; height: 50px; } .bobby-widget-query { min-height: 120px; }' });
     await page.getByRole('link', { name: 'Мои задачи' }).click();
     await input.press('Enter');
     await widget.getByText('Думаю').waitFor();
+    assert.ok(await widget.locator('.bobby-widget-thread').evaluate(element => element.scrollTop > 0));
     await widget.getByText('Ответ готов').waitFor();
     await widget.getByRole('heading', { name: 'Ваш первый шаг' }).waitFor();
     await input.fill('Следующий вопрос');

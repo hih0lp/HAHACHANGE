@@ -76,6 +76,7 @@ type WidgetProps = {
   target: WidgetTarget;
   fallback: string;
   state: BobbyState;
+  jobID?: string;
   query?: string;
   reply?: ReactNode;
   error?: string;
@@ -84,7 +85,7 @@ type WidgetProps = {
   children: ReactNode;
 };
 
-export function BobbyWidget({ target, fallback, state, query, reply, error, onClose, onChat, children }: WidgetProps) {
+export function BobbyWidget({ target, fallback, state, jobID, query, reply, error, onClose, onChat, children }: WidgetProps) {
   const [collapsed, setCollapsed] = useState(false);
   const panel = useRef<HTMLElement>(null);
   const petButton = useRef<HTMLButtonElement>(null);
@@ -95,8 +96,8 @@ export function BobbyWidget({ target, fallback, state, query, reply, error, onCl
     else panel.current?.querySelector('textarea')?.focus();
   }, [target, collapsed]);
   useEffect(() => {
-    if (thread.current) thread.current.scrollTop = 0;
-  }, [query]);
+    if (!collapsed && thread.current) thread.current.scrollTop = thread.current.scrollHeight;
+  }, [collapsed, jobID]);
 
   function toggleCollapsed() {
     setCollapsed(!collapsed);

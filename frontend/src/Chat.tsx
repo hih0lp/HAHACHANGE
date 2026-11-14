@@ -41,6 +41,7 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
   const input = useRef<HTMLTextAreaElement>(null);
   const inlinePanel = useRef<HTMLDivElement>(null);
   const initialRestore = useRef(true);
+  const scrollAfterSend = useRef(false);
   const sourceButton = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -98,10 +99,11 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
 
   useEffect(() => {
     if (hidden || !jobs.length || !scroll.current) return;
-    if (initialRestore.current || sending || scroll.current.scrollHeight - scroll.current.scrollTop - scroll.current.clientHeight < 200) {
+    if (initialRestore.current || sending || scrollAfterSend.current || scroll.current.scrollHeight - scroll.current.scrollTop - scroll.current.clientHeight < 200) {
       scroll.current.scrollTop = scroll.current.scrollHeight;
     }
     initialRestore.current = false;
+    if (!sending) scrollAfterSend.current = false;
   }, [hidden, jobs, sending]);
 
   useEffect(() => {
@@ -119,6 +121,7 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
     setError('');
     try {
       const job = await api.ask(query, { token, key: apiKey });
+      scrollAfterSend.current = true;
       if (job.status === 'completed' && job.answer?.trim()) setRevealedAnswers(previous => new Set(previous).add(job.id));
       setJobs(current => upsert(current, { ...job, query, created_at: job.created_at || new Date().toISOString() }));
       onDraft('');
@@ -255,7 +258,7 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
     </div>
   </div>
     {widget.target && <BobbyWidget target={widget.target} fallback={widget.fallback} state={widgetState}
-      query={latest?.query} reply={latest && reply(latest, true)} error={error} onClose={widget.close} onChat={openFromWidget}>
+      jobID={latest?.id} query={latest?.query} reply={latest && reply(latest, true)} error={error} onClose={widget.close} onChat={openFromWidget}>
       {composer(true)}
     </BobbyWidget>}
   </>;
