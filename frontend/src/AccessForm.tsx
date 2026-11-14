@@ -4,7 +4,7 @@ import { api, errorText } from './api';
 import type { Field, FormDefinition, Receipt, Resource, Values } from './api';
 import { fieldValue, newId } from './model';
 import { Notice, statusText } from './ui';
-import { Icon } from './visuals';
+import { Bobby, Icon } from './visuals';
 
 type Props = { id: string; token: string; apiKey: string; identity: string; onClose: () => void };
 type Review = { version: number; values: Values; idem: string; sent?: boolean; receipt?: Receipt };
@@ -128,7 +128,10 @@ export function AccessForm({ id, token, apiKey, identity, onClose }: Props) {
   }
 
   return <section className="card inline-form" aria-label={definition.title}>
-    <div className="section-heading"><h3>{definition.title}</h3><button className="icon-button" disabled={busy} aria-label="Закрыть форму" onClick={onClose}><Icon name="close"/></button></div>
+    <div className="section-heading">
+      {!receipt && !blocked && <Bobby className="form-bobby" state="waiting-form"/>}
+      <h3>{definition.title}</h3><button className="icon-button" disabled={busy} aria-label="Закрыть форму" onClick={onClose}><Icon name="close"/></button>
+    </div>
     {definition.description && <p className="muted">{definition.description}</p>}
     {blocked && <Notice>В каталоге нет ресурсов для вашей команды.</Notice>}
     {!receipt && <form hidden={!!review || blocked} onSubmit={verify} className="field-stack">
