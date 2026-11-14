@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -117,5 +118,47 @@ func TestMixedTeamAndPersonalJiraAvoidsInternalIDsAndUnverifiedDescription(t *te
 		if strings.Contains(answer, forbidden) {
 			t.Fatalf("unexpected %q in %q", forbidden, answer)
 		}
+	}
+}
+
+func TestConnectedGitLabKeepsVerifiedJiraCard(t *testing.T) {
+	jira := mcp.NewServer(&mcp.Implementation{Name: "test-jira", Version: "1"}, nil)
+	mcp.AddTool(jira, &mcp.Tool{Name: "jira_get_issue"}, func(_ context.Context, _ *mcp.CallToolRequest, _ struct {
+		Key string `json:"key"`
+	}) (*mcp.CallToolResult, map[string]any, error) {
+		return nil, map[string]any{"key": "TASK-7", "summary": "Проверенная задача", "status": "В работе", "description": ""}, nil
+	})
+	jiraHTTP := testMCPServer(t, jira)
+	defer jiraHTTP.Close()
+	gitlab := mcp.NewServer(&mcp.Implementation{Name: "test-gitlab", Version: "1"}, nil)
+	mcp.AddTool(gitlab, &mcp.Tool{Name: "gitlab_projects"}, func(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, map[string]any, error) {
+		return nil, map[string]any{"data": []any{map[string]any{"name": "Учебный репозиторий"}}}, nil
+	})
+	gitlabHTTP := testMCPServer(t, gitlab)
+	defer gitlabHTTP.Close()
+	calls := 0
+	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		switch calls {
+		case 1:
+			fmt.Fprint(w, `{"choices":[{"message":{"content":"{\"needs_jira_issue\":true,\"jira_issue_keys\":[\"TASK-7\"],\"needs_gitlab\":true}"}}]}`)
+		case 2:
+			var input struct {
+				Tools []any `json:"tools"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&input); err != nil || len(input.Tools) != 1 {
+				t.Errorf("GitLab should be the only answering tool: tools=%d err=%v", len(input.Tools), err)
+			}
+			fmt.Fprint(w, `{"choices":[{"message":{"content":"","tool_calls":[{"id":"call-1","type":"function","function":{"name":"gitlab_projects","arguments":"{}"}}]}}]}`)
+		default:
+			fmt.Fprint(w, `{"choices":[{"message":{"content":"GitLab показывает учебный репозиторий."}}]}`)
+		}
+	}))
+	defer model.Close()
+	service := rag.New(rag.Config{EmbeddingsURL: "http://127.0.0.1:1", QdrantURL: "http://127.0.0.1:1"})
+	a := answerer{service: service, url: model.URL, model: "test", jiraMode: "mock", mcpURL: jiraHTTP.URL, gitLabMCPURL: gitlabHTTP.URL}
+	answer, _, err := a.Ask(distributed.WithTeamToken(context.Background(), "session"), "Статус задачи и что в GitLab?")
+	if err != nil || calls != 3 || !strings.Contains(answer, "TASK-7") || !strings.Contains(answer, "GitLab показывает учебный репозиторий") {
+		t.Fatalf("calls=%d answer=%q err=%v", calls, answer, err)
 	}
 }

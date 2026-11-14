@@ -130,6 +130,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 	}
 	var teamTools []map[string]any
 	toolEndpoints := map[string]string{}
+	var verifiedParts []string
 	if a.jiraMode == "mock" {
 		jiraTools, err := mcpTeamTools(ctx, a.mcpURL, a.mcpKey, "")
 		if err != nil {
@@ -213,13 +214,21 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 		}
 		{
 			plan, planErr := a.planCalendar(ctx, question, time.Now().In(moscow), forms)
+			if planErr != nil {
+				if retry, retryErr := a.planCalendar(ctx, question, time.Now().In(moscow), forms); retryErr == nil {
+					plan, planErr = retry, nil
+				}
+			}
 			calendarProblem := ""
 			if planErr != nil {
 				if plan.NeedsEvents || plan.NeedsAvailability {
 					calendarProblem = "Не удалось определить период календаря для проверки расписания. Уточните даты."
 					plan.NeedsEvents, plan.NeedsAvailability = false, false
 				} else {
-					prompt += "\nПериод календаря не удалось определить; не делай утверждений о расписании без проверки."
+					prompt = question
+					hits = nil
+					teamTools = nil
+					systemPrompt = agentSystemPrompt + "\n\n" + untrustedEvidenceRule + "\n\nЕсли для этого вопроса нужны внутренние данные, а сервисы не удалось выбрать, прямо скажи, что сейчас не можешь их проверить. Не запрашивай период, которого пользователь не обязан указывать для ближайшего расписания."
 				}
 			}
 			if planErr == nil && !plan.NeedsDocumentEvidence && !plan.NeedsRecommendation && !plan.NeedsJiraIssue && !plan.NeedsMyJiraIssues && !plan.NeedsTeamDirectory && !plan.NeedsForm && !plan.NeedsGitLab && !plan.NeedsAccessCheck && !plan.NeedsEvents && !plan.NeedsAvailability {
@@ -445,7 +454,11 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 					}
 					systemPrompt += "\nВ персональной рекомендации используй только проверенные источники выше. Если GitLab подключён, список его проектов сам по себе не доказывает работу пользователя: запроси MR выбранных доступных проектов через подключённый инструмент, если это нужно для вывода. Если GitLab отключён, не утверждай ничего о его проектах и коде. Укажи, какие источники доступны и какие нет. Не приписывай человеку навыки, которых нет в профиле или доказанной работе."
 				}
-				if directScenario && len(directParts) > 0 {
+				if directScenario && plan.NeedsGitLab && a.gitLabMCPURL != "" {
+					verifiedParts = append(verifiedParts, directParts...)
+					teamTools = toolsForEndpoint(teamTools, toolEndpoints, a.gitLabMCPURL)
+					prompt += "\nОстальные части вопроса уже проверены подключёнными сервисами. Ответь только на часть о GitLab, используя его инструмент; не повторяй факты из других сервисов и не приписывай GitLab неподтверждённые данные."
+				} else if directScenario && len(directParts) > 0 {
 					return strings.Join(directParts, "\n\n"), hits, nil
 				}
 			}
@@ -550,6 +563,9 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 			answerText := message.Content
 			for name := range toolEndpoints {
 				answerText = strings.ReplaceAll(answerText, name, "подключённый сервис")
+			}
+			if len(verifiedParts) > 0 {
+				answerText = strings.Join(append(verifiedParts, answerText), "\n\n")
 			}
 			return answerText, hits, nil
 		}
