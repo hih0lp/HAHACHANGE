@@ -3,7 +3,7 @@ import type { FormEvent } from 'react';
 import { api, ApiError, errorText } from './api';
 import type { Field, FormDefinition, Receipt, Resource, Values } from './api';
 import { fieldValue, newId } from './model';
-import { Notice } from './ui';
+import { Notice, statusText } from './ui';
 import { Bobby, Icon } from './visuals';
 
 type Props = { id: string; token: string; apiKey: string; identity: string; onClose: () => void };
@@ -18,7 +18,8 @@ export function AccessForm({ id, token, apiKey, identity, onClose }: Props) {
     const saved = sessionStorage.getItem(storageKey);
     return saved ? JSON.parse(saved) as Review : undefined;
   });
-  const receipt = review?.receipt;
+  const [savedReceipt, setSavedReceipt] = useState<Receipt | null>(null);
+  const receipt = form?.kind === 'access' ? savedReceipt : review?.receipt;
   const [error, setError] = useState('');
   const [conflict, setConflict] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -38,10 +39,13 @@ export function AccessForm({ id, token, apiKey, identity, onClose }: Props) {
     if (!token) return;
     setError('');
     setConflict(false);
+    setForm(undefined);
     async function load() {
       const definition = await api.form(id, { token, key: apiKey });
-      const catalog = definition.kind === 'access' ? await api.resources({ token, key: apiKey }) : null;
+      const saved = definition.kind === 'access' ? await api.accessReceipt(id, { token, key: apiKey }) : null;
+      const catalog = definition.kind === 'access' && !saved?.receipt ? await api.resources({ token, key: apiKey }) : null;
       if (active) {
+        setSavedReceipt(saved?.receipt ?? null);
         setResources(catalog?.resources || []);
         setForm(definition);
       }
@@ -65,7 +69,7 @@ export function AccessForm({ id, token, apiKey, identity, onClose }: Props) {
   const labels = definition.ui_schema?.labels || {};
   const order = [...new Set([...(definition.ui_schema?.order || []), ...Object.keys(fields)])].filter(name => fields[name]);
   const selected = resources.find(item => item.id === resourceID);
-  const blocked = definition.kind === 'access' && resources.length === 0;
+  const blocked = definition.kind === 'access' && !receipt && resources.length === 0;
 
   async function verify(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -104,7 +108,12 @@ export function AccessForm({ id, token, apiKey, identity, onClose }: Props) {
       remember(attempt);
       const submitted = await api.submit(id, review.version, review.values, review.idem, auth);
       if (!submitted.id || !submitted.status) throw new Error('Missing receipt');
-      remember({ ...attempt, receipt: submitted });
+      if (definition.kind === 'access') {
+        setSavedReceipt(submitted);
+        remember();
+      } else {
+        remember({ ...attempt, receipt: submitted });
+      }
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
         setConflict(true);
@@ -162,8 +171,8 @@ export function AccessForm({ id, token, apiKey, identity, onClose }: Props) {
         </div>
       </>}
       {receipt && <>
-        <Notice><strong>Заявка успешно отправлена!</strong><br/>Номер заявки {receipt.id}</Notice>
-        <button className="button secondary" onClick={() => remember()}>Заполнить новую заявку</button>
+        <Notice><strong>Заявка успешно отправлена!</strong><br/>Номер заявки {receipt.id}{definition.kind === 'access' && <><br/>{statusText(receipt.status)}</>}</Notice>
+        {definition.kind !== 'access' && <button className="button secondary" onClick={() => remember()}>Заполнить новую заявку</button>}
       </>}
       {error && <Notice error={!conflict}>{error}</Notice>}
     </div>

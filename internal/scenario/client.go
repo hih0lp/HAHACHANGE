@@ -152,3 +152,11 @@ func (c Client) SubmitForm(ctx context.Context, token, idem, id string, version 
 	err := c.rights().call(ctx, token, "POST", "/v1/forms/"+url.PathEscape(id)+"/submit", idem, map[string]any{"version": version, "values": values, "confirmed": true}, &v)
 	return v, err
 }
+
+func (c Client) FormAccessRequests(ctx context.Context, token, id string) ([]Request, error) {
+	var v struct {
+		Requests []Request `json:"requests"`
+	}
+	err := c.rights().call(ctx, token, "GET", "/v1/access-requests?limit=1&form_id="+url.QueryEscape(id), "", nil, &v)
+	return v.Requests, err
+}

@@ -311,6 +311,24 @@ func (s *Service) createRequest(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "dependency_unavailable", "Storage unavailable")
 		return
 	}
+	if in.FormID != "" {
+		// Serialize submissions for this user and form, including different keys.
+		if _, err = tx.Exec(r.Context(), `SELECT pg_advisory_xact_lock(hashtext($1),hashtext($2))`, user(r), in.FormID); err != nil {
+			fail(w, 503, "dependency_unavailable", "Storage unavailable")
+			return
+		}
+		err = tx.QueryRow(r.Context(), `SELECT id FROM ta_requests WHERE user_id=$1 AND form_id=$2 ORDER BY created_at DESC,id DESC LIMIT 1`, user(r), in.FormID).Scan(&existingID)
+		if err == nil {
+			_ = tx.Rollback(r.Context())
+			s.getByID(w, r, existingID)
+			return
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			fail(w, 503, "dependency_unavailable", "Storage unavailable")
+			return
+		}
+	}
+
 	var granted bool
 	if tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM ta_grants WHERE user_id=$1 AND resource_id=$2 AND capability=$3)`, user(r), in.ResourceID, in.Capability).Scan(&granted) != nil {
 		fail(w, 503, "dependency_unavailable", "Storage unavailable")
@@ -392,7 +410,12 @@ func (s *Service) list(w http.ResponseWriter, r *http.Request, approvals bool) {
 	if approvals {
 		query = `SELECT id,status,resource_id,capability,approver_id,decision_reason,created_at,updated_at FROM ta_requests WHERE approver_id=$1 AND status='pending' ORDER BY created_at DESC LIMIT $2 OFFSET $3`
 	}
-	rows, err := s.DB.Query(r.Context(), query, user(r), limit, offset)
+	args := []any{user(r), limit, offset}
+	if formID := r.URL.Query().Get("form_id"); !approvals && formID != "" {
+		query = strings.Replace(query, "WHERE user_id=$1", "WHERE user_id=$1 AND form_id=$4", 1)
+		args = append(args, formID)
+	}
+	rows, err := s.DB.Query(r.Context(), query, args...)
 	if err != nil {
 		fail(w, 503, "dependency_unavailable", "Requests unavailable")
 		return
