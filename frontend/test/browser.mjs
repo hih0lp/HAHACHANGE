@@ -241,7 +241,15 @@ try {
     await widget.locator('.answer-actions').getByRole('button', { name: 'Скопировано' }).waitFor();
     assert.equal((await page.evaluate(() => navigator.clipboard.readText())).replace(/\r\n/g, '\n'),
       (await widget.locator('[data-answer-text]').innerText()).trim());
-    assert.equal(await widget.locator('.reply-context li').count(), 3);
+    const cards = widget.locator('.reply-context li');
+    assert.equal(await cards.count(), 3);
+    const cardRects = await cards.evaluateAll(elements => elements.map(element => {
+      const card = element.getBoundingClientRect();
+      const list = element.parentElement.getBoundingClientRect();
+      return { top: card.top, width: card.width, listWidth: list.width };
+    }));
+    assert.ok(cardRects.every(card => card.width < card.listWidth));
+    assert.ok(cardRects.at(-1).top > cardRects[0].top, 'quote tiles wrap in the mini-chat');
     await widget.getByRole('button', { name: 'Убрать цитату' }).first().click();
     await input.fill('Уточни детали');
     const sent = page.waitForRequest(request => request.url().endsWith('/v1/jobs') && request.method() === 'POST');

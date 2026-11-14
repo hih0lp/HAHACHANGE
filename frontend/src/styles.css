@@ -300,13 +300,15 @@
   .selection-actions .answer-action svg { color: var(--muted); }
   .clipboard-field { position: fixed; inset: 0 auto auto 0; width: 1px; height: 1px; opacity: 0; }
   .reply-context {
-    display: grid;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
     gap: var(--space-2);
     list-style: none;
     max-height: min(144px, 26dvh);
     overflow: auto;
-    margin: var(--space-3) var(--space-3) 0;
-    padding: 0;
+    margin: var(--space-2) var(--space-2) 0;
+    padding: var(--space-1);
     font-size: var(--text-small);
   }
   .reply-context li {
@@ -314,9 +316,11 @@
     align-items: center;
     gap: var(--space-2);
     min-width: 0;
-    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
-    background: var(--neutral);
-    border-radius: var(--radius-s);
+    max-width: min(100%, 232px);
+    padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
+    background: var(--canvas);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
   }
   .reply-context blockquote {
     flex: 1;
