@@ -93,13 +93,22 @@ func loadKey(path string) (*rsa.PrivateKey, error) {
 
 func (s *Service) seed(ctx context.Context) error {
 	if s.role == "rights" {
-		jiraURL := os.Getenv("TEAM_ACCESS_SEED_JIRA_URL")
-		if jiraURL == "" {
+		path := os.Getenv("TEAM_ACCESS_SEED_RESOURCES_FILE")
+		if path == "" {
 			return nil
 		}
-		_, err := s.DB.Exec(ctx, `INSERT INTO ta_resources(id,team_id,kind,name,external_ref,url,capabilities,approver_id)
- VALUES('demo-jira','demo-team','jira_project','Учебный Jira-проект',$1,$2,ARRAY['browse_issues'],'approver') ON CONFLICT(id) DO NOTHING`, os.Getenv("JIRA_PROJECT_KEY"), jiraURL)
-		return err
+		resources, err := loadSeedResources(path)
+		if err != nil {
+			return err
+		}
+		for _, resource := range resources {
+			_, err = s.DB.Exec(ctx, `INSERT INTO ta_resources(id,team_id,kind,name,external_ref,url,capabilities,approver_id)
+ VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(id) DO UPDATE SET team_id=EXCLUDED.team_id,kind=EXCLUDED.kind,name=EXCLUDED.name,external_ref=EXCLUDED.external_ref,url=EXCLUDED.url,capabilities=EXCLUDED.capabilities,approver_id=EXCLUDED.approver_id`, resource.ID, resource.TeamID, resource.Kind, resource.Name, resource.ExternalRef, resource.URL, resource.Capabilities, resource.ApproverID)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 	// Demo identities are explicit. Passwords are supplied by the operator, never committed.
 	seeds := []struct{ id, username, name, role, passwordEnv string }{

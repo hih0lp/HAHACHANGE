@@ -229,7 +229,6 @@ services:
       TEAM_DIRECTORY_URL: http://team-access:8080
       TEAM_ACCESS_MIGRATION: /app/migrations/001_rights.sql
       TEAM_ACCESS_KEY_FILE: /data/keys/private.pem
-      TEAM_ACCESS_SEED_JIRA_URL: ${TEAM_ACCESS_SEED_JIRA_URL:-}
       KAFKA_BROKERS: kafka:9092
     volumes:
       - team-access-keys:/data/keys:ro

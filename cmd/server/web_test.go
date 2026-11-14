@@ -96,4 +96,7 @@ func TestFormsUseRandomBytesOnHTTPAndConfirmOnlyAfterSuccess(t *testing.T) {
 	if !strings.Contains(page, "if(!sent.ok)throw") || !strings.Contains(page, "message.textContent='Заявка успешно отправлена!'") {
 		t.Fatal("chat form success message is missing or shown before server confirmation")
 	}
+	if !strings.Contains(page, "fetch('/v1/form-resources'") || !strings.Contains(page, "resourceField.addEventListener('change',updateCapabilities)") {
+		t.Fatal("access form does not use the live resource and capability catalogue")
+	}
 }

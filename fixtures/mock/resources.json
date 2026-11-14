@@ -1,0 +1,14 @@
+{
+  "resources": [
+    {
+      "id": "demo-jira",
+      "team_id": "demo-team",
+      "kind": "jira_project",
+      "name": "Учебный Jira-проект",
+      "external_ref": "SCRUM",
+      "url": "https://gapshinmihael.atlassian.net/",
+      "capabilities": ["browse_issues"],
+      "approver_id": "approver"
+    }
+  ]
+}

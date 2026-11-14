@@ -31,6 +31,23 @@ func registerFormRoutes(mux *http.ServeMux, key string, teamURL string) {
 		}
 		writeJSON(w, 200, map[string]any{"forms": v})
 	})))
+	mux.Handle("GET /v1/form-resources", authorize(key, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token := withToken(w, r)
+		if token == "" {
+			return
+		}
+		profile, err := client.Profile(r.Context(), token)
+		if err != nil || profile.CurrentTeamID == "" {
+			writeError(w, 503, errText("team profile unavailable"))
+			return
+		}
+		resources, err := client.Resources(r.Context(), token, profile.CurrentTeamID)
+		if err != nil {
+			writeError(w, 503, errText("resource catalogue unavailable"))
+			return
+		}
+		writeJSON(w, 200, map[string]any{"resources": resources})
+	})))
 	mux.Handle("GET /v1/forms/{id}", authorize(key, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := withToken(w, r)
 		if token == "" {

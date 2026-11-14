@@ -7,3 +7,7 @@ services:
     image: bobby-mocks-team-access:local
   access-rights:
     image: bobby-mocks-team-access:local
+    environment:
+      TEAM_ACCESS_SEED_RESOURCES_FILE: /fixtures/resources.json
+    volumes:
+      - ./fixtures/mock/resources.json:/fixtures/resources.json:ro
