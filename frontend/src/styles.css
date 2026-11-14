@@ -148,8 +148,9 @@
   .suggestion-icon { width: 33px; height: 33px; border-radius: var(--radius-s); display: grid; place-items: center; flex: none; }
   .suggestion-icon svg { width: 18px; height: 18px; }
   .suggestion-arrow { margin-left: auto; width: 15px; height: 15px; color: var(--muted); }
-  .composer { display: flex; align-items: center; gap: var(--space-2); min-height: 64px; padding: var(--space-2); border: 1px solid var(--control-line); border-radius: var(--radius-l); }
-  .composer:focus-within { border-color: var(--action); }
+  .compose-panel { border: 1px solid var(--control-line); border-radius: var(--radius-l); background: var(--white); }
+  .compose-panel:focus-within { border-color: var(--action); }
+  .composer { display: flex; align-items: center; gap: var(--space-2); min-height: 62px; padding: var(--space-2); }
   .composer textarea { resize: none; min-width: 0; min-height: var(--control); flex: 1; border: 0; padding: 10px var(--space-2); background: transparent; }
   .composer textarea:focus-visible { outline: 0; }
   .mic-button[aria-pressed="true"] { color: var(--error-ink); background: var(--error-bg); }
@@ -259,16 +260,30 @@
     }
   }
   .message-body { grid-area: 2 / 2; min-width: 0; overflow-wrap: anywhere; }
-  .answer-actions { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); }
-  .answer-actions .text-button, .selection-actions .text-button { font-size: var(--text-small); text-decoration: none; }
-  .answer-actions .text-button:hover:not(:disabled), .selection-actions .text-button:hover:not(:disabled) { background: var(--selected); }
+  .answer-actions { display: flex; align-items: center; gap: var(--space-1); margin-top: var(--space-3); }
+  .answer-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    min-width: 36px;
+    min-height: 36px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--space-2);
+    background: transparent;
+    color: var(--muted);
+  }
+  .answer-action svg { width: 17px; height: 17px; }
+  .answer-action:hover:not(:disabled), .answer-action:focus-visible { background: var(--neutral); color: var(--ink); }
+  .answer-action:disabled { opacity: .5; }
   .selection-actions {
     position: fixed;
     z-index: 6;
     display: flex;
     max-width: calc(100vw - 12px);
     gap: var(--space-1);
-    padding: var(--space-1);
+    padding: var(--space-2);
     transform: translate(-50%, -100%);
     border: 1px solid var(--line);
     border-radius: var(--radius-m);
@@ -276,31 +291,49 @@
     box-shadow: var(--shadow);
   }
   .selection-actions[data-below="true"] { transform: translateX(-50%); }
+  .selection-actions .answer-action {
+    padding-inline: var(--space-2);
+    color: var(--ink);
+    font-size: var(--text-small);
+    font-weight: 600;
+  }
+  .selection-actions .answer-action svg { color: var(--muted); }
   .clipboard-field { position: fixed; inset: 0 auto auto 0; width: 1px; height: 1px; opacity: 0; }
   .reply-context {
     display: grid;
-    gap: var(--space-1);
+    gap: var(--space-2);
     list-style: none;
     max-height: min(144px, 26dvh);
     overflow: auto;
-    margin: 0 0 var(--space-2);
+    margin: var(--space-3) var(--space-3) 0;
     padding: 0;
     font-size: var(--text-small);
   }
   .reply-context li {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: var(--space-2);
     min-width: 0;
-    padding: var(--space-1) var(--space-2);
-    background: var(--canvas);
+    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
+    background: var(--neutral);
     border-radius: var(--radius-s);
-    border-inline-start: 3px solid var(--action);
   }
-  .reply-context li > div { min-width: 0; }
-  .reply-context p { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-  .reply-context .icon-button { flex: none; }
+  .reply-context blockquote {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    padding: 2px 0 2px var(--space-2);
+    border-inline-start: 2px solid var(--control-line);
+    color: var(--muted);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .reply-context .answer-action { flex: none; min-width: 32px; min-height: 32px; }
+  .reply-context .answer-action:hover:not(:disabled), .reply-context .answer-action:focus-visible { background: var(--hover); }
+  @media (pointer: coarse) {
+    .answer-action, .reply-context .answer-action { min-width: 44px; min-height: 44px; }
+  }
   .message-body time, .user-message time { display: block; font-size: var(--text-small); margin-top: var(--space-2); }
   .answer > * { margin-block: 0 var(--space-2); }
   .answer ul, .answer ol { padding-left: var(--space-6); }

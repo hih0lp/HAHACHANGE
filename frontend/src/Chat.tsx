@@ -233,28 +233,30 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
   function composer(compact = false) {
     const surface = compact ? 'widget' : 'chat';
     return <>{dictation.message?.surface === surface && <Notice error>{dictation.message.text}</Notice>}
-    {!!replyContext.length && <ul className="reply-context" aria-label="Контекст ответа">
-      {replyContext.map(({ id, kind, text }) => {
-        const label = kind === 'reply' ? 'Ответ Бобби целиком' : 'Цитата';
-        return <li key={id}>
-          <div><strong>{label}</strong><p>{text}</p></div>
-          <button type="button" className="icon-button" aria-label={`Убрать ${kind === 'reply' ? 'ответ' : 'цитату'}`}
-            disabled={sending} onClick={() => {
-              setReplyContext(current => current.filter(item => item.id !== id));
-              (compact ? widgetInput : input).current?.focus();
-            }}><Icon name="close"/></button>
-        </li>;
-      })}
-    </ul>}
-    <form className="composer" onSubmit={event => submit(event, compact)}>
-      <textarea ref={compact ? widgetInput : input} value={draft} readOnly={sending} onChange={event => onDraft(event.target.value)} onKeyDown={event => {
-        if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
-          event.preventDefault();
-          void send(draft, compact);
-        }
-      }} aria-label="Ваш вопрос" placeholder="Напишите вопрос Бобби" rows={1}/>
-      {microphone(surface)}
-      <button className="send-button" aria-label={sending ? 'Отправляем вопрос' : 'Отправить вопрос'} title="Отправить вопрос" disabled={sending || [...draft.trim()].length < 2}><Icon name="send"/></button>
+    <form className="compose-panel" onSubmit={event => submit(event, compact)}>
+      {!!replyContext.length && <ul className="reply-context" aria-label="Контекст ответа">
+        {replyContext.map(({ id, kind, text }) => {
+          const removeLabel = kind === 'reply' ? 'Убрать ответ' : 'Убрать цитату';
+          return <li key={id}>
+            <blockquote aria-label={kind === 'reply' ? 'Ответ Бобби целиком' : 'Цитата'} title={text}>{text}</blockquote>
+            <button type="button" className="answer-action" aria-label={removeLabel} title={removeLabel}
+              disabled={sending} onClick={() => {
+                setReplyContext(current => current.filter(item => item.id !== id));
+                (compact ? widgetInput : input).current?.focus();
+              }}><Icon name="close"/></button>
+          </li>;
+        })}
+      </ul>}
+      <div className="composer">
+        <textarea ref={compact ? widgetInput : input} value={draft} readOnly={sending} onChange={event => onDraft(event.target.value)} onKeyDown={event => {
+          if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+            event.preventDefault();
+            void send(draft, compact);
+          }
+        }} aria-label="Ваш вопрос" placeholder="Напишите вопрос Бобби" rows={1}/>
+        {microphone(surface)}
+        <button className="send-button" aria-label={sending ? 'Отправляем вопрос' : 'Отправить вопрос'} title="Отправить вопрос" disabled={sending || [...draft.trim()].length < 2}><Icon name="send"/></button>
+      </div>
     </form></>;
   }
 

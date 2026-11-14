@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { Icon } from './visuals';
 
-function CopyButton({ getText }: { getText: () => string }) {
+function CopyButton({ getText, showLabel = false }: { getText: () => string; showLabel?: boolean }) {
   const [label, setLabel] = useState('Копировать');
   useEffect(() => {
     if (label === 'Копировать') return;
@@ -42,7 +43,11 @@ function CopyButton({ getText }: { getText: () => string }) {
     }
   }
 
-  return <button type="button" className="text-button" aria-live="polite" onClick={event => void copy(event.currentTarget)}>{label}</button>;
+  return <button type="button" className="answer-action" aria-label={label} title={label} aria-live="polite"
+    onClick={event => void copy(event.currentTarget)}>
+    <Icon name={label === 'Скопировано' ? 'check' : 'copy'}/>
+    {showLabel && <span>Копировать</span>}
+  </button>;
 }
 
 export function AnswerActions({ children, disabled, onReply }: { children: ReactNode; disabled: boolean; onReply: () => void }) {
@@ -50,7 +55,9 @@ export function AnswerActions({ children, disabled, onReply }: { children: React
   return <>
     <div ref={content} data-answer-text>{children}</div>
     <div className="answer-actions">
-      <button type="button" className="text-button" disabled={disabled} onClick={onReply}>Ответить</button>
+      <button type="button" className="answer-action" aria-label="Ответить" title="Ответить" disabled={disabled} onClick={onReply}>
+        <Icon name="reply"/>
+      </button>
       <CopyButton getText={() => content.current?.innerText.trim() || ''}/>
     </div>
   </>;
@@ -90,8 +97,8 @@ export function AnswerSelection({ children, active, disabled, onQuote }: { child
         setSelected(null);
         return;
       }
-      const below = top < 60;
-      setSelected({ text, x: (rect.left + rect.right) / 2, y: below ? bottom + 8 : top - 8, below });
+      const below = top < 76;
+      setSelected({ text, x: (rect.left + rect.right) / 2, y: below ? bottom + 10 : top - 10, below });
     }
 
     function dismiss(event: KeyboardEvent) {
@@ -117,12 +124,12 @@ export function AnswerSelection({ children, active, disabled, onQuote }: { child
       <div className="selection-actions" data-below={selected.below} role="group" aria-label="Действия с выделенным текстом"
         style={{ left: `clamp(min(124px, 50vw), ${selected.x}px, max(50vw, 100vw - 124px))`, top: selected.y }}
         onPointerDown={event => event.preventDefault()}>
-        <button type="button" className="text-button" disabled={disabled} onClick={() => {
+        <button type="button" className="answer-action" disabled={disabled} onClick={() => {
           doc.getSelection()?.removeAllRanges();
           setSelected(null);
           onQuote(selected.text);
-        }}>Цитировать</button>
-        <CopyButton key={selected.text} getText={() => selected.text}/>
+        }}><Icon name="quote"/>Цитировать</button>
+        <CopyButton key={selected.text} getText={() => selected.text} showLabel/>
       </div>, doc.body,
     )}
   </div>;
