@@ -258,9 +258,15 @@ try {
       try {
         motion.currentTime = 0;
         const bottom = body.getBoundingClientRect().bottom;
-        motion.currentTime = 1300;
-        if (bottom - body.getBoundingClientRect().bottom < 4) {
-          throw new Error('Bobby moves less than four CSS pixels in the widget header');
+        const midpoint = motion.effect.getTiming().duration / 2;
+        motion.currentTime = midpoint / 2;
+        const ascent = bottom - body.getBoundingClientRect().bottom;
+        motion.currentTime = midpoint;
+        const peak = bottom - body.getBoundingClientRect().bottom;
+        motion.currentTime = midpoint * 1.5;
+        const descent = bottom - body.getBoundingClientRect().bottom;
+        if (peak < 5 || ascent < 1 || descent < 1 || ascent >= peak || descent >= peak) {
+          throw new Error(`Unexpected breathing path: ${ascent}, ${peak}, ${descent}`);
         }
       } finally {
         motion.play();
