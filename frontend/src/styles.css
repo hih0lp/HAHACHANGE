@@ -236,6 +236,7 @@
   .bobby-body, .bobby-motion, .bobby-eye, .bobby-accent, .bobby-accent circle { transform-box: fill-box; }
   .bobby-body, .bobby-motion { transform-origin: center bottom; }
   .bobby-eye, .bobby-accent, .bobby-accent circle { transform-origin: center; }
+  .bobby-eyelids { opacity: 0; }
   .bobby-body { transform: translate(0, 0) rotate(0deg) scale(1); }
   [data-bobby-state="thinking"] .bobby-body { transform: translate(0, 5%) rotate(-3deg) scale(.97); }
   [data-bobby-state="listening"] .bobby-body { transform: translate(2%, 1%) rotate(-7deg) scale(1); }
@@ -255,11 +256,12 @@
     .bobby-body { transition: transform 820ms cubic-bezier(.42, 0, .32, 1); }
     .bobby-gaze { transition: transform 620ms ease-in-out; }
     .bobby-smile, [data-bobby-expression] { transition: opacity 440ms ease-in-out, transform 720ms ease-in-out; }
-    [data-bobby-animated="true"] .bobby-motion { animation: bobby-breathe 3.4s ease-in-out infinite; }
-    [data-bobby-animated="true"][data-bobby-state="answering"] .bobby-motion {
+    .bobby-motion { animation: bobby-breathe 3.4s ease-in-out infinite; }
+    [data-bobby-state="answering"] .bobby-motion {
       animation: bobby-breathe 3.4s ease-in-out infinite, bobby-nod 1000ms ease-in-out;
     }
-    [data-bobby-animated="true"] .bobby-eye { animation: bobby-blink 3.2s ease-in-out infinite; }
+    .bobby-eye { animation: bobby-blink 3.2s ease-in-out infinite; }
+    .bobby-eyelids { animation: bobby-eyelids 3.2s ease-in-out infinite; }
     [data-bobby-state="thinking"] [data-bobby-expression="thinking"] circle { animation: bobby-thought 1.8s ease-in-out infinite; }
     [data-bobby-state="thinking"] [data-bobby-expression="thinking"] circle:nth-child(2) { animation-delay: 150ms; }
     [data-bobby-state="thinking"] [data-bobby-expression="thinking"] circle:nth-child(3) { animation-delay: 300ms; }
@@ -276,8 +278,12 @@
       72% { rotate: 2deg; translate: 0 -2%; }
     }
     @keyframes bobby-blink {
-      0%, 21%, 40%, 100% { transform: scaleY(1); }
-      26%, 32% { transform: scaleY(.08); }
+      0%, 21%, 40%, 100% { transform: scaleY(1); opacity: 1; }
+      26%, 32% { transform: scaleY(.08); opacity: 0; }
+    }
+    @keyframes bobby-eyelids {
+      0%, 21%, 40%, 100% { opacity: 0; }
+      26%, 32% { opacity: 1; }
     }
     @keyframes bobby-thought { 0%, 100% { opacity: .5; } 50% { opacity: 1; transform: translateY(-40%) scale(1.18); } }
     @keyframes bobby-listen { 50% { stroke-opacity: .45; stroke-width: 41px; } }

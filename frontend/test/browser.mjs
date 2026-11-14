@@ -382,7 +382,32 @@ try {
     const avatars = main.locator('.message-avatar');
     await page.emulateMedia({ reducedMotion: 'no-preference' });
     assert.equal(await avatars.last().locator('.bobby-eye').first().evaluate(element => getComputedStyle(element).animationName), 'bobby-blink');
-    assert.equal(await avatars.first().locator('.bobby-motion').evaluate(element => getComputedStyle(element).animationName), 'none');
+    await avatars.first().evaluate(async avatar => {
+      const body = avatar.querySelector('.bobby-motion');
+      const eyelids = avatar.querySelector('.bobby-eyelids');
+      const breath = body.getAnimations().find(animation => animation.animationName === 'bobby-breathe');
+      const blink = eyelids.getAnimations().find(animation => animation.animationName === 'bobby-eyelids');
+      if (!breath || !blink) throw new Error('Earlier chat avatars must breathe and blink');
+      await Promise.all([breath.ready, blink.ready]);
+      breath.pause();
+      blink.pause();
+      try {
+        breath.currentTime = 0;
+        const bottom = body.getBoundingClientRect().bottom;
+        breath.currentTime = breath.effect.getTiming().duration / 2;
+        assertMotion(bottom - body.getBoundingClientRect().bottom >= 5, 'Breathing is too subtle in the chat');
+        blink.currentTime = 0;
+        assertMotion(getComputedStyle(eyelids).opacity === '0', 'Eyelids cover open eyes');
+        blink.currentTime = blink.effect.getTiming().duration * .29;
+        assertMotion(getComputedStyle(eyelids).opacity === '1', 'Closed eyelids are not visible');
+      } finally {
+        breath.play();
+        blink.play();
+      }
+      function assertMotion(condition, message) {
+        if (!condition) throw new Error(message);
+      }
+    });
     await page.emulateMedia({ reducedMotion: 'reduce' });
     assert.equal(await avatars.last().locator('.bobby-body').evaluate(element => getComputedStyle(element).transitionDuration), '0s');
     assert.equal(await avatars.last().locator('.bobby-eye').first().evaluate(element => getComputedStyle(element).animationName), 'none');

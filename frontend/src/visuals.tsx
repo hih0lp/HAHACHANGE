@@ -35,8 +35,8 @@ export function Icon({ name, ...props }: SVGProps<SVGSVGElement> & { name: IconN
 
 export type BobbyState = 'idle' | 'thinking' | 'answering' | 'listening' | 'waiting-form';
 
-export function Bobby({ className, state = 'idle', animated = true }: { className?: string; state?: BobbyState; animated?: boolean }) {
-  return <svg className={className} data-bobby-state={state} data-bobby-animated={animated} viewBox="30 10 1240 1170" aria-hidden="true">
+export function Bobby({ className, state = 'idle' }: { className?: string; state?: BobbyState }) {
+  return <svg className={className} data-bobby-state={state} viewBox="30 10 1240 1170" aria-hidden="true">
     <g className="bobby-body">
       <g className="bobby-motion">
         <g stroke="var(--bobby-ink)" strokeWidth="24" strokeLinecap="round" strokeLinejoin="round">
@@ -53,6 +53,8 @@ export function Bobby({ className, state = 'idle', animated = true }: { classNam
             <ellipse cx="865" cy="482" rx="50" ry="54" transform="rotate(12 865 482)"/>
             <circle className="bobby-gaze" cx="877" cy="454" r="14" fill="white"/>
           </g>
+          <path className="bobby-eyelids" d="M519 540q51 37 107 19m187-88q48 37 104 19"
+            fill="none" stroke="var(--bobby-ink)" strokeWidth="28" strokeLinecap="round"/>
         </g>
         <g fill="none" stroke="var(--bobby-ink)" strokeWidth="25" strokeLinecap="round" strokeLinejoin="round">
           <path className="bobby-smile" d="M695 581c28 23 68 10 80-22"/>
