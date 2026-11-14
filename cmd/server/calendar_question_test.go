@@ -25,7 +25,7 @@ func TestCalendarPlannerValidatesModelRange(t *testing.T) {
 	if err != nil || !plan.NeedsEvents || !strings.HasPrefix(plan.TimeMin, "2026-11-12T20:00") || plan.TimeMax != "2026-11-16T00:00:00+03:00" {
 		t.Fatalf("plan=%+v err=%v", plan, err)
 	}
-	response = `{"needs_events":true,"time_min":"2026-11-12T00:00:00+03:00","time_max":"2027-01-01T00:00:00+03:00"}`
+	response = `{"needs_events":true,"period_kind":"explicit","time_min":"2026-11-12T00:00:00+03:00","time_max":"2027-01-01T00:00:00+03:00"}`
 	if _, err := a.planCalendar(context.Background(), "Календарь", time.Now().In(loc), nil); err == nil {
 		t.Fatal("range over 31 days accepted")
 	}
@@ -37,6 +37,10 @@ func TestCalendarPlannerDefaultsUnboundedUpcomingRequest(t *testing.T) {
 	plan, err := normalizeCalendarPlan(calendarPlan{NeedsEvents: true, NeedsJiraIssue: true, JiraIssueKeys: []string{"TASK-7"}}, now)
 	if err != nil || plan.TimeMin != now.Format(time.RFC3339) || plan.TimeMax != now.Add(30*24*time.Hour).Format(time.RFC3339) || !plan.NeedsJiraIssue {
 		t.Fatalf("plan=%+v err=%v", plan, err)
+	}
+	partial, err := normalizeCalendarPlan(calendarPlan{NeedsEvents: true, PeriodKind: "upcoming", TimeMin: now.Format(time.RFC3339)}, now)
+	if err != nil || partial.TimeMax != now.Add(30*24*time.Hour).Format(time.RFC3339) {
+		t.Fatalf("partial upcoming plan=%+v err=%v", partial, err)
 	}
 }
 

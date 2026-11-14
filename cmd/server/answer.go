@@ -213,11 +213,27 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 		}
 		{
 			plan, planErr := a.planCalendar(ctx, question, time.Now().In(moscow), forms)
+			calendarProblem := ""
 			if planErr != nil {
-				prompt += "\nПериод календаря не удалось определить; не делай утверждений о расписании без проверки."
-			} else {
+				if plan.NeedsEvents || plan.NeedsAvailability {
+					calendarProblem = "Не удалось определить период календаря для проверки расписания. Уточните даты."
+					plan.NeedsEvents, plan.NeedsAvailability = false, false
+				} else {
+					prompt += "\nПериод календаря не удалось определить; не делай утверждений о расписании без проверки."
+				}
+			}
+			if planErr == nil && !plan.NeedsDocumentEvidence && !plan.NeedsRecommendation && !plan.NeedsJiraIssue && !plan.NeedsMyJiraIssues && !plan.NeedsTeamDirectory && !plan.NeedsForm && !plan.NeedsGitLab && !plan.NeedsAccessCheck && !plan.NeedsEvents && !plan.NeedsAvailability {
+				prompt = question
+				hits = nil
+				teamTools = nil
+				systemPrompt = agentSystemPrompt + "\n\n" + untrustedEvidenceRule
+			}
+			if planErr == nil || calendarProblem != "" || plan.NeedsJiraIssue || plan.NeedsMyJiraIssues || plan.NeedsTeamDirectory || plan.NeedsForm || plan.NeedsGitLab || plan.NeedsAccessCheck {
 				directScenario := !plan.NeedsRecommendation
 				var directParts []string
+				if calendarProblem != "" {
+					directParts = append(directParts, calendarProblem)
+				}
 				if plan.NeedsGitLab && a.gitLabMCPURL == "" && directScenario {
 					directParts = append(directParts, "GitLab сейчас отключён, поэтому я не могу проверить проекты, репозитории или merge request.")
 				}
