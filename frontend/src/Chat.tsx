@@ -85,6 +85,10 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
   }, []);
 
   useEffect(() => {
+    if (edit && !jobs.some(job => job.id === edit.id && !completed(job))) setEdit(null);
+  }, [edit, jobs]);
+
+  useEffect(() => {
     for (const job of jobs) {
       if (completed(job) || replaced.current.has(job.id) || watchers.current.has(job.id)) continue;
       const stop = watchJob(job.id, { key: apiKey }, update => {
@@ -184,7 +188,7 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
     event.preventDefault();
     if (edit) {
       const job = jobs.find(item => item.id === edit.id);
-      if (job) void changeJob(job, edit.query.trim());
+      if (job && !completed(job)) void changeJob(job, edit.query.trim());
     } else {
       void send(draft, fromWidget);
     }
@@ -387,13 +391,13 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
               <p>{job.query}</p>
               <div className="message-actions">
                 <Stamp value={job.created_at}/>
-                <button type="button" className="answer-action" aria-label="Изменить вопрос" title="Изменить вопрос"
+                {!completed(job) && <button type="button" className="answer-action" aria-label="Изменить вопрос" title="Изменить вопрос"
                   disabled={sending || changing} onClick={event => {
                     dictation.cancel();
                     editMessage.current = event.currentTarget.closest('.user-message');
                     if (edit?.id !== job.id) setEdit({ id: job.id, query: job.query });
                     input.current?.focus({ preventScroll: true });
-                  }}><Icon name="edit"/></button>
+                  }}><Icon name="edit"/></button>}
               </div>
             </div>
             <div className="assistant-message" aria-live="polite">
