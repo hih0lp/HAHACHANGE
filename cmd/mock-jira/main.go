@@ -23,6 +23,7 @@ type issue struct {
 	StatusCategory    string         `json:"status_category"`
 	Description       string         `json:"description"`
 	DueDate           string         `json:"due_date,omitempty"`
+	DueAt             string         `json:"due_at,omitempty"`
 	StartDate         string         `json:"start_date,omitempty"`
 	AssigneeAccountID string         `json:"assignee_account_id,omitempty"`
 	AssigneeName      string         `json:"assignee_name,omitempty"`
@@ -67,13 +68,18 @@ func load(path string) (fixture, error) {
 				}
 			}
 		}
+		if v.DueAt != "" {
+			if _, err := time.Parse(time.RFC3339, v.DueAt); err != nil {
+				return f, fmt.Errorf("invalid due_at in issue %q", v.Key)
+			}
+		}
 		seen[v.Key] = true
 	}
 	return f, nil
 }
 func summary(v issue) map[string]any {
 	m := map[string]any{"key": v.Key, "summary": v.Summary, "status": v.Status}
-	for k, x := range map[string]string{"due_date": v.DueDate, "assignee_account_id": v.AssigneeAccountID, "assignee_name": v.AssigneeName} {
+	for k, x := range map[string]string{"due_date": v.DueDate, "due_at": v.DueAt, "assignee_account_id": v.AssigneeAccountID, "assignee_name": v.AssigneeName} {
 		if x != "" {
 			m[k] = x
 		}
@@ -106,6 +112,9 @@ func issueFields(v issue) map[string]any {
 	fields := map[string]any{"Название (summary)": v.Summary, "Статус (status)": map[string]any{"name": v.Status}, "Описание (description)": v.Description}
 	if v.DueDate != "" {
 		fields["Срок исполнения (duedate)"] = v.DueDate
+	}
+	if v.DueAt != "" {
+		fields["Точное время окончания (due_at)"] = v.DueAt
 	}
 	if v.StartDate != "" {
 		fields["Дата начала (customfield_10015)"] = v.StartDate
@@ -178,7 +187,7 @@ func main() {
 			http.Error(w, e.Error(), 404)
 			return
 		}
-		fields := map[string]any{"summary": v.Summary, "status": map[string]any{"name": v.Status, "statusCategory": map[string]string{"key": v.StatusCategory}}, "description": v.Description, "duedate": v.DueDate, "customfield_10015": v.StartDate, "assignee": map[string]string{"accountId": v.AssigneeAccountID, "displayName": v.AssigneeName}}
+		fields := map[string]any{"summary": v.Summary, "status": map[string]any{"name": v.Status, "statusCategory": map[string]string{"key": v.StatusCategory}}, "description": v.Description, "duedate": v.DueDate, "due_at": v.DueAt, "customfield_10015": v.StartDate, "assignee": map[string]string{"accountId": v.AssigneeAccountID, "displayName": v.AssigneeName}}
 		w.Header().Set("Content-Type", "application/json")
 		if r.URL.Query().Get("expand") == "names" {
 			json.NewEncoder(w).Encode(map[string]any{"key": v.Key, "fields": fields, "names": map[string]string{"summary": "Название", "status": "Статус", "description": "Описание", "duedate": "Срок исполнения", "customfield_10015": "Дата начала", "assignee": "Исполнитель"}})
@@ -203,7 +212,7 @@ func main() {
 			if account != "" && v.AssigneeAccountID != account {
 				continue
 			}
-			items = append(items, map[string]any{"key": v.Key, "fields": map[string]any{"summary": v.Summary, "duedate": v.DueDate, "assignee": map[string]string{"accountId": v.AssigneeAccountID, "displayName": v.AssigneeName}, "status": map[string]any{"name": v.Status, "statusCategory": map[string]string{"key": v.StatusCategory}}}})
+			items = append(items, map[string]any{"key": v.Key, "fields": map[string]any{"summary": v.Summary, "duedate": v.DueDate, "due_at": v.DueAt, "assignee": map[string]string{"accountId": v.AssigneeAccountID, "displayName": v.AssigneeName}, "status": map[string]any{"name": v.Status, "statusCategory": map[string]string{"key": v.StatusCategory}}}})
 		}
 		sort.SliceStable(items, func(i, j int) bool {
 			return items[i].(map[string]any)["key"].(string) < items[j].(map[string]any)["key"].(string)
