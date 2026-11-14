@@ -206,11 +206,14 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 			}
 		}
 		{
-			plan, planErr := a.planCalendar(ctx, question, time.Now().In(moscow), forms, history...)
+			plan, planErr := a.planWithTools(ctx, question, time.Now().In(moscow), forms, teamTools, history...)
 			if planErr != nil {
 				prompt += "\nПериод календаря не удалось определить; не делай утверждений о расписании без проверки."
 			} else {
 				evidence.require(plan.RequiredSources...)
+				if plan.OverviewTool == "gitlab_projects" && a.gitLabMCPURL != "" && toolEndpoints[plan.OverviewTool] == a.gitLabMCPURL {
+					return a.gitLabProjectsAnswer(ctx, teamToken), hits, nil
+				}
 				if plan.NeedsForm {
 					selected := make([]formChoice, 0, len(forms))
 					for _, form := range forms {
@@ -284,7 +287,7 @@ func (a answerer) Ask(ctx context.Context, question string) (string, []rag.Searc
 						{"team_profile", a.teamMCPURL, map[string]any{}},
 						{"team_members", a.teamMCPURL, map[string]any{}},
 						{"jira_list_issues", a.mcpURL, map[string]any{}},
-						{"gitlab_projects", a.gitLabMCPURL, map[string]any{}},
+						{"gitlab_projects", a.gitLabMCPURL, map[string]any{"project": ""}},
 					} {
 						if source.endpoint == "" {
 							missing[source.name] = true
