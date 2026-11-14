@@ -1,0 +1,9 @@
+services:
+  api:
+    image: bobby-mocks-api:local
+  worker:
+    image: bobby-mocks-api:local
+  team-access:
+    image: bobby-mocks-team-access:local
+  access-rights:
+    image: bobby-mocks-team-access:local

@@ -1,0 +1,112 @@
+{
+  "calendar_id": "mentor-demo",
+  "summary": "Бобби — доступность ментора (демо)",
+  "time_zone": "Europe/Moscow",
+  "events": [
+    {
+      "id": "c9ckr1rf7ckiih7s076lonhku8_20261117T123000Z",
+      "summary": "Окно ментора: вопросы и 1:1 (демо)",
+      "description": "<p>Учебное окно доступности по открытому чек-листу стажёра Авито: регулярные встречи с наставником и вопросы. Это не реальная занятость наставника.</p>",
+      "start": {
+        "dateTime": "2026-11-17T15:30:00+03:00",
+        "timeZone": "Europe/Moscow"
+      },
+      "end": {
+        "dateTime": "2026-11-17T16:00:00+03:00",
+        "timeZone": "Europe/Moscow"
+      },
+      "status": "confirmed",
+      "htmlLink": "https://www.google.com/calendar/event?eid=Yzlja3IxcmY3Y2tpaWg3czA3NmxvbmhrdThfMjAyNjExMTdUMTIzMDAwWiA4OTA0N2E2MTM1ZGU3MDc0NzIwZmFkNDExNTMxYzU0OTBhYWRlMjNjNjhiYTUwMWQ5YzY5Y2I4ZTIzY2IwMzcwQGc"
+    },
+    {
+      "id": "1nh4aalob7h8e66o886a3kcm60_20261119T130000Z",
+      "summary": "Окно ментора: ревью и разбор задач (демо)",
+      "description": "<p>Учебное окно для обсуждения задач, прогресса и вопросов по материалам стажировки. Время выбрано для прототипа.</p>",
+      "start": {
+        "dateTime": "2026-11-19T16:00:00+03:00",
+        "timeZone": "Europe/Moscow"
+      },
+      "end": {
+        "dateTime": "2026-11-19T17:00:00+03:00",
+        "timeZone": "Europe/Moscow"
+      },
+      "status": "confirmed",
+      "htmlLink": "https://www.google.com/calendar/event?eid=MW5oNGFhbG9iN2g4ZTY2bzg4NmEza2NtNjBfMjAyNjExMTlUMTMwMDAwWiA4OTA0N2E2MTM1ZGU3MDc0NzIwZmFkNDExNTMxYzU0OTBhYWRlMjNjNjhiYTUwMWQ5YzY5Y2I4ZTIzY2IwMzcwQGc"
+    },
+    {
+      "id": "c9ckr1rf7ckiih7s076lonhku8_20261124T123000Z",
+      "summary": "Окно ментора: вопросы и 1:1 (демо)",
+      "description": "<p>Учебное окно доступности по открытому чек-листу стажёра Авито: регулярные встречи с наставником и вопросы. Это не реальная занятость наставника.</p>",
+      "start": {
+        "dateTime": "2026-11-24T15:30:00+03:00",
+        "timeZone": "Europe/Moscow"
+      },
+      "end": {
+        "dateTime": "2026-11-24T16:00:00+03:00",
+        "timeZone": "Europe/Moscow"
+      },
+      "status": "confirmed",
+      "htmlLink": "https://www.google.com/calendar/event?eid=Yzlja3IxcmY3Y2tpaWg3czA3NmxvbmhrdThfMjAyNjExMjRUMTIzMDAwWiA4OTA0N2E2MTM1ZGU3MDc0NzIwZmFkNDExNTMxYzU0OTBhYWRlMjNjNjhiYTUwMWQ5YzY5Y2I4ZTIzY2IwMzcwQGc"
+    },
+    {
+      "id": "1nh4aalob7h8e66o886a3kcm60_20261126T130000Z",
+      "summary": "Окно ментора: ревью и разбор задач (демо)",
+      "description": "<p>Учебное окно для обсуждения задач, прогресса и вопросов по материалам стажировки. Время выбрано для прототипа.</p>",
+      "start": {
+        "dateTime": "2026-11-26T16:00:00+03:00",
+        "timeZone": "Europe/Moscow"
+      },
+      "end": {
+        "dateTime": "2026-11-26T17:00:00+03:00",
+        "timeZone": "Europe/Moscow"
+      },
+      "status": "confirmed",
+      "htmlLink": "https://www.google.com/calendar/event?eid=MW5oNGFhbG9iN2g4ZTY2bzg4NmEza2NtNjBfMjAyNjExMjZUMTMwMDAwWiA4OTA0N2E2MTM1ZGU3MDc0NzIwZmFkNDExNTMxYzU0OTBhYWRlMjNjNjhiYTUwMWQ5YzY5Y2I4ZTIzY2IwMzcwQGc"
+    },
+    {
+      "id": "c9ckr1rf7ckiih7s076lonhku8_20261201T123000Z",
+      "summary": "Окно ментора: вопросы и 1:1 (демо)",
+      "description": "<p>Учебное окно доступности по открытому чек-листу стажёра Авито: регулярные встречи с наставником и вопросы. Это не реальная занятость наставника.</p>",
+      "start": {
+        "dateTime": "2026-12-01T15:30:00+03:00",
+        "timeZone": "Europe/Moscow"
+      },
+      "end": {
+        "dateTime": "2026-12-01T16:00:00+03:00",
+        "timeZone": "Europe/Moscow"
+      },
+      "status": "confirmed",
+      "htmlLink": "https://www.google.com/calendar/event?eid=Yzlja3IxcmY3Y2tpaWg3czA3NmxvbmhrdThfMjAyNjEyMDFUMTIzMDAwWiA4OTA0N2E2MTM1ZGU3MDc0NzIwZmFkNDExNTMxYzU0OTBhYWRlMjNjNjhiYTUwMWQ5YzY5Y2I4ZTIzY2IwMzcwQGc"
+    },
+    {
+      "id": "1nh4aalob7h8e66o886a3kcm60_20261203T130000Z",
+      "summary": "Окно ментора: ревью и разбор задач (демо)",
+      "description": "<p>Учебное окно для обсуждения задач, прогресса и вопросов по материалам стажировки. Время выбрано для прототипа.</p>",
+      "start": {
+        "dateTime": "2026-12-03T16:00:00+03:00",
+        "timeZone": "Europe/Moscow"
+      },
+      "end": {
+        "dateTime": "2026-12-03T17:00:00+03:00",
+        "timeZone": "Europe/Moscow"
+      },
+      "status": "confirmed",
+      "htmlLink": "https://www.google.com/calendar/event?eid=MW5oNGFhbG9iN2g4ZTY2bzg4NmEza2NtNjBfMjAyNjEyMDNUMTMwMDAwWiA4OTA0N2E2MTM1ZGU3MDc0NzIwZmFkNDExNTMxYzU0OTBhYWRlMjNjNjhiYTUwMWQ5YzY5Y2I4ZTIzY2IwMzcwQGc"
+    },
+    {
+      "id": "c9ckr1rf7ckiih7s076lonhku8_20261208T123000Z",
+      "summary": "Окно ментора: вопросы и 1:1 (демо)",
+      "description": "<p>Учебное окно доступности по открытому чек-листу стажёра Авито: регулярные встречи с наставником и вопросы. Это не реальная занятость наставника.</p>",
+      "start": {
+        "dateTime": "2026-12-08T15:30:00+03:00",
+        "timeZone": "Europe/Moscow"
+      },
+      "end": {
+        "dateTime": "2026-12-08T16:00:00+03:00",
+        "timeZone": "Europe/Moscow"
+      },
+      "status": "confirmed",
+      "htmlLink": "https://www.google.com/calendar/event?eid=Yzlja3IxcmY3Y2tpaWg3czA3NmxvbmhrdThfMjAyNjEyMDhUMTIzMDAwWiA4OTA0N2E2MTM1ZGU3MDc0NzIwZmFkNDExNTMxYzU0OTBhYWRlMjNjNjhiYTUwMWQ5YzY5Y2I4ZTIzY2IwMzcwQGc"
+    }
+  ]
+}

@@ -39,7 +39,6 @@ export type FormDefinition = {
 export type Values = Record<string, unknown>;
 export type Receipt = { id: string; status: string };
 export type Reminder = { id: string; key: string; summary: string; url: string; due_at: string };
-export type MergeRequest = { id: string; iid: number; title: string; url: string; updated_at?: string };
 export type CalendarEvent = {
   id: string; summary?: string; start?: { dateTime?: string; date?: string };
   htmlLink?: string; status?: string;
@@ -104,7 +103,6 @@ export const api = {
       token, idem, body: { revision: state.revision, reason, confirmed: true, form_values: {} },
     }),
   jira: (auth: Auth) => request<{ enabled: boolean; reminders: Reminder[] }>('/v1/tasks/jira', auth),
-  gitlab: (auth: Auth) => request<{ reminders?: MergeRequest[] }>('/v1/gitlab/reminders', auth),
   calendar: (auth: Auth) => request<{ data?: { items?: CalendarEvent[] } }>('/v1/calendar/reminders', auth),
   deadlines: (key: string) => request<{ notifications: (Reminder & { kind: string })[] }>('/v1/deadline-notifications', { key }),
 };

@@ -1,12 +1,11 @@
-# Reuse the already provisioned demo MCP containers on the distributed network.
-# Their credentials remain in the separate private configuration, outside Git.
+# Compatibility overlay for existing deployment commands. GitLab is disabled;
+# Jira and Calendar MCPs are provided by compose.distributed.yml.
 services:
   api:
     environment:
-      GITLAB_MCP_URL: http://bobby-gitlab-mcp-demo:8080/mcp
-      GITLAB_REMINDER_PROJECT: "2"
-      CALENDAR_MCP_URL: http://bobby-calendar-mcp-updated:8080/mcp
+      GITLAB_MCP_URL: ""
+      GITLAB_REMINDER_PROJECT: ""
   worker:
     environment:
-      GITLAB_MCP_URL: http://bobby-gitlab-mcp-demo:8080/mcp
-      CALENDAR_MCP_URL: http://bobby-calendar-mcp-updated:8080/mcp
+      GITLAB_MCP_URL: ""
+      GITLAB_REMINDER_PROJECT: ""

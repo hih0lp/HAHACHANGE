@@ -31,3 +31,17 @@ func TestGeneralQuestionWorksWithoutDocumentSearch(t *testing.T) {
 		t.Fatalf("answer=%q sources=%d err=%v", answer, len(sources), err)
 	}
 }
+
+func TestToolsForEndpointKeepsOnlyTheSelectedLiveService(t *testing.T) {
+	tools := []map[string]any{
+		{"type": "function", "function": map[string]any{"name": "team_members"}},
+		{"type": "function", "function": map[string]any{"name": "rights_forms_list"}},
+	}
+	selected := toolsForEndpoint(tools, map[string]string{
+		"team_members":      "http://team-mcp",
+		"rights_forms_list": "http://rights-mcp",
+	}, "http://team-mcp")
+	if len(selected) != 1 || selected[0]["function"].(map[string]any)["name"] != "team_members" {
+		t.Fatalf("selected tools = %#v", selected)
+	}
+}

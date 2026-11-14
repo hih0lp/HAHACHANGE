@@ -4,12 +4,12 @@ import { External, Notice, Stamp } from './ui';
 import { Icon } from './visuals';
 
 type Task = { id: string; title: string; href?: string; status: string; date?: string; dateOnly?: boolean };
-type Source = 'Jira' | 'GitLab' | 'Календарь';
+type Source = 'Jira' | 'Календарь';
 type Result = { state: 'loading' } | { state: 'error'; message: string } | { state: 'ready'; items: Task[] };
-const sources: Source[] = ['Jira', 'GitLab', 'Календарь'];
-const initials = { Jira: 'J', GitLab: 'G', Календарь: 'К' };
-const colors = { Jira: 'sky', GitLab: 'peach', Календарь: 'mint' };
-const defaultResult = (): Record<Source, Result> => ({ Jira: { state: 'loading' }, GitLab: { state: 'loading' }, Календарь: { state: 'loading' } });
+const sources: Source[] = ['Jira', 'Календарь'];
+const initials = { Jira: 'J', Календарь: 'К' };
+const colors = { Jira: 'sky', Календарь: 'mint' };
+const defaultResult = (): Record<Source, Result> => ({ Jira: { state: 'loading' }, Календарь: { state: 'loading' } });
 
 export function Tasks({ token, apiKey, onProfile }: { token: string; apiKey: string; onProfile: () => void }) {
   const [data, setData] = useState(defaultResult);
@@ -25,12 +25,6 @@ export function Tasks({ token, apiKey, onProfile }: { token: string; apiKey: str
         return { state: 'ready', items: result.reminders.map(item => ({
           id: item.id, title: item.key + ' · ' + item.summary, href: item.url, status: 'Скоро дедлайн',
           date: new Date(Date.parse(item.due_at) - 1).toISOString(), dateOnly: true,
-        })) } as const;
-      },
-      GitLab: async () => {
-        const result = await api.gitlab(auth);
-        return { state: 'ready', items: (result.reminders || []).map(item => ({
-          id: item.id, title: '!' + item.iid + ' · ' + item.title, href: item.url, status: 'Открытый MR', date: item.updated_at,
         })) } as const;
       },
       Календарь: async () => {
@@ -66,7 +60,7 @@ export function Tasks({ token, apiKey, onProfile }: { token: string; apiKey: str
 
   return <div className="section-page">
     <header className="page-intro"><div className="page-symbol lavender"><Icon name="tasks"/></div><h1>Мои задачи</h1>
-      <p>Ближайшие дедлайны, открытые MR и события календаря.</p>
+      <p>Ближайшие дедлайны и события календаря.</p>
     </header>
     {!token ? <Notice action={<button className="button secondary" onClick={onProfile}>Открыть профиль</button>}>Войдите, чтобы увидеть задачи своей команды.</Notice> : <>
       <div className="tasks-toolbar"><span>Время событий указано по Москве</span><button className="button secondary" onClick={() => setReload(value => value + 1)}>Обновить</button></div>

@@ -79,7 +79,6 @@ async function fixtures(page) {
     }
     if (path === '/v1/scenarios/scenario-1') return respond(scenario);
     if (path === '/v1/tasks/jira') return respond({ enabled: true, reminders: [{ id: 'demo-5', key: 'DEMO-5', summary: 'Настроить окружение', due_at: '2026-11-14T00:00:00+03:00', url: 'https://example.atlassian.net/browse/DEMO-5' }] });
-    if (path === '/v1/gitlab/reminders') return respond({ error: 'unavailable' }, 503);
     if (path === '/v1/calendar/reminders') return respond({ data: { items: [{ id: 'meeting', summary: 'Встреча с наставником', start: { dateTime: '2026-11-13T11:00:00Z' }, htmlLink: 'https://calendar.google.com/' }] } });
     return respond({ error: 'unknown fixture: ' + path }, 404);
   });
@@ -187,7 +186,9 @@ try {
 
     await navigate(page, 'Мои задачи');
     await page.getByText('DEMO-5 · Настроить окружение').waitFor();
-    await page.getByText('Источник временно недоступен.').waitFor();
+    if (await page.getByRole('heading', { name: 'GitLab' }).count()) {
+      throw new Error('Tasks must only show Jira and Calendar');
+    }
     await page.getByText('Встреча с наставником').waitFor();
     await page.getByText(/14:00 МСК/).waitFor();
     await shot(page, 'tasks', width);
