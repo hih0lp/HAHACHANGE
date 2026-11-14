@@ -229,7 +229,11 @@ func (s store) latest(ctx context.Context, user, group string) (searchResult, er
 		JOIN chat_groups g ON g.id = member.group_id
 		JOIN chat_messages m ON m.group_id = g.id
 		JOIN chat_group_members a ON a.group_id = g.id AND a.user_id = m.author_id
-		WHERE member.user_id = $1 AND ($2 = '' OR g.id = $2 OR lower(g.name) = lower($2))
+		WHERE member.user_id = $1 AND (
+			$2 = '' OR g.id = $2 OR lower(g.name) = lower($2)
+			OR lower(g.name || ' - ' || a.display_name) =
+			   regexp_replace(lower($2), '[[:space:]]+[-–—][[:space:]]+', ' - ', 'g')
+		)
 		  AND m.sent_at <= now()
 		ORDER BY m.sent_at DESC, m.id DESC LIMIT 10
 	`, user, group)
