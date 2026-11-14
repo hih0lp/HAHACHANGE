@@ -4,6 +4,7 @@ import { api, ApiError, completed, errorText, watchJob } from './api';
 import type { Job } from './api';
 import { AccessForm } from './AccessForm';
 import { Answer } from './Answer';
+import { AnswerActions, AnswerSelection } from './AnswerActions';
 import { BobbyWidget } from './BobbyWidget';
 import type { useBobbyWidget } from './BobbyWidget';
 import { timeText, upsert } from './model';
@@ -27,11 +28,14 @@ type Props = {
   onOpenChat: () => void;
 };
 
+type ReplyContext = { id: number; kind: 'reply' | 'quote'; text: string };
+
 export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, onDraft, onForm, onCloseForm, onCatalog, widget, onOpenChat }: Props) {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [revealedAnswers, setRevealedAnswers] = useState<Set<string>>(() => new Set());
   const [waiting, setWaiting] = useState<Record<string, 'reconnect' | 'timeout'>>({});
   const [sending, setSending] = useState(false);
+  const [replyContext, setReplyContext] = useState<ReplyContext[]>([]);
   const [error, setError] = useState('');
   const [historyError, setHistoryError] = useState('');
   const [reload, setReload] = useState(0);
@@ -41,6 +45,8 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
   const scroll = useRef<HTMLDivElement>(null);
   const latestTurn = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
+  const widgetInput = useRef<HTMLTextAreaElement>(null);
+  const nextContextID = useRef(0);
   const inlinePanel = useRef<HTMLDivElement>(null);
   const initialRestore = useRef(true);
   const scrollAfterSend = useRef(false);
@@ -129,8 +135,13 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
   }, [formID, catalog]);
 
   async function send(text: string, fromWidget = false) {
-    const query = text.trim();
-    if ([...query].length < 2 || lock.current) return;
+    const question = text.trim();
+    if ([...question].length < 2 || lock.current) return;
+    const context = replyContext.map(({ kind, text }) => {
+      const label = kind === 'reply' ? 'Ответ Бобби целиком' : 'Цитата из ответа Бобби';
+      return `${label}\n${text.split(/\r?\n/).map(line => '> ' + line).join('\n')}`;
+    });
+    const query = [question, ...context].join('\n\n');
     dictation.cancel();
     lock.current = true;
     setSending(true);
@@ -141,9 +152,10 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
       if (job.status === 'completed' && job.answer?.trim()) setRevealedAnswers(previous => new Set(previous).add(job.id));
       setJobs(current => upsert(current, { ...job, query, created_at: job.created_at || new Date().toISOString() }));
       onDraft('');
+      setReplyContext([]);
       if (!fromWidget) input.current?.focus();
     } catch (err) {
-      onDraft(query);
+      onDraft(question);
       setError(errorText(err, 'Не удалось отправить вопрос. Попробуйте ещё раз.'));
     } finally {
       setSending(false);
@@ -189,12 +201,23 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
     }
   }
 
+  function addReplyContext(kind: ReplyContext['kind'], text: string, compact: boolean) {
+    if (lock.current) return;
+    const id = nextContextID.current++;
+    setReplyContext(current => [...current, { id, kind, text }]);
+    (compact ? widgetInput : input).current?.focus({ preventScroll: true });
+  }
+
   function reply(job: Job, compact = false) {
-    if (job.status === 'completed') return job.answer?.trim()
-      ? <Answer text={job.answer} onForm={compact ? openFromWidget : openForm} reveal={!compact && revealedAnswers.has(job.id)}/>
+    const answer = job.answer;
+    if (job.status === 'completed') return answer?.trim()
+      ? <AnswerActions disabled={sending} onReply={() => addReplyContext('reply', answer, compact)}>
+          <Answer text={answer} onForm={compact ? openFromWidget : openForm} reveal={!compact && revealedAnswers.has(job.id)}/>
+        </AnswerActions>
       : <p>Ответ пуст. Уточните вопрос или попробуйте снова.</p>;
     if (job.status === 'failed') return <Notice error action={<button className="text-button" onClick={event => {
       onDraft(job.query);
+      setReplyContext([]);
       if (compact) event.currentTarget.closest('.bobby-widget')?.querySelector('textarea')?.focus();
       else input.current?.focus();
     }}>Повторить</button>}>
@@ -210,8 +233,21 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
   function composer(compact = false) {
     const surface = compact ? 'widget' : 'chat';
     return <>{dictation.message?.surface === surface && <Notice error>{dictation.message.text}</Notice>}
+    {!!replyContext.length && <ul className="reply-context" aria-label="Контекст ответа">
+      {replyContext.map(({ id, kind, text }) => {
+        const label = kind === 'reply' ? 'Ответ Бобби целиком' : 'Цитата';
+        return <li key={id}>
+          <div><strong>{label}</strong><p>{text}</p></div>
+          <button type="button" className="icon-button" aria-label={`Убрать ${kind === 'reply' ? 'ответ' : 'цитату'}`}
+            disabled={sending} onClick={() => {
+              setReplyContext(current => current.filter(item => item.id !== id));
+              (compact ? widgetInput : input).current?.focus();
+            }}><Icon name="close"/></button>
+        </li>;
+      })}
+    </ul>}
     <form className="composer" onSubmit={event => submit(event, compact)}>
-      <textarea ref={compact ? undefined : input} value={draft} readOnly={sending} onChange={event => onDraft(event.target.value)} onKeyDown={event => {
+      <textarea ref={compact ? widgetInput : input} value={draft} readOnly={sending} onChange={event => onDraft(event.target.value)} onKeyDown={event => {
         if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
           event.preventDefault();
           void send(draft, compact);
@@ -245,7 +281,8 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
           <h1>Привет, я Бобби!</h1>
           <p>Помогу освоиться в команде и разобраться с первыми задачами.</p>
         </div>}
-        {hasMessages && <div className="messages" aria-label="Сообщения чата">
+        {hasMessages && <AnswerSelection active={!hidden} disabled={sending} onQuote={text => addReplyContext('quote', text, false)}>
+        <div className="messages" aria-label="Сообщения чата">
           {deadlines.map(item => <Notice key={item.id}>
             <strong>{item.kind === 'mentor_24h' ? 'Помогите стажёру' : 'Скоро дедлайн'}</strong>
             <br/><External href={item.url}>{item.key} · {item.summary}</External> · {timeText(new Date(Date.parse(item.due_at) - 1).toISOString(), true)}
@@ -268,7 +305,7 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
             {catalog && !formID && <FormCatalog token={token} apiKey={apiKey} onForm={openForm} onClose={closeForm}/>}
             {formID && <AccessForm key={formID} id={formID} token={auth.token} apiKey={auth.key} identity={identity} onClose={closeForm}/>}
           </div>}
-        </div>}
+        </div></AnswerSelection>}
       </div>
     </div>
     <div className="chat-footer">
@@ -291,7 +328,10 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
     </div>
   </div>
     {widget.target && <BobbyWidget target={widget.target} fallback={widget.fallback} state={widgetState}
-      jobID={latest?.id} query={latest?.query} reply={latest && reply(latest, true)} error={error}
+      jobID={latest?.id} query={latest?.query} reply={expanded => latest &&
+        <AnswerSelection active={expanded} disabled={sending} onQuote={text => addReplyContext('quote', text, true)}>
+          {reply(latest, true)}
+        </AnswerSelection>} error={error}
       onClose={widget.close} onChat={openFromWidget} renderMicrophone={reveal => microphone('widget', reveal)}>
       {composer(true)}
     </BobbyWidget>}

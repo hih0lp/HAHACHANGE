@@ -78,7 +78,7 @@ type WidgetProps = {
   state: BobbyState;
   jobID?: string;
   query?: string;
-  reply?: ReactNode;
+  reply: (expanded: boolean) => ReactNode;
   error?: string;
   onClose: () => void;
   onChat: () => void;
@@ -130,7 +130,7 @@ export function BobbyWidget({ target, fallback, state, jobID, query, reply, erro
       </div>}
       <header className="bobby-widget-header" hidden={collapsed}>
         <Bobby className="bobby-widget-pet" state={state}/>
-        <div className="bobby-widget-name"><strong>Бобби</strong><small role="status">{moods[state]}</small></div>
+        <div className="bobby-widget-name"><strong>Бобби</strong><small role="status"><span key={state}>{moods[state]}</span></small></div>
         <button type="button" className="icon-button" aria-label="Открыть полный чат" title="Открыть полный чат" onClick={onChat}><Icon name="external"/></button>
         <button type="button" className="icon-button" aria-label="Свернуть мини-чат" title="Свернуть мини-чат" onClick={toggleCollapsed}><Icon name="minimize"/></button>
         <button type="button" className="icon-button" aria-label="Закрыть мини-чат" title="Закрыть мини-чат" onClick={onClose}><Icon name="close"/></button>
@@ -138,7 +138,7 @@ export function BobbyWidget({ target, fallback, state, jobID, query, reply, erro
       {target === 'inline' && fallback && <p className="bobby-widget-fallback" hidden={collapsed}>{fallback}</p>}
       <div className="bobby-widget-thread" ref={thread} aria-live="polite" tabIndex={0} hidden={collapsed}>
         {query && <p className="bobby-widget-query">{query}</p>}
-        {reply || (!query && <p className="muted">Напишите мне, если нужна помощь.</p>)}
+        {reply(!collapsed) || (!query && <p className="muted">Напишите мне, если нужна помощь.</p>)}
       </div>
       <div className="bobby-widget-compose" hidden={collapsed}>
         {error && <p className="bobby-widget-error" role="alert">{error}</p>}

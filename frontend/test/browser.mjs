@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
 
-const server = await createServer({ server: { host: '127.0.0.1', port: 0 } });
+const cacheDir = await mkdtemp(join(tmpdir(), 'bobby-vite-'));
+const server = await createServer({ cacheDir, server: { host: '127.0.0.1', port: 0 } });
 await server.listen();
 const { port } = server.httpServer.address();
 const base = 'http://127.0.0.1:' + port;
@@ -104,6 +106,19 @@ async function shot(page, label, width) {
   await page.screenshot({ path: join(output, label + '-' + width + '.png'), animations: 'disabled' });
 }
 
+async function selectText(locator) {
+  await locator.scrollIntoViewIfNeeded();
+  return locator.evaluate(element => {
+    const doc = element.ownerDocument;
+    const selection = doc.getSelection();
+    const range = doc.createRange();
+    range.selectNodeContents(element);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    return selection.toString().trim();
+  });
+}
+
 try {
   await mkdir(output, { recursive: true });
   const launch = { headless: true, args: ['--no-sandbox'] };
@@ -152,6 +167,19 @@ try {
       await page.evaluate(() => window.documentPictureInPicture.window.document.querySelector('.send-button').click());
       await page.waitForFunction(() => window.documentPictureInPicture.window?.document.querySelector('.answer h3')?.textContent === 'Ваш первый шаг');
       assert.equal(await page.locator('.chat-page .user-message p').textContent(), 'Бобби, ты здесь?');
+      await page.evaluate(() => {
+        const doc = window.documentPictureInPicture.window.document;
+        const heading = doc.querySelector('.answer h3');
+        heading.scrollIntoView();
+        const range = doc.createRange();
+        range.selectNodeContents(heading);
+        doc.getSelection().removeAllRanges();
+        doc.getSelection().addRange(range);
+      });
+      await page.waitForFunction(() => window.documentPictureInPicture.window.document.querySelector('.selection-actions'));
+      await page.evaluate(() => window.documentPictureInPicture.window.document.querySelector('.selection-actions button').click());
+      await page.locator('.chat-page .reply-context').getByText('Ваш первый шаг').waitFor();
+      await page.locator('.chat-page').getByRole('button', { name: 'Убрать цитату' }).click();
       await page.evaluate(() => window.documentPictureInPicture.window.document.querySelector('[aria-label="Свернуть мини-чат"]').click());
       await page.waitForFunction(() => {
         const floating = window.documentPictureInPicture.window;
@@ -191,13 +219,37 @@ try {
     await finishDictation('голосом');
     assert.equal(await input.inputValue(), 'Начать работу через мини-чат голосом');
     await widget.getByText('Слушаю').waitFor();
-    await page.addStyleTag({ content: '.bobby-widget-thread { flex: none; height: 50px; } .bobby-widget-query { min-height: 120px; }' });
+    const scrollStyle = await page.addStyleTag({ content: '.bobby-widget-thread { flex: none; height: 50px; } .bobby-widget-query { min-height: 120px; }' });
     await page.getByRole('link', { name: 'Мои задачи' }).click();
     await input.press('Enter');
     await widget.getByText('Думаю').waitFor();
     assert.ok(await widget.locator('.bobby-widget-thread').evaluate(element => element.scrollTop > 0));
     await widget.getByText('Ответ готов').waitFor();
     await widget.getByRole('heading', { name: 'Ваш первый шаг' }).waitFor();
+    await scrollStyle.evaluate(element => element.remove());
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+    const selection = page.getByRole('group', { name: 'Действия с выделенным текстом' });
+    const firstQuote = await selectText(widget.locator('.answer h3'));
+    await selection.getByRole('button', { name: 'Копировать' }).click();
+    await selection.getByRole('button', { name: 'Скопировано' }).waitFor();
+    assert.equal(await page.evaluate(() => navigator.clipboard.readText()), firstQuote);
+    await selection.getByRole('button', { name: 'Цитировать' }).click();
+    const secondQuote = await selectText(widget.locator('.answer p').first());
+    await selection.getByRole('button', { name: 'Цитировать' }).click();
+    await widget.getByRole('button', { name: 'Ответить' }).click();
+    await widget.locator('.answer-actions').getByRole('button', { name: 'Копировать' }).click();
+    await widget.locator('.answer-actions').getByRole('button', { name: 'Скопировано' }).waitFor();
+    assert.equal((await page.evaluate(() => navigator.clipboard.readText())).replace(/\r\n/g, '\n'),
+      (await widget.locator('[data-answer-text]').innerText()).trim());
+    assert.equal(await widget.locator('.reply-context li').count(), 3);
+    await widget.getByRole('button', { name: 'Убрать цитату' }).first().click();
+    await input.fill('Уточни детали');
+    const sent = page.waitForRequest(request => request.url().endsWith('/v1/jobs') && request.method() === 'POST');
+    await input.press('Enter');
+    assert.equal((await sent).postDataJSON().query,
+      `Уточни детали\n\nЦитата из ответа Бобби\n> ${secondQuote}\n\nОтвет Бобби целиком\n${answer.split('\n').map(line => '> ' + line).join('\n')}`);
+    await widget.locator('.reply-context').waitFor({ state: 'hidden' });
+    await widget.getByText('Ответ готов').waitFor();
     await input.fill('Следующий вопрос');
     await widget.locator('.bobby-widget-header [data-bobby-state="listening"]').waitFor();
     const listeningAvatar = page.locator('.message-avatar [data-bobby-state="listening"]');
@@ -214,6 +266,13 @@ try {
     await widget.getByRole('textbox').press('Escape');
     await widget.waitFor({ state: 'hidden' });
     assert.equal(await trigger.evaluate(element => document.activeElement === element), true);
+    const main = page.locator('.chat-page');
+    await selectText(main.locator('.answer h3').last());
+    await selection.getByRole('button', { name: 'Цитировать' }).click();
+    await main.locator('.reply-context').getByText('Ваш первый шаг').waitFor();
+    await main.getByRole('button', { name: 'Убрать цитату' }).click();
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    assert.equal(await main.locator('.bobby-body').last().evaluate(element => getComputedStyle(element).transitionDuration), '0s');
     assert.deepEqual(errors, []);
     await page.close();
     console.log('Passed Bobby widget checks');
@@ -336,4 +395,5 @@ try {
 } finally {
   await browser?.close();
   await server.close();
+  await rm(cacheDir, { recursive: true, force: true });
 }

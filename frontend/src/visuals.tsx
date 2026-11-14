@@ -43,18 +43,21 @@ export function Bobby({ className, state = 'idle' }: { className?: string; state
         <ellipse cx="572" cy="550" rx="53" ry="56" transform="rotate(12 572 550)"/>
         <ellipse cx="865" cy="482" rx="50" ry="54" transform="rotate(12 865 482)"/>
       </g>
-      <g fill="white" transform={state === 'thinking' ? 'translate(4 -9)' : state === 'listening' ? 'translate(-29 7)' : undefined}>
+      <g className="bobby-gaze" fill="white">
         <circle cx="586" cy="519" r="14"/><circle cx="877" cy="454" r="14"/>
       </g>
-      <path d={state === 'answering' ? 'M690 573l94-19c4 88-77 107-94 19Z' : state === 'listening' ? 'M709 585l49-10' : 'M695 581c28 23 68 10 80-22'}
-        fill={state === 'answering' ? 'var(--bobby-blue)' : 'none'} stroke="var(--bobby-ink)" strokeWidth="25" strokeLinecap="round" strokeLinejoin="round"/>
+      <g fill="none" stroke="var(--bobby-ink)" strokeWidth="25" strokeLinecap="round" strokeLinejoin="round">
+        <path className="bobby-smile" d="M695 581c28 23 68 10 80-22"/>
+        <path data-bobby-expression="listening" d="M709 585l49-10"/>
+        <path data-bobby-expression="answering" d="M690 573l94-19c4 88-77 107-94 19Z" fill="var(--bobby-blue)"/>
+      </g>
     </g>
-    {state === 'thinking' && <g fill="var(--bobby-blue)"><circle cx="856" cy="176" r="20"/><circle cx="923" cy="126" r="29"/><circle cx="1003" cy="65" r="40"/></g>}
-    {state === 'answering' && <path d="m1117 517 84-38m-84 109 90 27" fill="none" stroke="var(--bobby-blue)" strokeWidth="27" strokeLinecap="round"/>}
-    {state === 'listening' && <path d="M173 512q-57 71-14 145M114 471Q32 572 92 682" fill="none" stroke="var(--bobby-blue)" strokeWidth="26" strokeLinecap="round"/>}
-    {state === 'waiting-form' && <g fill="none" stroke="var(--bobby-blue)" strokeWidth="30" strokeLinecap="round">
+    <g className="bobby-accent" data-bobby-expression="thinking" fill="var(--bobby-blue)"><circle cx="856" cy="176" r="20"/><circle cx="923" cy="126" r="29"/><circle cx="1003" cy="65" r="40"/></g>
+    <path className="bobby-accent" data-bobby-expression="answering" d="m1117 517 84-38m-84 109 90 27" fill="none" stroke="var(--bobby-blue)" strokeWidth="27" strokeLinecap="round"/>
+    <path className="bobby-accent" data-bobby-expression="listening" d="M173 512q-57 71-14 145M114 471Q32 572 92 682" fill="none" stroke="var(--bobby-blue)" strokeWidth="26" strokeLinecap="round"/>
+    <g className="bobby-accent" data-bobby-expression="waiting-form" fill="none" stroke="var(--bobby-blue)" strokeWidth="30" strokeLinecap="round">
       <path d="M1090 342c0-75 130-79 130-4 0 54-66 58-66 112"/><circle cx="1154" cy="507" r="16" fill="var(--bobby-blue)" stroke="none"/>
-    </g>}
+    </g>
   </svg>;
 }
 
