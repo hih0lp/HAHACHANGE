@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react';
+import { cloneElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { linkedForm, linkSource, safeLink } from './model';
 import { Icon } from './visuals';
 
@@ -29,9 +30,9 @@ function inline(value: string, onForm: (id: string) => void): ReactNode[] {
   return nodes;
 }
 
-export function Answer({ text, onForm }: { text: string; onForm: (id: string) => void }) {
+export function Answer({ text, onForm, reveal }: { text: string; onForm: (id: string) => void; reveal: boolean }) {
   const lines = text.replace(/\\([*()[\]])/g, '$1').split(/\r?\n/).map(line => line.trim());
-  const blocks: ReactNode[] = [];
+  const blocks: ReactElement[] = [];
   const listPattern = /^([-*]|\d+[.)])\s+(.+)$/;
   for (let index = 0; index < lines.length;) {
     const key = index;
@@ -51,5 +52,7 @@ export function Answer({ text, onForm }: { text: string; onForm: (id: string) =>
       blocks.push(<Tag key={key}>{items.map((entry, i) => <li key={i}>{inline(entry, onForm)}</li>)}</Tag>);
     } else blocks.push(<p key={key}>{inline(line, onForm)}</p>);
   }
-  return <div className="answer">{blocks}</div>;
+  return <div className={reveal ? 'answer answer-reveal' : 'answer'}>
+    {reveal ? blocks.map((block, index) => cloneElement(block, { style: { animationDelay: `${Math.min(index * 85, 700)}ms` } })) : blocks}
+  </div>;
 }

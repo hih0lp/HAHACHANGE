@@ -101,48 +101,48 @@ export function errorText(error: unknown, fallback: string) {
 export const completed = (job: Job) => job.status === 'completed' || job.status === 'failed';
 
 export function watchJob(id: string, auth: Auth, onJob: (job: Job) => void, onState: (state: 'reconnect' | 'timeout') => void) {
-  const abort = new AbortController();
+  let stopped = false;
   let socket: WebSocket | undefined;
-  let pollTimer: ReturnType<typeof setTimeout>;
+  let retryTimer: ReturnType<typeof setTimeout>;
   let socketTimer: ReturnType<typeof setTimeout>;
   const deadline = setTimeout(() => { stop(); onState('timeout'); }, 210_000);
+  const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const url = scheme + '//' + location.host + '/v1/jobs/' + encodeURIComponent(id) + '/ws' + (auth.token ? '?account=1' : '');
+
   function stop() {
-    abort.abort();
+    stopped = true;
     clearTimeout(deadline);
-    clearTimeout(pollTimer);
+    clearTimeout(retryTimer);
     clearTimeout(socketTimer);
     socket?.close();
   }
-  function receive(job: Job) {
-    if (abort.signal.aborted || job.id !== id) return;
-    onJob(job);
-    if (completed(job)) stop();
-  }
-  async function poll() {
-    if (abort.signal.aborted) return;
-    try {
-      receive(await api.job(id, auth, abort.signal));
-    } catch {
-      if (!abort.signal.aborted) onState('reconnect');
-    }
-    if (!abort.signal.aborted) pollTimer = setTimeout(poll, 2_000);
-  }
-  const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  socket = new WebSocket(scheme + '//' + location.host + '/v1/jobs/' + encodeURIComponent(id) + '/ws' + (auth.token ? '?account=1' : ''));
-  socketTimer = setTimeout(() => socket?.close(), 8_000);
-  socket.onopen = () => { if (auth.key || auth.token) socket?.send(JSON.stringify({ api_key: auth.key, access_token: auth.token })); };
-  socket.onmessage = ({ data }) => {
-    try {
-      receive(JSON.parse(data) as Job);
+
+  function connect() {
+    const connection = new WebSocket(url);
+    socket = connection;
+    socketTimer = setTimeout(() => connection.close(), 8_000);
+    connection.onopen = () => {
+      if (auth.key || auth.token) connection.send(JSON.stringify({ api_key: auth.key, access_token: auth.token }));
+    };
+    connection.onmessage = ({ data }) => {
+      try {
+        const job = JSON.parse(data) as Job;
+        if (stopped || job.id !== id) return;
+        clearTimeout(socketTimer);
+        onJob(job);
+        if (completed(job)) stop();
+      } catch {
+        connection.close();
+      }
+    };
+    connection.onclose = () => {
       clearTimeout(socketTimer);
-    } catch {
-      socket?.close();
-    }
-  };
-  socket.onclose = () => {
-    clearTimeout(socketTimer);
-    if (!abort.signal.aborted) { onState('reconnect'); void poll(); }
-  };
-  socket.onerror = () => socket?.close();
+      if (stopped) return;
+      onState('reconnect');
+      retryTimer = setTimeout(connect, 2_000);
+    };
+    connection.onerror = () => connection.close();
+  }
+  connect();
   return stop;
 }

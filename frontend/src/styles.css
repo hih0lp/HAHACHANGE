@@ -175,6 +175,13 @@
     .bobby-body { transition: none; }
   }
   .message-name { display: block; margin-bottom: var(--space-1); }
+  @media (prefers-reduced-motion: no-preference) {
+    .answer-reveal > * { animation: reveal-answer 240ms ease-out both; }
+    @keyframes reveal-answer {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  }
   .message-body { min-width: 0; overflow-wrap: anywhere; }
   .message-body time, .user-message time { display: block; font-size: var(--text-small); margin-top: var(--space-2); }
   .answer > * { margin-block: 0 var(--space-2); }
