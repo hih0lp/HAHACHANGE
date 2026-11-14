@@ -61,7 +61,7 @@ func formatCalendarBusy(result any) (string, error) {
 	return "По календарю наставник занят:\n" + strings.Join(lines, "\n"), nil
 }
 
-func formatCalendarEvents(result any) (string, error) {
+func formatCalendarEvents(result any, maxItems ...int) (string, error) {
 	raw, err := json.Marshal(result)
 	if err != nil {
 		return "", err
@@ -100,6 +100,9 @@ func formatCalendarEvents(result any) (string, error) {
 	}
 	lines := make([]string, 0, len(response.Data.Items))
 	for _, event := range response.Data.Items {
+		if len(maxItems) > 0 && maxItems[0] > 0 && len(lines) >= maxItems[0] {
+			break
+		}
 		start, startErr := time.Parse(time.RFC3339, event.Start.DateTime)
 		end, endErr := time.Parse(time.RFC3339, event.End.DateTime)
 		if startErr != nil || endErr != nil || !end.After(start) {
@@ -111,6 +114,9 @@ func formatCalendarEvents(result any) (string, error) {
 			line += ". " + strings.TrimSpace(html.UnescapeString(calendarHTMLTag.ReplaceAllString(event.Description, "")))
 		}
 		lines = append(lines, line)
+	}
+	if len(maxItems) > 0 && maxItems[0] == 1 {
+		return "Ближайшее событие календаря наставника:\n" + strings.Join(lines, "\n"), nil
 	}
 	return "События календаря наставника:\n" + strings.Join(lines, "\n"), nil
 }
