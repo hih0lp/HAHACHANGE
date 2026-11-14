@@ -215,13 +215,12 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
             <br/><External href={item.url}>{item.key} · {item.summary}</External> · {timeText(new Date(Date.parse(item.due_at) - 1).toISOString(), true)}
           </Notice>)}
           {jobs.map((job, index) => <div key={job.id} className="turn">
-            <div className="user-message">
-              <p>{job.query}</p><Stamp value={job.created_at}/>
-              {job.id === latest?.id && composerState === 'listening' &&
-                <Bobby className="user-message-bobby" state="listening"/>}
-            </div>
+            <div className="user-message"><p>{job.query}</p><Stamp value={job.created_at}/></div>
             <div className="assistant-message" aria-live="polite">
-              <span className="message-avatar"><Bobby state={index < jobs.length - 1 ? 'idle' : job.status === 'completed' && job.answer?.trim() ? 'answering' : !completed(job) && !waiting[job.id] ? 'thinking' : 'idle'}/></span>
+              <span className="message-avatar"><Bobby state={index < jobs.length - 1 ? 'idle'
+                : composerState === 'listening' ? 'listening'
+                : job.status === 'completed' && job.answer?.trim() ? 'answering'
+                : !completed(job) && !waiting[job.id] ? 'thinking' : 'idle'}/></span>
               <strong className="message-name">Бобби</strong>
               <div className="message-body">
                 {reply(job)}

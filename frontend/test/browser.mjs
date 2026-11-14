@@ -161,6 +161,8 @@ try {
     await widget.getByRole('button', { name: 'Свернуть мини-чат' }).click();
     const pet = widget.getByRole('button', { name: 'Развернуть мини-чат' });
     await pet.locator('[data-bobby-state="listening"]').waitFor();
+    assert.equal(await widget.evaluate(element => getComputedStyle(element).backgroundColor), 'rgba(0, 0, 0, 0)');
+    assert.equal(await widget.evaluate(element => getComputedStyle(element).boxShadow), 'none');
     assert.equal(await input.isVisible(), false);
     await pet.click();
     assert.equal(await input.inputValue(), 'Начать работу через мини-чат');
@@ -170,8 +172,11 @@ try {
     await widget.getByText('Ответ готов').waitFor();
     await widget.getByRole('heading', { name: 'Ваш первый шаг' }).waitFor();
     await input.fill('Следующий вопрос');
-    await widget.locator('.bobby-widget-query [data-bobby-state="listening"]').waitFor();
-    assert.equal(await page.locator('.user-message [data-bobby-state="listening"]').count(), 1);
+    await widget.locator('.bobby-widget-header [data-bobby-state="listening"]').waitFor();
+    const listeningAvatar = page.locator('.message-avatar [data-bobby-state="listening"]');
+    assert.equal(await listeningAvatar.count(), 1);
+    assert.equal(await listeningAvatar.evaluate(element => getComputedStyle(element).width), '68px');
+    assert.equal(await page.locator('.user-message [data-bobby-state="listening"], .bobby-widget-query [data-bobby-state="listening"]').count(), 0);
     assert.equal(await page.locator('.composer [data-bobby-state="listening"]').count(), 0);
     await input.clear();
     await widget.getByRole('button', { name: 'Заполнить заявку' }).click();

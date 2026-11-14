@@ -124,7 +124,7 @@ export function BobbyWidget({ target, fallback, state, query, reply, error, onCl
         <Bobby className="bobby-widget-pet" state={state}/>
       </button>}
       <header className="bobby-widget-header" hidden={collapsed}>
-        <Bobby className="bobby-widget-pet" state={query && state === 'listening' ? 'idle' : state}/>
+        <Bobby className="bobby-widget-pet" state={state}/>
         <div className="bobby-widget-name"><strong>Бобби</strong><small role="status">{moods[state]}</small></div>
         <button type="button" className="icon-button" aria-label="Открыть полный чат" title="Открыть полный чат" onClick={onChat}><Icon name="external"/></button>
         <button type="button" className="icon-button" aria-label="Свернуть мини-чат" title="Свернуть мини-чат" onClick={toggleCollapsed}><Icon name="minimize"/></button>
@@ -132,10 +132,7 @@ export function BobbyWidget({ target, fallback, state, query, reply, error, onCl
       </header>
       {target === 'inline' && fallback && <p className="bobby-widget-fallback" hidden={collapsed}>{fallback}</p>}
       <div className="bobby-widget-thread" ref={thread} aria-live="polite" tabIndex={0} hidden={collapsed}>
-        {query && <div className="bobby-widget-query">
-          <p>{query}</p>
-          {state === 'listening' && <Bobby className="user-message-bobby" state="listening"/>}
-        </div>}
+        {query && <p className="bobby-widget-query">{query}</p>}
         {reply || (!query && <p className="muted">Напишите мне, если нужна помощь.</p>)}
       </div>
       <div className="bobby-widget-compose" hidden={collapsed}>
