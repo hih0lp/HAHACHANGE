@@ -28,6 +28,7 @@ services:
       DISTRIBUTED_MODE: "true"
       LLM_URL: http://ollama:11434
       LLM_MODEL: ${BOBBY_MODEL:-qwen3:4b}
+      LLM_REASONING_EFFORT: ${BOBBY_REASONING_EFFORT:-none}
       JOB_TIMEOUT_SECONDS: "600"
       QDRANT_URL: http://qdrant:6333
       EMBEDDINGS_URL: http://embeddings:80
@@ -84,6 +85,7 @@ services:
       DISTRIBUTED_MODE: "true"
       LLM_URL: http://ollama:11434
       LLM_MODEL: ${BOBBY_MODEL:-qwen3:4b}
+      LLM_REASONING_EFFORT: ${BOBBY_REASONING_EFFORT:-none}
       JOB_TIMEOUT_SECONDS: "600"
       QDRANT_URL: http://qdrant:6333
       EMBEDDINGS_URL: http://embeddings:80

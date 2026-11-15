@@ -554,6 +554,7 @@ func (a answerer) ask(ctx context.Context, question string) (string, []rag.Searc
 	messages = append(messages, map[string]any{"role": "user", "content": prompt})
 	for step := 0; step < 5; step++ {
 		payload := map[string]any{"model": a.model, "stream": false, "messages": messages}
+		applyReasoningEffort(payload)
 		if len(teamTools) > 0 {
 			payload["tools"] = teamTools
 			payload["tool_choice"] = "auto"
