@@ -91,7 +91,7 @@ func runDistributed(cfg config) error {
 		}, time.Duration(envInt("JOB_TIMEOUT_SECONDS", 180))*time.Second)
 	}
 	if cfg.IndexOnStartup {
-		if _, err := service.IndexIfEmpty(readyCtx); err != nil {
+		if _, err := service.Reindex(readyCtx); err != nil {
 			return fmt.Errorf("initial indexing: %w", err)
 		}
 	}
