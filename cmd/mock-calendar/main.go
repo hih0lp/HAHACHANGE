@@ -143,6 +143,15 @@ func main() {
 		}
 	}
 	cancel()
+	mux := newMockCalendarHandler(path, companyPath, directory, subjects, mentor, company)
+	listen := os.Getenv("MOCK_LISTEN")
+	if listen == "" {
+		listen = "127.0.0.1:8080"
+	}
+	log.Fatal(http.ListenAndServe(listen, mux))
+}
+
+func newMockCalendarHandler(path, companyPath, directory string, subjects map[string]bool, mentor, company *mockfixture.Dataset) http.Handler {
 	server := mcp.NewServer(&mcp.Implementation{Name: "bobby-mock-calendar", Version: "1.0.0"}, nil)
 	if companyPath != "" {
 		mcp.AddTool(server, &mcp.Tool{Name: "calendar_company_events", Description: "List confirmed company events for the requested RFC3339 period."}, func(ctx context.Context, _ *mcp.CallToolRequest, q query) (*mcp.CallToolResult, map[string]any, error) {
@@ -241,11 +250,7 @@ func main() {
 		}
 		stream.ServeHTTP(w, r)
 	}))
-	listen := os.Getenv("MOCK_LISTEN")
-	if listen == "" {
-		listen = "127.0.0.1:8080"
-	}
-	log.Fatal(http.ListenAndServe(listen, mux))
+	return mux
 }
 
 func calendarSubjects(value string) map[string]bool {

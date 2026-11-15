@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -130,4 +131,86 @@ func TestFixtureAcceptsExactDeadlineAndRejectsInvalidTimestamp(t *testing.T) {
 	if _, err := load(path); err == nil {
 		t.Fatal("invalid exact deadline accepted")
 	}
+}
+
+func TestMockJiraRESTAndMCPFields(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "jira.json")
+	data := `{"project_key":"SCRUM","issues":[{"key":"SCRUM-2","summary":"Second","status":"In progress","description":"Detailed work","due_date":"2026-11-19","due_at":"2026-11-19T15:00:00+03:00","start_date":"2026-11-18","assignee_account_id":"second","assignee_name":"Intern Two","fields":{"customfield_7":"value","empty":null}},{"key":"SCRUM-1","summary":"First","status":"Open","description":"First details","assignee_account_id":"first"}]}`
+	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	team := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer intern2" {
+			http.Error(w, "invalid token", http.StatusUnauthorized)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]string{"id": "intern2", "jira_account_id": "second"})
+	}))
+	defer team.Close()
+	jira := httptest.NewServer(newMockJiraHandler(path, scenario.Client{BaseURL: team.URL}))
+	defer jira.Close()
+	for _, tc := range []struct {
+		path     string
+		status   int
+		contains string
+	}{
+		{"/health", http.StatusNoContent, ""},
+		{"/rest/api/3/issue/SCRUM-2", http.StatusOK, "Detailed work"},
+		{"/rest/api/3/issue/SCRUM-2?expand=names", http.StatusOK, "Название"},
+		{"/rest/api/3/issue/SCRUM-404", http.StatusNotFound, ""},
+		{"/rest/api/3/search/jql?jql=assignee%20%3D%20%22second%22", http.StatusOK, "SCRUM-2"},
+	} {
+		resp, err := http.Get(jira.URL + tc.path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != tc.status || !strings.Contains(string(body), tc.contains) {
+			t.Fatalf("%s: status=%d body=%s", tc.path, resp.StatusCode, body)
+		}
+		if strings.Contains(tc.path, "search/jql") && strings.Contains(string(body), "SCRUM-1") {
+			t.Fatalf("JQL leaked another intern's issue: %s", body)
+		}
+	}
+	client := mcp.NewClient(&mcp.Implementation{Name: "jira-test", Version: "1"}, nil)
+	transport := &mcp.StreamableClientTransport{Endpoint: jira.URL + "/mcp", HTTPClient: &http.Client{Transport: bearerTransport{token: "intern2"}}}
+	session, err := client.Connect(context.Background(), transport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	for _, tc := range []struct {
+		name      string
+		args      map[string]any
+		contains  string
+		wantError bool
+	}{
+		{"jira_list_assigned_issues", map[string]any{"account_id": "second"}, "SCRUM-2", false},
+		{"jira_list_assigned_issues", map[string]any{"account_id": "first"}, "", true},
+		{"jira_get_issue", map[string]any{"key": "SCRUM-2"}, "Detailed work", false},
+		{"jira_get_issue_fields", map[string]any{"key": "SCRUM-2"}, "customfield_7", false},
+		{"jira_get_issue_fields", map[string]any{"key": "SCRUM-1"}, "", true},
+		{"jira_get_issue", map[string]any{"key": "SCRUM-404"}, "", true},
+	} {
+		result, callErr := session.CallTool(context.Background(), &mcp.CallToolParams{Name: tc.name, Arguments: tc.args})
+		failed := callErr != nil || result.IsError
+		if failed != tc.wantError {
+			t.Fatalf("%s(%v): result=%+v err=%v", tc.name, tc.args, result, callErr)
+		}
+		if !failed {
+			encoded, _ := json.Marshal(result.StructuredContent)
+			if !strings.Contains(string(encoded), tc.contains) || strings.Contains(string(encoded), "SCRUM-1") {
+				t.Fatalf("%s returned unscoped/invalid data: %s", tc.name, encoded)
+			}
+		}
+	}
+	if err := os.WriteFile(path, []byte("{"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	resp, err := http.Get(jira.URL + "/health")
+	if err != nil || resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("invalid fixture health: %v %v", resp, err)
+	}
+	resp.Body.Close()
 }
