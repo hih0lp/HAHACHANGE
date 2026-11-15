@@ -5,6 +5,7 @@ COPY go.mod go.sum ./
 COPY cmd ./cmd
 COPY internal ./internal
 COPY pkg ./pkg
+COPY fixtures ./fixtures
 
 RUN go test -cover ./... \
     && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/knowledge-api ./cmd/server

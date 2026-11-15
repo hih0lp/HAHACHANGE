@@ -28,7 +28,7 @@ services:
       MOCK_EDITOR_ENABLED: "true"
       DISTRIBUTED_MODE: "true"
       LLM_URL: http://ollama:11434
-      LLM_MODEL: ${BOBBY_MODEL:-qwen3:4b}
+      LLM_MODEL: ${BOBBY_MODEL:-qwen3:8b}
       LLM_REASONING_EFFORT: ${BOBBY_REASONING_EFFORT:-none}
       JOB_TIMEOUT_SECONDS: "600"
       QDRANT_URL: http://qdrant:6333
@@ -86,7 +86,7 @@ services:
       SESSION_SECRET: bobby-local-session-only
       DISTRIBUTED_MODE: "true"
       LLM_URL: http://ollama:11434
-      LLM_MODEL: ${BOBBY_MODEL:-qwen3:4b}
+      LLM_MODEL: ${BOBBY_MODEL:-qwen3:8b}
       LLM_REASONING_EFFORT: ${BOBBY_REASONING_EFFORT:-none}
       JOB_TIMEOUT_SECONDS: "600"
       QDRANT_URL: http://qdrant:6333
@@ -380,7 +380,7 @@ services:
     image: ollama/ollama:0.12.11
     environment:
       OLLAMA_HOST: http://ollama:11434
-      BOBBY_MODEL: ${BOBBY_MODEL:-qwen3:4b}
+      BOBBY_MODEL: ${BOBBY_MODEL:-qwen3:8b}
     entrypoint: ["/bin/sh", "-ec"]
     command:
       - |
