@@ -150,6 +150,18 @@ func main() {
 	}
 	stream := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
+		for _, fixturePath := range []string{path, companyPath} {
+			if fixturePath == "" {
+				continue
+			}
+			if _, err := load(fixturePath); err != nil {
+				http.Error(w, "calendar fixture unavailable", http.StatusServiceUnavailable)
+				return
+			}
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
 	mockfixture.Register(mux, path, "calendar_save_fixture", os.Getenv("MOCK_FIXTURE_WRITE_TOKEN"), func(data []byte) error {
 		f, err := parseFixture(data)
 		if err == nil && f.Events == nil {
