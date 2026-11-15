@@ -79,7 +79,7 @@ func (d *Dataset) RegisterMutation(mux *http.ServeMux, directory scenario.Client
 			d.failed(w, err)
 			return
 		}
-		datasetJSON(w, 200, current)
+		datasetJSON(w, 200, map[string]any{"version": current.Version, "saved": true})
 	})
 }
 

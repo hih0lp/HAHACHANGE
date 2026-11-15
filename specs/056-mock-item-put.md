@@ -12,4 +12,6 @@ These routes edit the database-backed mocks. The existing versioned full-dataset
 
 The Bobby API proxies each addressed PUT through the same `/v1/mock-data/...` path to the corresponding mock service, forwarding the caller's JWT. The mock services remain on the private Compose network.
 
+The addressed PUT response contains only `{ "version": <number>, "saved": true }`. It does not return the full dataset, which may contain records assigned to other users.
+
 Tests cover an intern JWT, invalid JWT, missing item, invalid payload, persistence, dates, and GitLab branch references.

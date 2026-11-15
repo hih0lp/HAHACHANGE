@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 )
@@ -22,4 +23,14 @@ func TestRenameBranchUpdatesReferences(t *testing.T) {
 	if _, err := renameMockBranch(data, r, []byte(`{"name":"main"}`)); err == nil {
 		t.Fatal("duplicate branch accepted")
 	}
+}
+
+func TestBranchRouteAcceptsNestedName(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("PUT /v1/mock-data/gitlab/projects/{project}/branches/{name...}", func(w http.ResponseWriter, r *http.Request) {
+		if r.PathValue("project") != "2" || r.PathValue("name") != "docs/demo" {
+			t.Errorf("path values: %q %q", r.PathValue("project"), r.PathValue("name"))
+		}
+	})
+	mux.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("PUT", "/v1/mock-data/gitlab/projects/2/branches/docs/demo", nil))
 }
