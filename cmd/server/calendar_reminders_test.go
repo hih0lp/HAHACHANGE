@@ -19,13 +19,19 @@ type calendarReminderArgs struct {
 func TestCalendarReminderRouteUsesBearerAndNextDay(t *testing.T) {
 	server := mcp.NewServer(&mcp.Implementation{Name: "fixture", Version: "1"}, nil)
 	mcp.AddTool(server, &mcp.Tool{Name: "calendar_onboarding_events"}, func(_ context.Context, _ *mcp.CallToolRequest, in calendarReminderArgs) (*mcp.CallToolResult, map[string]any, error) {
-		if in.TimeMin == "" && in.TimeMax == "" {
-			return nil, map[string]any{"data": map[string]any{"items": []map[string]any{{"summary": "this week"}, {"summary": "next month"}}}}, nil
-		}
 		start, e1 := time.Parse(time.RFC3339, in.TimeMin)
 		end, e2 := time.Parse(time.RFC3339, in.TimeMax)
-		if e1 != nil || e2 != nil || end.Sub(start) != 24*time.Hour {
-			t.Errorf("wrong reminder window: %q %q", in.TimeMin, in.TimeMax)
+		if e1 != nil || e2 != nil {
+			t.Errorf("invalid calendar window: %q %q", in.TimeMin, in.TimeMax)
+		}
+		if start.Day() == 1 && start.Hour() == 0 {
+			if end.Day() != 1 || end.Month() == start.Month() {
+				t.Errorf("not current calendar month: %q %q", in.TimeMin, in.TimeMax)
+			}
+			return nil, map[string]any{"data": map[string]any{"items": []map[string]any{{"summary": "current month"}}}}, nil
+		}
+		if end.Sub(start) > 24*time.Hour {
+			t.Errorf("reminder window exceeds one day: %q %q", in.TimeMin, in.TimeMax)
 		}
 		return nil, map[string]any{"data": map[string]any{"items": []map[string]any{{"summary": "demo"}}}}, nil
 	})
@@ -63,7 +69,7 @@ func TestCalendarReminderRouteUsesBearerAndNextDay(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer allowed")
 	reply = httptest.NewRecorder()
 	mux.ServeHTTP(reply, req)
-	if reply.Code != http.StatusOK || json.Unmarshal(reply.Body.Bytes(), &result) != nil || len(result.Data.Items) != 2 {
+	if reply.Code != http.StatusOK || json.Unmarshal(reply.Body.Bytes(), &result) != nil || len(result.Data.Items) != 1 || result.Data.Items[0].Summary != "current month" {
 		t.Fatalf("unexpected calendar list: %d %s", reply.Code, reply.Body.String())
 	}
 }

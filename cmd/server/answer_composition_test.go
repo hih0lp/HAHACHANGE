@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hackchange/avito-rag/internal/distributed"
 	"github.com/hackchange/avito-rag/internal/rag"
@@ -21,6 +22,11 @@ func testMCPServer(t *testing.T, server *mcp.Server) *httptest.Server {
 }
 
 func TestMixedJiraCalendarAndDisconnectedGitLabKeepEveryAnswer(t *testing.T) {
+	moscow, _ := time.LoadLocation("Europe/Moscow")
+	now := time.Now().In(moscow)
+	start := time.Date(now.Year(), now.Month(), 1, 13, 0, 0, 0, moscow)
+	end := start.Add(time.Hour)
+	periodEnd := start.AddDate(0, 0, 1)
 	jira := mcp.NewServer(&mcp.Implementation{Name: "test-jira", Version: "1"}, nil)
 	mcp.AddTool(jira, &mcp.Tool{Name: "jira_get_issue"}, func(_ context.Context, _ *mcp.CallToolRequest, in struct {
 		Key string `json:"key"`
@@ -37,12 +43,13 @@ func TestMixedJiraCalendarAndDisconnectedGitLabKeepEveryAnswer(t *testing.T) {
 		TimeMin string `json:"time_min"`
 		TimeMax string `json:"time_max"`
 	}) (*mcp.CallToolResult, map[string]any, error) {
-		return nil, map[string]any{"data": map[string]any{"items": []any{map[string]any{"summary": "Встреча", "start": map[string]string{"dateTime": "2099-11-19T13:00:00Z"}, "end": map[string]string{"dateTime": "2099-11-19T14:00:00Z"}}}}}, nil
+		return nil, map[string]any{"data": map[string]any{"items": []any{map[string]any{"summary": "Встреча", "start": map[string]string{"dateTime": start.Format(time.RFC3339)}, "end": map[string]string{"dateTime": end.Format(time.RFC3339)}}}}}, nil
 	})
 	calendarHTTP := testMCPServer(t, calendar)
 	defer calendarHTTP.Close()
 	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		fmt.Fprint(w, `{"choices":[{"message":{"content":"{\"needs_jira_issue\":true,\"jira_issue_keys\":[\"TASK-7\"],\"needs_events\":true,\"needs_gitlab\":true,\"nearest_event_only\":true,\"time_min\":\"2099-11-19T00:00:00Z\",\"time_max\":\"2099-11-20T00:00:00Z\"}"}}]}`)
+		plan := fmt.Sprintf(`{"needs_jira_issue":true,"jira_issue_keys":["TASK-7"],"needs_events":true,"needs_gitlab":true,"nearest_event_only":true,"historical":true,"period_kind":"explicit","time_min":%q,"time_max":%q}`, start.Format(time.RFC3339), periodEnd.Format(time.RFC3339))
+		fmt.Fprintf(w, `{"choices":[{"message":{"content":%q}}]}`, plan)
 	}))
 	defer model.Close()
 	service := rag.New(rag.Config{EmbeddingsURL: "http://127.0.0.1:1", QdrantURL: "http://127.0.0.1:1"})

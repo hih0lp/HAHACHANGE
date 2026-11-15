@@ -142,7 +142,7 @@ const groupScopePrompt = `Return exactly one flat JSON object with keys "latest_
 "all_chat_groups" is true only when no particular group is named or referred to. It is false for an unresolved reference.
 For topic search return chat_query with the topic alone, or the exact issue key if present. Copy requested dates as inclusive chat_from and exclusive chat_to timestamps (RFC3339, Moscow). When no dates are requested, omit both. Use recent_chat only to resolve references. Do not invent group names.`
 
-const calendarPeriodPrompt = `Extract only the calendar period from the user's question and return JSON. This week means {"period_kind":"current_week"} and next week means {"period_kind":"next_week"}. For the next N days use days_ahead as an integer. For fixed dates use period_kind explicit and RFC3339 time_min and time_max in Europe/Moscow. Only set historical for a past range. If there is no stated period return {"period_kind":"upcoming"}. Read the request in its original language. Use recent_chat only to resolve references.`
+const calendarPeriodPrompt = `Extract only the calendar period from the user's question and return JSON. This week means {"period_kind":"current_week"} and next week means {"period_kind":"next_week"}. For the next N days use days_ahead as an integer. For fixed dates use period_kind explicit and RFC3339 time_min and time_max in Europe/Moscow. Only set historical for a past range. If there is no stated period return {"period_kind":"current_month"}. Calendar data is limited to the current Moscow calendar month. Read the request in its original language. Use recent_chat only to resolve references.`
 
 func (a answerer) planQuestion(ctx context.Context, question string, now time.Time, recent []chatContextTurn, forms []formChoice, resources []resourceChoice) (calendarPlan, error) {
 	instruction := `Classify the current question. Return a JSON object with only relevant fields; omit false flags. Do not answer the question.
@@ -157,7 +157,7 @@ Classify only what the user requests in the current question. If a reference or 
 - needs_group_chat: messenger history. Add latest_group_messages for newest messages instead of topic search. If the user asks what groups they are a member of, set needs_group_memberships and do not search messages. For search, return chat_query with the topic alone (use just the issue key when there is one), chat_from and chat_to for explicit dates (RFC3339, inclusive start and exclusive end). If the user names a group, copy the group name into chat_group, without quotation marks. Set all_chat_groups only for unscoped requests; never set it when a group name was provided.
 - A request about the user's own chat history does not need external service flags unless it also asks to check current data.
 - Calendar scope: use needs_events for meetings with the mentor, the mentor's schedule and onboarding meetings. Use needs_company_events only for a company-wide event schedule. "а глобально какие события?" in a calendar discussion means needs_company_events. "когда я доступен для 1:1 со стажёрами?" means needs_one_on_one. Unqualified "на неделе" for upcoming meetings means upcoming, not the remaining hours of Sunday. If the user only asks about meetings with the mentor, set needs_events and leave needs_company_events and needs_team_directory false. For free or busy time use needs_availability. Set nearest_event_only only if the user asks for one event.
-- For a rolling range of upcoming days, copy the requested number into days_ahead as an integer. The server adds it to the current time. Do not convert a rolling range to a calendar week. Use period_kind current_week or next_week only for calendar weeks, not a number of days. For fixed dates use explicit and supply time_min and time_max in RFC3339, in Europe/Moscow. An unspecified period is upcoming for seven days in the mentor calendar and 30 days in the company calendar. Set historical only for explicitly past events.
+- For a rolling range of upcoming days, copy the requested number into days_ahead as an integer. The server adds it to the current time. Do not convert a rolling range to a calendar week. Use period_kind current_week or next_week only for calendar weeks, not a number of days. For fixed dates use explicit and supply time_min and time_max in RFC3339, in Europe/Moscow. Without a stated period use the current calendar month in Europe/Moscow. Calendar data outside that month is unavailable. Set historical only for explicitly past events.
 Preserve independent intents in compound questions. For general conversation without internal evidence return {}.`
 	plan, err := a.requestPlan(ctx, instruction, map[string]any{"current_time": now.Format(time.RFC3339), "recent_chat": recent, "available_forms": forms, "available_resources": resources, "question": question})
 	if err != nil {
@@ -264,23 +264,25 @@ func normalizeCalendarPlan(plan calendarPlan, now time.Time) (calendarPlan, erro
 	if !plan.NeedsEvents && !plan.NeedsAvailability && !plan.NeedsCompanyEvents {
 		return plan, nil
 	}
+	zone, err := time.LoadLocation("Europe/Moscow")
+	if err != nil {
+		return plan, err
+	}
+	now = now.In(zone)
+	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, zone)
+	monthEnd := monthStart.AddDate(0, 1, 0)
 	if plan.DaysAhead != 0 {
 		if plan.DaysAhead < 1 || plan.DaysAhead > 31 {
 			return plan, errors.New("calendar days_ahead must be between 1 and 31")
 		}
 		plan.TimeMin = now.Format(time.RFC3339)
 		plan.TimeMax = now.Add(time.Duration(plan.DaysAhead) * 24 * time.Hour).Format(time.RFC3339)
-		return plan, nil
 	}
-	defaultUpcoming := func() {
-		days := 30
-		if plan.NeedsEvents || plan.NeedsAvailability {
-			days = 7
-		}
-		plan.TimeMin = now.Format(time.RFC3339)
-		plan.TimeMax = now.Add(time.Duration(days) * 24 * time.Hour).Format(time.RFC3339)
+	defaultMonth := func() {
+		plan.TimeMin = monthStart.Format(time.RFC3339)
+		plan.TimeMax = monthEnd.Format(time.RFC3339)
 	}
-	if plan.PeriodKind == "current_week" || plan.PeriodKind == "next_week" {
+	if plan.DaysAhead == 0 && (plan.PeriodKind == "current_week" || plan.PeriodKind == "next_week") {
 		local := now.In(now.Location())
 		weekday := (int(local.Weekday()) + 6) % 7
 		monday := time.Date(local.Year(), local.Month(), local.Day()-weekday, 0, 0, 0, 0, local.Location())
@@ -290,13 +292,13 @@ func normalizeCalendarPlan(plan calendarPlan, now time.Time) (calendarPlan, erro
 		plan.TimeMin = monday.Format(time.RFC3339)
 		plan.TimeMax = monday.AddDate(0, 0, 7).Format(time.RFC3339)
 	}
-	if (plan.PeriodKind == "" || plan.PeriodKind == "upcoming") && (plan.TimeMin == "" || plan.TimeMax == "") {
-		defaultUpcoming()
+	if plan.DaysAhead == 0 && (plan.PeriodKind == "" || plan.PeriodKind == "upcoming" || plan.PeriodKind == "current_month") && (plan.TimeMin == "" || plan.TimeMax == "") {
+		defaultMonth()
 	}
 	start, err := time.Parse(time.RFC3339, plan.TimeMin)
 	if err != nil {
 		if plan.PeriodKind == "" || plan.PeriodKind == "upcoming" {
-			defaultUpcoming()
+			defaultMonth()
 			start, err = time.Parse(time.RFC3339, plan.TimeMin)
 		} else {
 			return plan, errors.New("calendar start is invalid")
@@ -305,21 +307,50 @@ func normalizeCalendarPlan(plan calendarPlan, now time.Time) (calendarPlan, erro
 	end, err := time.Parse(time.RFC3339, plan.TimeMax)
 	if err != nil || !end.After(start) || end.Sub(start) > 31*24*time.Hour {
 		if plan.PeriodKind == "" || plan.PeriodKind == "upcoming" {
-			defaultUpcoming()
+			defaultMonth()
 			start, _ = time.Parse(time.RFC3339, plan.TimeMin)
 			end, _ = time.Parse(time.RFC3339, plan.TimeMax)
 		} else {
 			return plan, errors.New("calendar range is invalid")
 		}
 	}
-	if !plan.Historical && start.Before(now) {
+	if !end.After(monthStart) || !start.Before(monthEnd) {
+		return plan, errors.New("calendar period is outside the current Moscow month")
+	}
+	if start.Before(monthStart) {
+		start = monthStart
+	}
+	if end.After(monthEnd) {
+		end = monthEnd
+	}
+	if !plan.Historical && plan.PeriodKind != "" && plan.PeriodKind != "upcoming" && plan.PeriodKind != "current_month" && start.Before(now) {
 		start = now
-		plan.TimeMin = start.Format(time.RFC3339)
 	}
 	if !end.After(start) {
 		return plan, errors.New("calendar range has elapsed")
 	}
+	plan.TimeMin = start.Format(time.RFC3339)
+	plan.TimeMax = end.Format(time.RFC3339)
 	return plan, nil
+}
+
+// Bound model-selected calendar tools as well as preplanned requests. The MCP
+// receives only the current Moscow month, even if the model proposes another range.
+func boundCalendarToolArgs(name string, args map[string]any, now time.Time) (map[string]any, error) {
+	if name != "calendar_onboarding_events" && name != "calendar_mentor_freebusy" && name != "calendar_company_events" {
+		return args, nil
+	}
+	minimum, _ := args["time_min"].(string)
+	maximum, _ := args["time_max"].(string)
+	plan := calendarPlan{NeedsEvents: true, TimeMin: minimum, TimeMax: maximum, PeriodKind: "explicit"}
+	if minimum == "" && maximum == "" {
+		plan.PeriodKind = "current_month"
+	}
+	bounded, err := normalizeCalendarPlan(plan, now)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"time_min": bounded.TimeMin, "time_max": bounded.TimeMax}, nil
 }
 
 func applyReasoningEffort(request map[string]any) {

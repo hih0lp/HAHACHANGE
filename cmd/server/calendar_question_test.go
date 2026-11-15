@@ -36,16 +36,23 @@ func TestCalendarPlannerDefaultsUnboundedUpcomingRequest(t *testing.T) {
 	loc, _ := time.LoadLocation("Europe/Moscow")
 	now := time.Date(2026, 11, 14, 15, 0, 0, 0, loc)
 	plan, err := normalizeCalendarPlan(calendarPlan{NeedsEvents: true, NeedsJiraIssue: true, JiraIssueKeys: []string{"TASK-7"}}, now)
-	if err != nil || plan.TimeMin != now.Format(time.RFC3339) || plan.TimeMax != now.Add(7*24*time.Hour).Format(time.RFC3339) || !plan.NeedsJiraIssue {
+	if err != nil || plan.TimeMin != "2026-11-01T00:00:00+03:00" || plan.TimeMax != "2026-12-01T00:00:00+03:00" || !plan.NeedsJiraIssue {
 		t.Fatalf("plan=%+v err=%v", plan, err)
 	}
 	partial, err := normalizeCalendarPlan(calendarPlan{NeedsEvents: true, PeriodKind: "upcoming", TimeMin: now.Format(time.RFC3339)}, now)
-	if err != nil || partial.TimeMax != now.Add(7*24*time.Hour).Format(time.RFC3339) {
+	if err != nil || partial.TimeMin != "2026-11-01T00:00:00+03:00" || partial.TimeMax != "2026-12-01T00:00:00+03:00" {
 		t.Fatalf("partial upcoming plan=%+v err=%v", partial, err)
 	}
 	company, err := normalizeCalendarPlan(calendarPlan{NeedsCompanyEvents: true}, now)
-	if err != nil || company.TimeMax != now.Add(30*24*time.Hour).Format(time.RFC3339) {
+	if err != nil || company.TimeMin != "2026-11-01T00:00:00+03:00" || company.TimeMax != "2026-12-01T00:00:00+03:00" {
 		t.Fatalf("company plan=%+v err=%v", company, err)
+	}
+	bounded, err := boundCalendarToolArgs("calendar_mentor_freebusy", map[string]any{"time_min": "2026-11-15T00:00:00Z", "time_max": "2026-12-15T00:00:00Z"}, now)
+	if err != nil || bounded["time_max"] != "2026-12-01T00:00:00+03:00" {
+		t.Fatalf("tool range=%v err=%v", bounded, err)
+	}
+	if _, err := boundCalendarToolArgs("calendar_onboarding_events", map[string]any{"time_min": "2026-12-02T00:00:00+03:00", "time_max": "2026-12-03T00:00:00+03:00"}, now); err == nil {
+		t.Fatal("calendar tool could read outside current month")
 	}
 }
 
@@ -175,5 +182,9 @@ func TestCompanyCalendarRollingDaysStartNow(t *testing.T) {
 	plan, err := normalizeCalendarPlan(calendarPlan{NeedsCompanyEvents: true, DaysAhead: 7, PeriodKind: "current_week"}, now)
 	if err != nil || plan.TimeMin != "2026-11-15T15:00:00+03:00" || plan.TimeMax != "2026-11-22T15:00:00+03:00" {
 		t.Fatalf("unexpected plan: %+v, %v", plan, err)
+	}
+	clipped, err := normalizeCalendarPlan(calendarPlan{NeedsCompanyEvents: true, DaysAhead: 31}, now)
+	if err != nil || clipped.TimeMax != "2026-12-01T00:00:00+03:00" {
+		t.Fatalf("month boundary: %+v, %v", clipped, err)
 	}
 }

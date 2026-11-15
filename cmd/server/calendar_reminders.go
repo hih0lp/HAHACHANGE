@@ -24,7 +24,12 @@ func registerCalendarReminderRoute(mux *http.ServeMux, endpoint string) {
 			return
 		}
 		now := time.Now().In(moscow)
-		result, err := mcpTeamTool(r.Context(), endpoint, "", bearer, "calendar_onboarding_events", map[string]any{"time_min": now.Format(time.RFC3339), "time_max": now.Add(24 * time.Hour).Format(time.RFC3339)})
+		args, err := boundCalendarToolArgs("calendar_onboarding_events", map[string]any{"time_min": now.Format(time.RFC3339), "time_max": now.Add(24 * time.Hour).Format(time.RFC3339)}, now)
+		if err != nil {
+			writeError(w, http.StatusServiceUnavailable, errText("calendar period unavailable"))
+			return
+		}
+		result, err := mcpTeamTool(r.Context(), endpoint, "", bearer, "calendar_onboarding_events", args)
 		if err != nil {
 			writeError(w, http.StatusServiceUnavailable, errText("calendar reminders unavailable"))
 			return
@@ -38,7 +43,12 @@ func registerCalendarReminderRoute(mux *http.ServeMux, endpoint string) {
 			writeError(w, http.StatusUnauthorized, errText("team session required"))
 			return
 		}
-		result, err := mcpTeamTool(r.Context(), endpoint, "", bearer, "calendar_onboarding_events", map[string]any{})
+		args, err := boundCalendarToolArgs("calendar_onboarding_events", nil, time.Now())
+		if err != nil {
+			writeError(w, http.StatusServiceUnavailable, errText("calendar period unavailable"))
+			return
+		}
+		result, err := mcpTeamTool(r.Context(), endpoint, "", bearer, "calendar_onboarding_events", args)
 		if err != nil {
 			writeError(w, http.StatusServiceUnavailable, errText("calendar events unavailable"))
 			return
