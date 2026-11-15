@@ -202,12 +202,21 @@ func (a answerer) requestJSON(ctx context.Context, instruction string, input, ou
 	if err != nil {
 		return err
 	}
-	request := map[string]any{"model": a.model, "stream": false, "messages": []map[string]string{{"role": "system", "content": instruction}, {"role": "user", "content": string(plannerInput)}}}
+	inputText := string(plannerInput)
+	noThink := envBool("LLM_PLANNER_NO_THINK", false)
+	if noThink {
+		// LM Studio accepts the Qwen chat marker, but rejects the json_object response format.
+		inputText += "\n/no_think"
+	}
+	messages := []map[string]string{{"role": "system", "content": instruction}, {"role": "user", "content": inputText}}
+	request := map[string]any{"model": a.model, "stream": false, "messages": messages}
 	applyReasoningEffort(request)
-	if request["reasoning_effort"] == "none" {
-		request["response_format"] = map[string]string{"type": "json_object"}
+	if noThink || request["reasoning_effort"] == "none" {
 		request["max_tokens"] = 512
 		request["temperature"] = 0
+	}
+	if !noThink && request["reasoning_effort"] == "none" {
+		request["response_format"] = map[string]string{"type": "json_object"}
 	}
 	body, err := json.Marshal(request)
 	if err != nil {
