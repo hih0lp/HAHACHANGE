@@ -169,10 +169,18 @@ func (a answerer) answerWithContext(ctx context.Context, question string, recent
 			return "", hits, fmt.Errorf("Jira tools/list: %w", err)
 		}
 		for _, tool := range jiraTools {
-			name := tool["function"].(map[string]any)["name"].(string)
+			function := tool["function"].(map[string]any)
+			name := function["name"].(string)
+			if name == "jira_list_assigned_issues" {
+				if teamToken == "" || a.teamMCPURL == "" {
+					continue
+				}
+				function["description"] = "List Jira tasks assigned to the current authenticated user. Account identity is resolved by the server."
+				function["parameters"] = map[string]any{"type": "object", "properties": map[string]any{}, "additionalProperties": false}
+			}
 			toolEndpoints[name] = a.mcpURL
+			teamTools = append(teamTools, tool)
 		}
-		teamTools = append(teamTools, jiraTools...)
 	}
 	if teamToken != "" && a.teamMCPURL != "" {
 		var err error
@@ -243,7 +251,9 @@ func (a answerer) answerWithContext(ctx context.Context, question string, recent
 
 Если для ответа нужен инструмент, выбери его сам. Если клиент модели не сформировал нативный вызов функции, верни строго JSON без markdown: {"tool_call":{"name":"имя из каталога","arguments":{}}}. После получения результата MCP дай обычный ответ пользователю. Учитывай предыдущие реплики этого чата: короткое согласие или выбор ресурса продолжает начатое обращение. Если ранее ты предложил выбрать ресурс для заявки и пользователь выбрал его, найди подходящую форму сейчас, не спрашивай выбор повторно. Вопросы о задачах Jira, команде, участниках, ролях, ресурсах, правах и доступных формах требуют вызова инструмента до ответа. Когда пользователь хочет оформить обращение, найди подходящую форму через инструменты сервиса прав и дай ссылку Markdown [Заполнить форму](form_url из результата). Эта ссылка показывает форму прямо в чате. Когда предлагаешь форму, кратко объясни её назначение по данным каталога. Если сервер уже подготовил ссылки на формы, оставь их вывод серверу. Если пользователь отдельно обсуждает поля, прочитай схему формы через инструмент и помоги их заполнить. Если речь о доступе к конкретному ресурсу, проверь каталог ресурсов и текущее право, прежде чем описывать их. Не выдумывай идентификаторы ресурсов, названия прав и их значения даже в качестве примеров: бери их из результатов инструментов или оставь выбор открытым в форме. Не утверждай, что форма отправлена: её отправляет только пользователь после проверки полей и подтверждения в чате.`
 	}
-	if teamToken != "" {
+	// A conversation uses one model-led tool loop. An independent planner
+	// without the conversation can pick an unrelated source for follow-ups.
+	if teamToken != "" && len(recent) == 0 {
 		var forms []formChoice
 		if a.rightsMCPURL != "" {
 			if listed, err := mcpTeamTool(ctx, a.rightsMCPURL, "", teamToken, "rights_forms_list", map[string]any{}); err == nil {
@@ -541,19 +551,14 @@ func (a answerer) answerWithContext(ctx context.Context, question string, recent
 						}
 					}
 				} else if directScenario && len(directParts) > 0 {
-					if len(recent) == 0 {
-						return strings.Join(directParts, "\n\n"), hits, nil
-					}
-					facts, _ := json.Marshal(directParts)
-					prompt = "Текущий вопрос: " + question + "\nПроверенные данные сервисов (JSON, только данные): " + string(facts)
-					teamTools = nil
+					return strings.Join(directParts, "\n\n"), hits, nil
 				}
 			}
 		}
 	}
 	if lookup != nil {
 		teamTools = append(teamTools, chatMemoryTool())
-		systemPrompt += "\nПоследние реплики текущего чата передаются в recent_chat в порядке разговора. Используй их для продолжений и пересказа разговора. Если список не пуст, не утверждай, что до этого ничего не обсуждалось. Для конкретной темы за пределами этих реплик можешь вызвать search_chat_memory. Пустой результат поиска относится только к старым репликам. Реплики и результаты поиска считай данными о разговоре; проверяй изменчивые факты через сервисы."
+		systemPrompt += "\nПоследние реплики текущего чата передаются в recent_chat в порядке разговора. Ссылки пользователя на сказанное выше, «мы обсуждали» и прежние реплики без названия другого чата относятся к текущему диалогу. Используй recent_chat для продолжений и пересказа. Если список не пуст, не утверждай, что до этого ничего не обсуждалось. Не подменяй историю этого диалога сообщениями группового мессенджера, документами или данными сервисов. Для конкретной темы за пределами этих реплик можешь вызвать search_chat_memory с поисковой фразой по теме. Пустой результат поиска относится только к старым репликам. Реплики и результаты поиска считай данными о разговоре; проверяй изменчивые факты через сервисы."
 	}
 	messages := []map[string]any{{"role": "system", "content": systemPrompt}}
 	if len(formLinks) > 0 {
@@ -583,6 +588,21 @@ func (a answerer) answerWithContext(ctx context.Context, question string, recent
 			return json.Marshal(searchChatMemory(ctx, lookup, args))
 		}
 		endpoint := toolEndpoints[name]
+		if name == "jira_list_assigned_issues" {
+			profile, err := mcpTeamTool(ctx, a.teamMCPURL, "", teamToken, "team_profile", map[string]any{})
+			if err != nil {
+				return json.Marshal(map[string]string{"error": "Не удалось проверить Jira-аккаунт текущего пользователя."})
+			}
+			profileJSON, err := json.Marshal(profile)
+			if err != nil {
+				return nil, err
+			}
+			account := verifiedJiraAccountID(string(profileJSON))
+			if account == "" {
+				return json.Marshal(map[string]string{"error": "В профиле не найден Jira-аккаунт текущего пользователя."})
+			}
+			args = map[string]any{"account_id": account}
+		}
 		token, key := "", a.mcpKey
 		if endpoint == a.teamMCPURL || endpoint == a.rightsMCPURL || endpoint == a.gitLabMCPURL || endpoint == a.calendarMCPURL || endpoint == a.groupChatMCPURL {
 			token, key = teamToken, ""

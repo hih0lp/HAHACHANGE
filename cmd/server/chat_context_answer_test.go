@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hackchange/avito-rag/internal/distributed"
 	"github.com/hackchange/avito-rag/internal/rag"
 )
 
@@ -63,7 +64,8 @@ func TestAnswerUsesRecentChatEvenWhenOlderSearchIsEmpty(t *testing.T) {
 			}
 			service := rag.New(rag.Config{EmbeddingsURL: "http://127.0.0.1:1", QdrantURL: "http://127.0.0.1:1"})
 			a := answerer{service: service, url: model.URL, model: "test"}
-			answer, _, err := a.answerWithContext(context.Background(), "О чём говорили выше?", []chatContextTurn{
+			ctx := distributed.WithTeamToken(context.Background(), "demo-session")
+			answer, _, err := a.answerWithContext(ctx, "О чём говорили выше?", []chatContextTurn{
 				{Question: "Что проверим?", Answer: "Сверим макет."},
 			}, lookup)
 			expectedSearches := 1
