@@ -120,7 +120,7 @@ Classify only what the user requests in the current question. If a reference or 
 - needs_group_chat: messenger history. Add latest_group_messages for newest messages instead of topic search. If the user names a group, copy the group name into chat_group, without quotation marks. Set all_chat_groups only for unscoped requests; never set it when a group name was provided.
 - A request about the user's own chat history does not need external service flags unless it also asks to check current data.
 - Calendar scope: use needs_events for meetings with the mentor, the mentor's schedule and onboarding meetings. Use needs_company_events only for a company-wide event schedule. If the user only asks about meetings with the mentor, set needs_events and leave needs_company_events and needs_team_directory false. For free or busy time use needs_availability. Set nearest_event_only only if the user asks for one event.
-- For a rolling range of upcoming days, copy the requested number into days_ahead as an integer. The server adds it to the current time. Do not convert a rolling range to a calendar week. Use period_kind current_week or next_week only for calendar weeks, not a number of days. For fixed dates use explicit and supply time_min and time_max in RFC3339, in Europe/Moscow. An unspecified future period is upcoming for 30 days. Set historical only for explicitly past events.
+- For a rolling range of upcoming days, copy the requested number into days_ahead as an integer. The server adds it to the current time. Do not convert a rolling range to a calendar week. Use period_kind current_week or next_week only for calendar weeks, not a number of days. For fixed dates use explicit and supply time_min and time_max in RFC3339, in Europe/Moscow. An unspecified period is upcoming for seven days in the mentor calendar and 30 days in the company calendar. Set historical only for explicitly past events.
 Preserve independent intents in compound questions. For general conversation without internal evidence return {}.`
 	plan, err := a.requestPlan(ctx, instruction, map[string]any{"current_time": now.Format(time.RFC3339), "recent_chat": recent, "available_forms": forms, "available_resources": resources, "question": question})
 	if err != nil {
@@ -212,8 +212,12 @@ func normalizeCalendarPlan(plan calendarPlan, now time.Time) (calendarPlan, erro
 		return plan, nil
 	}
 	defaultUpcoming := func() {
+		days := 30
+		if plan.NeedsEvents || plan.NeedsAvailability {
+			days = 7
+		}
 		plan.TimeMin = now.Format(time.RFC3339)
-		plan.TimeMax = now.Add(30 * 24 * time.Hour).Format(time.RFC3339)
+		plan.TimeMax = now.Add(time.Duration(days) * 24 * time.Hour).Format(time.RFC3339)
 	}
 	if plan.PeriodKind == "current_week" || plan.PeriodKind == "next_week" {
 		local := now.In(now.Location())

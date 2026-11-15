@@ -224,6 +224,7 @@ func TestRunBootstrapsService(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "rules.md"), []byte("# Правила"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	indexed := false
 	qdrant := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/collections" {
 			json.NewEncoder(w).Encode(map[string]any{"result": map[string]any{}})
@@ -231,6 +232,15 @@ func TestRunBootstrapsService(t *testing.T) {
 		}
 		if r.URL.Path == "/collections/playbook/points/count" {
 			json.NewEncoder(w).Encode(map[string]any{"result": map[string]any{"count": 1}})
+			return
+		}
+		if r.URL.Path == "/collections/playbook" || r.URL.Path == "/collections/playbook/points/delete" {
+			json.NewEncoder(w).Encode(map[string]any{"result": true})
+			return
+		}
+		if r.URL.Path == "/collections/playbook/points" && r.Method == http.MethodPut {
+			indexed = true
+			json.NewEncoder(w).Encode(map[string]any{"result": true})
 			return
 		}
 		http.NotFound(w, r)
@@ -254,6 +264,9 @@ func TestRunBootstrapsService(t *testing.T) {
 	}
 	if err := run(); !errors.Is(err, want) {
 		t.Fatalf("run error = %v", err)
+	}
+	if !indexed {
+		t.Fatal("startup did not refresh existing document index")
 	}
 }
 

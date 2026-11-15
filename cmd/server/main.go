@@ -51,7 +51,7 @@ func run() error {
 			return fmt.Errorf("dependencies are not ready: %w", err)
 		}
 		if cfg.IndexOnStartup {
-			result, err := service.IndexIfEmpty(ctx)
+			result, err := service.Reindex(ctx)
 			if err != nil {
 				return fmt.Errorf("initial indexing failed: %w", err)
 			}

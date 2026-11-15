@@ -36,12 +36,16 @@ func TestCalendarPlannerDefaultsUnboundedUpcomingRequest(t *testing.T) {
 	loc, _ := time.LoadLocation("Europe/Moscow")
 	now := time.Date(2026, 11, 14, 15, 0, 0, 0, loc)
 	plan, err := normalizeCalendarPlan(calendarPlan{NeedsEvents: true, NeedsJiraIssue: true, JiraIssueKeys: []string{"TASK-7"}}, now)
-	if err != nil || plan.TimeMin != now.Format(time.RFC3339) || plan.TimeMax != now.Add(30*24*time.Hour).Format(time.RFC3339) || !plan.NeedsJiraIssue {
+	if err != nil || plan.TimeMin != now.Format(time.RFC3339) || plan.TimeMax != now.Add(7*24*time.Hour).Format(time.RFC3339) || !plan.NeedsJiraIssue {
 		t.Fatalf("plan=%+v err=%v", plan, err)
 	}
 	partial, err := normalizeCalendarPlan(calendarPlan{NeedsEvents: true, PeriodKind: "upcoming", TimeMin: now.Format(time.RFC3339)}, now)
-	if err != nil || partial.TimeMax != now.Add(30*24*time.Hour).Format(time.RFC3339) {
+	if err != nil || partial.TimeMax != now.Add(7*24*time.Hour).Format(time.RFC3339) {
 		t.Fatalf("partial upcoming plan=%+v err=%v", partial, err)
+	}
+	company, err := normalizeCalendarPlan(calendarPlan{NeedsCompanyEvents: true}, now)
+	if err != nil || company.TimeMax != now.Add(30*24*time.Hour).Format(time.RFC3339) {
+		t.Fatalf("company plan=%+v err=%v", company, err)
 	}
 }
 
