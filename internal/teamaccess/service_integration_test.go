@@ -144,4 +144,29 @@ func TestDirectoryAndRightsFlow(t *testing.T) {
 	call(base, "POST", "/v1/forms", intern, newForm, 403, nil)
 	call(base, "POST", "/v1/forms", approver, newForm, 201, nil)
 	call(base, "POST", "/v1/forms", approver, newForm, 409, nil)
+
+	// A form submission must create exactly one pending access request, even
+	// when the browser retries with a different idempotency key.
+	if _, err := rights.DB.Exec(ctx, `INSERT INTO ta_resources(id,team_id,kind,name,capabilities,approver_id) VALUES('demo-docs','demo-team','document','Documents',ARRAY['read'],'approver')`); err != nil {
+		t.Fatal(err)
+	}
+	call(base, "GET", "/v1/access-requests?limit=0", intern, "", 400, nil)
+	call(base, "GET", "/v1/access-requests?offset=-1", intern, "", 400, nil)
+	call(base, "POST", "/v1/access/check", intern, `{"resource_id":"missing","capability":"read"}`, 404, nil)
+	call(base, "POST", "/v1/access/check", intern, `{"resource_id":"demo-docs","capability":"read"}`, 200, nil)
+	call(base, "POST", "/v1/access-requests", intern, `{"resource_id":"demo-docs","capability":"read","reason":"Need docs","confirmed":false}`, 400, map[string]string{"Idempotency-Key": "docs-key-1"})
+	formAccess := `{"values":{"resource_id":"demo-docs","capability":"read","reason":"Need docs"},"confirmed":true,"version":1}`
+	access := call(base, "POST", "/v1/forms/access-request/submit", intern, formAccess, 201, map[string]string{"Idempotency-Key": "docs-form-key-1"})
+	accessID := access["id"].(string)
+	call(base, "POST", "/v1/forms/access-request/submit", intern, formAccess, 200, map[string]string{"Idempotency-Key": "docs-form-key-2"})
+	call(base, "POST", "/v1/access/check", intern, `{"resource_id":"demo-docs","capability":"read"}`, 200, nil)
+	call(base, "GET", "/v1/access-requests?form_id=access-request&limit=1", intern, "", 200, nil)
+	call(base, "POST", "/v1/access-requests", intern, `{"resource_id":"demo-docs","capability":"read","reason":"Changed reason","confirmed":true}`, 409, map[string]string{"Idempotency-Key": "docs-form-key-1"})
+	call(base, "POST", "/v1/access-requests/"+accessID+"/decision", approver, `{"decision":"bad"}`, 400, nil)
+	call(base, "POST", "/v1/access-requests/"+accessID+"/decision", approver, `{"decision":"reject","comment":"Please clarify"}`, 200, nil)
+	check := call(base, "POST", "/v1/access/check", intern, `{"resource_id":"demo-docs","capability":"read"}`, 200, nil)
+	if check["state"] != "missing" {
+		t.Fatalf("rejected request granted access: %v", check)
+	}
+	call(base, "POST", "/v1/access-requests", intern, `{"resource_id":"demo-calendar","capability":"read","reason":"Already granted","confirmed":true}`, 409, map[string]string{"Idempotency-Key": "granted-key-1"})
 }

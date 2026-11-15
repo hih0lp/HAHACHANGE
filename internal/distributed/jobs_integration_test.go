@@ -2,6 +2,7 @@ package distributed_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,44 @@ import (
 	"github.com/hackchange/avito-rag/internal/testsupport"
 	"github.com/jackc/pgx/v5"
 )
+
+func TestSubmitContextAndExpiredLeaseRecovery(t *testing.T) {
+	s, ctx := jobSystem(t)
+	job, err := s.SubmitWithContext(ctx, "browser:intern", "general", "context question", json.RawMessage(`{"jira_account_id":"first"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var account string
+	if err := s.DB.QueryRow(ctx, `SELECT team_context->>'jira_account_id' FROM ai_jobs WHERE id=$1`, job.ID).Scan(&account); err != nil || account != "first" {
+		t.Fatalf("stored team context=%q err=%v", account, err)
+	}
+	if err := s.RequeueExpired(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.Exec(ctx, `UPDATE ai_jobs SET status='running', lease_until=now()-interval '1 minute' WHERE id=$1`, job.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.Exec(ctx, `UPDATE ai_job_outbox SET published_at=now() WHERE job_id=$1`, job.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RequeueExpired(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var status string
+	var published bool
+	if err := s.DB.QueryRow(ctx, `SELECT j.status, o.published_at IS NOT NULL FROM ai_jobs j JOIN ai_job_outbox o ON o.job_id=j.id WHERE j.id=$1`, job.ID).Scan(&status, &published); err != nil || status != "queued" || published {
+		t.Fatalf("lease recovery: status=%q published=%v err=%v", status, published, err)
+	}
+	if err := s.PublishPending(ctx); err == nil {
+		t.Fatal("missing Kafka writer was accepted")
+	}
+	if err := s.Work(ctx, func(context.Context, string) (string, any, error) { return "", nil, nil }, time.Second); err == nil {
+		t.Fatal("missing Kafka reader was accepted")
+	}
+	if _, err := s.Submit(ctx, "browser:intern", "general", "another question"); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func jobSystem(t *testing.T) (*distributed.System, context.Context) {
 	t.Helper()
