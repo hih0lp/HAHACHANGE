@@ -142,6 +142,11 @@ func serveMock() error {
 		return err
 	}
 	cancel()
+	mux := newMockGitLabHandler(dataset, os.Getenv("TEAM_DIRECTORY_URL"), "http://127.0.0.1:8080")
+	return (&http.Server{Addr: ":8080", Handler: mux, ReadHeaderTimeout: 5 * time.Second}).ListenAndServe()
+}
+
+func newMockGitLabHandler(dataset *mockfixture.Dataset, directory, selfURL string) http.Handler {
 	read := func(ctx context.Context) (mockData, error) {
 		if dataset == nil {
 			return defaultMockData(), nil
@@ -152,11 +157,10 @@ func serveMock() error {
 		}
 		return parseMockData(data)
 	}
-	directory := os.Getenv("TEAM_DIRECTORY_URL")
 	if directory == "" {
 		directory = "http://team-access:8080"
 	}
-	b := bridge{gitlab: "http://127.0.0.1:8080", directory: directory, mock: true, client: &http.Client{
+	b := bridge{gitlab: selfURL, directory: directory, mock: true, client: &http.Client{
 		Timeout: 8 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}}
 	mux := http.NewServeMux()
@@ -175,7 +179,7 @@ func serveMock() error {
 	mux.HandleFunc("GET /api/v4/", func(w http.ResponseWriter, r *http.Request) {
 		serveMockGitLab(w, r, read)
 	})
-	return (&http.Server{Addr: ":8080", Handler: mux, ReadHeaderTimeout: 5 * time.Second}).ListenAndServe()
+	return mux
 }
 
 func mockGitLab(w http.ResponseWriter, r *http.Request) {
