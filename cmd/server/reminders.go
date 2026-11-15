@@ -24,11 +24,13 @@ type reminderConfig struct {
 }
 
 type reminder struct {
-	URL     string    `json:"url"`
-	ID      string    `json:"id"`
-	Key     string    `json:"key"`
-	Summary string    `json:"summary"`
-	DueAt   time.Time `json:"due_at"`
+	URL      string    `json:"url"`
+	ID       string    `json:"id"`
+	Key      string    `json:"key"`
+	Summary  string    `json:"summary"`
+	DueAt    time.Time `json:"due_at"`
+	Status   string    `json:"status,omitempty"`
+	DateOnly bool      `json:"date_only,omitempty"`
 }
 
 type reminderSnapshot struct {
@@ -59,6 +61,10 @@ func loadReminders(ctx context.Context, jira jiraConfig, cfg reminderConfig, now
 }
 
 func loadRemindersWindow(ctx context.Context, jira jiraConfig, cfg reminderConfig, now time.Time, window time.Duration) (reminderSnapshot, error) {
+	return loadJiraTasks(ctx, jira, cfg, now, window, false)
+}
+
+func loadJiraTasks(ctx context.Context, jira jiraConfig, cfg reminderConfig, now time.Time, window time.Duration, all bool) (reminderSnapshot, error) {
 	result := reminderSnapshot{Reminders: []reminder{}}
 	if jira.Mode != "mock" || strings.TrimSpace(cfg.InternAccountID) == "" {
 		result.Message = "Напоминания выключены: укажите Jira accountId стажёра и подключите мок Jira."
@@ -81,6 +87,7 @@ func loadRemindersWindow(ctx context.Context, jira jiraConfig, cfg reminderConfi
 					AccountID string `json:"accountId"`
 				} `json:"assignee"`
 				Status struct {
+					Name     string `json:"name"`
 					Category struct {
 						Key string `json:"key"`
 					} `json:"statusCategory"`
@@ -92,14 +99,20 @@ func loadRemindersWindow(ctx context.Context, jira jiraConfig, cfg reminderConfi
 		return result, err
 	}
 	for _, issue := range raw.Issues {
-		if issue.Fields.Assignee.AccountID != cfg.InternAccountID || issue.Fields.Status.Category.Key == "done" || (issue.Fields.DueDate == "" && issue.Fields.DueAt == "") {
+		if issue.Fields.Assignee.AccountID != cfg.InternAccountID {
 			continue
 		}
 		due, err := reminderDeadline(issue.Fields.DueAt, issue.Fields.DueDate, zone)
-		if err != nil || !deadlineWindow(now, due, window) {
+		if !all && (err != nil || issue.Fields.Status.Category.Key == "done" || !deadlineWindow(now, due, window)) {
 			continue
 		}
-		result.Reminders = append(result.Reminders, reminder{ID: issue.Key + ":" + due.Format(time.RFC3339), Key: issue.Key, Summary: issue.Fields.Summary, DueAt: due})
+		item := reminder{ID: issue.Key + ":" + due.Format(time.RFC3339), Key: issue.Key, Summary: issue.Fields.Summary, DueAt: due}
+		if all {
+			item.ID = issue.Key
+			item.Status = issue.Fields.Status.Name
+			item.DateOnly = issue.Fields.DueAt == "" && !due.IsZero()
+		}
+		result.Reminders = append(result.Reminders, item)
 	}
 	return result, nil
 }
@@ -150,11 +163,10 @@ func registerJiraTasks(mux *http.ServeMux, apiKey string, jira jiraConfig, cfg r
 		}
 		delete(accounts, "")
 		result := reminderSnapshot{Reminders: []reminder{}}
-		now := time.Now()
 		for account := range accounts {
 			taskConfig := cfg
 			taskConfig.InternAccountID = account
-			snapshot, err := loadReminders(ctx, jira, taskConfig, now)
+			snapshot, err := loadJiraTasks(ctx, jira, taskConfig, time.Time{}, 0, true)
 			if err != nil {
 				writeError(w, http.StatusBadGateway, errText("Не удалось проверить задачи Jira"))
 				return
@@ -167,10 +179,25 @@ func registerJiraTasks(mux *http.ServeMux, apiKey string, jira jiraConfig, cfg r
 			if a.DueAt.Equal(b.DueAt) {
 				return a.Key < b.Key
 			}
+			if a.DueAt.IsZero() || b.DueAt.IsZero() {
+				return !a.DueAt.IsZero()
+			}
 			return a.DueAt.Before(b.DueAt)
 		})
 		w.Header().Set("Cache-Control", "no-store")
-		writeJSON(w, http.StatusOK, result)
+		type task struct {
+			reminder
+			DueAt *time.Time `json:"due_at,omitempty"`
+		}
+		tasks := make([]task, 0, len(result.Reminders))
+		for _, item := range result.Reminders {
+			entry := task{reminder: item}
+			if !item.DueAt.IsZero() {
+				entry.DueAt = &item.DueAt
+			}
+			tasks = append(tasks, entry)
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"enabled": result.Enabled, "reminders": tasks})
 	})))
 }
 

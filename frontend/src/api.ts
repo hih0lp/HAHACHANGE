@@ -93,8 +93,8 @@ export const api = {
     request<{ valid: boolean }>(formPath(id) + '/validate', { ...auth, body: { version, values } }),
   submit: (id: string, version: number, values: Values, idem: string, auth: Auth) =>
     request<Receipt>(formPath(id) + '/submit', { ...auth, idem, body: { version, values, confirmed: true } }),
-  jira: (auth: Auth) => request<{ enabled: boolean; reminders: Reminder[] }>('/v1/tasks/jira', auth),
-  calendar: (auth: Auth) => request<{ data?: { items?: CalendarEvent[] } }>('/v1/calendar/reminders', auth),
+  jira: (auth: Auth) => request<{ enabled: boolean; reminders: (Omit<Reminder, 'due_at'> & { due_at?: string; date_only?: boolean; status?: string })[] }>('/v1/tasks/jira', auth),
+  calendar: (auth: Auth) => request<{ data?: { items?: CalendarEvent[] } }>('/v1/calendar/events', auth),
 };
 
 export function errorText(error: unknown, fallback: string) {

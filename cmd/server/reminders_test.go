@@ -46,7 +46,7 @@ func TestJiraTasksByTeamProfile(t *testing.T) {
 					continue
 				}
 				issues = append(issues, map[string]any{"key": key, "fields": map[string]any{
-					"summary": key, "due_at": now.Add(time.Hour).Format(time.RFC3339),
+					"summary": key, "due_at": now.Add(72 * time.Hour).Format(time.RFC3339),
 					"assignee": map[string]string{"accountId": account},
 				}})
 			}

@@ -32,4 +32,18 @@ func registerCalendarReminderRoute(mux *http.ServeMux, endpoint string) {
 		w.Header().Set("Cache-Control", "no-store")
 		writeJSON(w, http.StatusOK, result)
 	})
+	mux.HandleFunc("GET /v1/calendar/events", func(w http.ResponseWriter, r *http.Request) {
+		bearer, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if !ok || bearer == "" {
+			writeError(w, http.StatusUnauthorized, errText("team session required"))
+			return
+		}
+		result, err := mcpTeamTool(r.Context(), endpoint, "", bearer, "calendar_onboarding_events", map[string]any{})
+		if err != nil {
+			writeError(w, http.StatusServiceUnavailable, errText("calendar events unavailable"))
+			return
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		writeJSON(w, http.StatusOK, result)
+	})
 }

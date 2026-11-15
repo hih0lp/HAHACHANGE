@@ -37,8 +37,8 @@ type fixture struct {
 	Events     []event `json:"events"`
 }
 type query struct {
-	TimeMin string `json:"time_min"`
-	TimeMax string `json:"time_max"`
+	TimeMin string `json:"time_min,omitempty"`
+	TimeMax string `json:"time_max,omitempty"`
 }
 
 func load(path string) (fixture, error) {
@@ -84,7 +84,7 @@ func selectEvents(f fixture, a, b time.Time) []event {
 	for _, v := range f.Events {
 		start, _ := time.Parse(time.RFC3339, v.Start.DateTime)
 		end, _ := time.Parse(time.RFC3339, v.End.DateTime)
-		if start.Before(b) && end.After(a) && v.Status != "cancelled" {
+		if v.Status != "cancelled" && (b.IsZero() || start.Before(b) && end.After(a)) {
 			out = append(out, v)
 		}
 	}
@@ -105,9 +105,13 @@ func main() {
 	for _, tool := range []struct{ name, description string }{{"calendar_onboarding_events", "Fetch scheduled events from the mentor calendar for a bounded RFC3339 range."}, {"calendar_mentor_freebusy", "Fetch busy intervals from the same mentor calendar; does not identify event titles."}} {
 		tool := tool
 		mcp.AddTool(server, &mcp.Tool{Name: tool.name, Description: tool.description}, func(_ context.Context, _ *mcp.CallToolRequest, q query) (*mcp.CallToolResult, map[string]any, error) {
-			a, b, e := rangeQuery(q)
-			if e != nil {
-				return nil, nil, e
+			var a, b time.Time
+			if tool.name != "calendar_onboarding_events" || q.TimeMin != "" || q.TimeMax != "" {
+				var err error
+				a, b, err = rangeQuery(q)
+				if err != nil {
+					return nil, nil, err
+				}
 			}
 			f, e := load(path)
 			if e != nil {

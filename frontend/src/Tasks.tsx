@@ -23,8 +23,9 @@ export function Tasks({ token, apiKey, onProfile }: { token: string; apiKey: str
         const result = await api.jira(auth);
         if (!result.enabled) return { state: 'error', message: 'Jira не подключена для этого профиля.' } as const;
         return { state: 'ready', items: result.reminders.map(item => ({
-          id: item.id, title: item.key + ' · ' + item.summary, href: item.url, status: 'Скоро дедлайн',
-          date: new Date(Date.parse(item.due_at) - 1).toISOString(), dateOnly: true,
+          id: item.id, title: item.key + ' · ' + item.summary, href: item.url, status: item.status || 'Задача',
+          date: item.due_at && item.date_only ? new Date(Date.parse(item.due_at) - 1).toISOString() : item.due_at,
+          dateOnly: item.date_only,
         })) } as const;
       },
       Календарь: async () => {
@@ -60,7 +61,7 @@ export function Tasks({ token, apiKey, onProfile }: { token: string; apiKey: str
 
   return <div className="section-page">
     <header className="page-intro"><div className="page-symbol lavender"><Icon name="tasks"/></div><h1>Мои задачи</h1>
-      <p>Ближайшие дедлайны и события календаря.</p>
+      <p>Назначенные задачи Jira и события календаря.</p>
     </header>
     {!token ? <Notice action={<button className="button secondary" onClick={onProfile}>Открыть профиль</button>}>Для просмотра задач нужна демо-сессия.</Notice> : <>
       <div className="tasks-toolbar"><span>Время событий указано по Москве</span><button className="button secondary" onClick={() => setReload(value => value + 1)}>Обновить</button></div>
@@ -75,7 +76,7 @@ export function Tasks({ token, apiKey, onProfile }: { token: string; apiKey: str
               <External href={item.href}>{item.title}</External>
               <span className="pill">{item.status}</span>
               <div className="muted"><Stamp value={item.date} dateOnly={item.dateOnly}/></div>
-            </li>)}</ul> : <p className="muted">Ближайших действий нет.</p>)}
+            </li>)}</ul> : <p className="muted">Список пуст.</p>)}
           </section>;
         })}
       </div>

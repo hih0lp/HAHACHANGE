@@ -12,13 +12,16 @@ import (
 )
 
 type calendarReminderArgs struct {
-	TimeMin string `json:"time_min"`
-	TimeMax string `json:"time_max"`
+	TimeMin string `json:"time_min,omitempty"`
+	TimeMax string `json:"time_max,omitempty"`
 }
 
 func TestCalendarReminderRouteUsesBearerAndNextDay(t *testing.T) {
 	server := mcp.NewServer(&mcp.Implementation{Name: "fixture", Version: "1"}, nil)
 	mcp.AddTool(server, &mcp.Tool{Name: "calendar_onboarding_events"}, func(_ context.Context, _ *mcp.CallToolRequest, in calendarReminderArgs) (*mcp.CallToolResult, map[string]any, error) {
+		if in.TimeMin == "" && in.TimeMax == "" {
+			return nil, map[string]any{"data": map[string]any{"items": []map[string]any{{"summary": "this week"}, {"summary": "next month"}}}}, nil
+		}
 		start, e1 := time.Parse(time.RFC3339, in.TimeMin)
 		end, e2 := time.Parse(time.RFC3339, in.TimeMax)
 		if e1 != nil || e2 != nil || end.Sub(start) != 24*time.Hour {
@@ -55,5 +58,12 @@ func TestCalendarReminderRouteUsesBearerAndNextDay(t *testing.T) {
 	}
 	if reply.Code != http.StatusOK || json.Unmarshal(reply.Body.Bytes(), &result) != nil || len(result.Data.Items) != 1 {
 		t.Fatalf("unexpected calendar response: %d %s", reply.Code, reply.Body.String())
+	}
+	req = httptest.NewRequest(http.MethodGet, "/v1/calendar/events", nil)
+	req.Header.Set("Authorization", "Bearer allowed")
+	reply = httptest.NewRecorder()
+	mux.ServeHTTP(reply, req)
+	if reply.Code != http.StatusOK || json.Unmarshal(reply.Body.Bytes(), &result) != nil || len(result.Data.Items) != 2 {
+		t.Fatalf("unexpected calendar list: %d %s", reply.Code, reply.Body.String())
 	}
 }
