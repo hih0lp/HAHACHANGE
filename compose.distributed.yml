@@ -250,6 +250,7 @@ services:
     environment:
       MOCK_JIRA_JSON: /fixtures/jira.json
       MOCK_LISTEN: :8080
+      TEAM_DIRECTORY_URL: http://team-access:8080
     volumes:
       - ./fixtures/mock/jira.json:/fixtures/jira.json:ro
 

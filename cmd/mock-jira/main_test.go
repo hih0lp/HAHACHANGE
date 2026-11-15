@@ -1,10 +1,69 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/hackchange/avito-rag/internal/scenario"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+type bearerTransport struct{ token string }
+
+func (t bearerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	copy := r.Clone(r.Context())
+	copy.Header.Set("Authorization", "Bearer "+t.token)
+	return http.DefaultTransport.RoundTrip(copy)
+}
+
+func TestMockJiraScopesMCPToJWTAccount(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "jira.json")
+	data := `{"project_key":"SCRUM","issues":[{"key":"SCRUM-1","summary":"First","status":"Open","assignee_account_id":"first"},{"key":"SCRUM-2","summary":"Second","status":"Open","assignee_account_id":"second"}]}`
+	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	team := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/me" || r.Header.Get("Authorization") != "Bearer intern2" {
+			http.Error(w, "invalid token", http.StatusUnauthorized)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]string{"id": "intern2", "jira_account_id": "second"})
+	}))
+	defer team.Close()
+	jira := httptest.NewServer(newMockJiraHandler(path, scenario.Client{BaseURL: team.URL}))
+	defer jira.Close()
+	request, _ := http.NewRequest(http.MethodPost, jira.URL+"/mcp", nil)
+	response, err := http.DefaultClient.Do(request)
+	if err != nil || response.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("missing token response=%v error=%v", response, err)
+	}
+	response.Body.Close()
+	client := mcp.NewClient(&mcp.Implementation{Name: "jira-test", Version: "1"}, nil)
+	transport := &mcp.StreamableClientTransport{Endpoint: jira.URL + "/mcp", HTTPClient: &http.Client{Transport: bearerTransport{token: "intern2"}}}
+	session, err := client.Connect(context.Background(), transport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "jira_list_issues", Arguments: map[string]any{}})
+	if err != nil || result.IsError {
+		t.Fatalf("list failed: %+v %v", result, err)
+	}
+	encoded, _ := json.Marshal(result.StructuredContent)
+	if !strings.Contains(string(encoded), "SCRUM-2") || strings.Contains(string(encoded), "SCRUM-1") {
+		t.Fatalf("unscoped list: %s", encoded)
+	}
+	result, err = session.CallTool(context.Background(), &mcp.CallToolParams{Name: "jira_get_issue", Arguments: map[string]any{"key": "SCRUM-1"}})
+	if err == nil && !result.IsError {
+		t.Fatal("other intern's issue was readable")
+	}
+}
 
 func TestFixtureReloadAndPersonalList(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "jira.json")
@@ -38,6 +97,19 @@ func TestFixtureReloadAndPersonalList(t *testing.T) {
 	}
 	if _, e = load(path); e == nil {
 		t.Fatal("invalid JSON accepted")
+	}
+}
+
+func TestSeedFixtureInternAssignments(t *testing.T) {
+	fixture, err := load("../../fixtures/mock/jira.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for account, expected := range map[string]int{"demo-intern": 4, "demo-intern2": 3, "demo-colleague-alina": 1, "demo-colleague-roman": 1} {
+		issues := list(fixture, account, 50)["issues"].([]any)
+		if len(issues) != expected {
+			t.Errorf("%s has %d issues, expected %d", account, len(issues), expected)
+		}
 	}
 }
 

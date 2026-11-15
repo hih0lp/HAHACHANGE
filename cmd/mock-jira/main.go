@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/hackchange/avito-rag/internal/mockfixture"
+	"github.com/hackchange/avito-rag/internal/scenario"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -41,6 +42,7 @@ type assigneeArg struct {
 	AccountID string `json:"account_id"`
 }
 type emptyArg struct{}
+type jiraAccountKey struct{}
 
 var keyPattern = regexp.MustCompile(`^[A-Z][A-Z0-9_]*-[0-9]+$`)
 
@@ -139,25 +141,36 @@ func main() {
 	if path == "" {
 		log.Fatal("MOCK_JIRA_JSON is required")
 	}
+	mux := newMockJiraHandler(path, scenario.Client{BaseURL: os.Getenv("TEAM_DIRECTORY_URL")})
+	listen := os.Getenv("MOCK_LISTEN")
+	if listen == "" {
+		listen = "127.0.0.1:8080"
+	}
+	log.Fatal(http.ListenAndServe(listen, mux))
+}
+
+func newMockJiraHandler(path string, team scenario.Client) http.Handler {
 	server := mcp.NewServer(&mcp.Implementation{Name: "bobby-mock-jira", Version: "1.0.0"}, nil)
-	mcp.AddTool(server, &mcp.Tool{Name: "jira_list_issues", Description: "Discover recently updated issues in the configured project; fetch detail for description and start date."}, func(_ context.Context, _ *mcp.CallToolRequest, _ emptyArg) (*mcp.CallToolResult, any, error) {
+	mcp.AddTool(server, &mcp.Tool{Name: "jira_list_issues", Description: "List issues assigned to the signed-in user in the configured project."}, func(ctx context.Context, _ *mcp.CallToolRequest, _ emptyArg) (*mcp.CallToolResult, any, error) {
 		f, e := load(path)
 		if e != nil {
 			return nil, nil, e
 		}
-		return nil, list(f, "", 10), nil
+		account, _ := ctx.Value(jiraAccountKey{}).(string)
+		return nil, list(f, account, 10), nil
 	})
-	mcp.AddTool(server, &mcp.Tool{Name: "jira_list_assigned_issues", Description: "Find issues assigned to a verified Jira accountId in the configured project."}, func(_ context.Context, _ *mcp.CallToolRequest, a assigneeArg) (*mcp.CallToolResult, any, error) {
+	mcp.AddTool(server, &mcp.Tool{Name: "jira_list_assigned_issues", Description: "Find issues assigned to the signed-in user."}, func(ctx context.Context, _ *mcp.CallToolRequest, a assigneeArg) (*mcp.CallToolResult, any, error) {
 		f, e := load(path)
 		if e != nil {
 			return nil, nil, e
 		}
-		if a.AccountID == "" {
-			return nil, nil, errors.New("account_id is required")
+		account, _ := ctx.Value(jiraAccountKey{}).(string)
+		if a.AccountID != "" && a.AccountID != account {
+			return nil, nil, errors.New("account_id does not match signed-in user")
 		}
-		return nil, list(f, a.AccountID, 50), nil
+		return nil, list(f, account, 50), nil
 	})
-	mcp.AddTool(server, &mcp.Tool{Name: "jira_get_issue", Description: "Fetch authoritative issue title, status, description, due date, start date, assignee and URL."}, func(_ context.Context, _ *mcp.CallToolRequest, a keyArg) (*mcp.CallToolResult, any, error) {
+	mcp.AddTool(server, &mcp.Tool{Name: "jira_get_issue", Description: "Fetch an assigned issue's title, status, description, dates, assignee and URL."}, func(ctx context.Context, _ *mcp.CallToolRequest, a keyArg) (*mcp.CallToolResult, any, error) {
 		f, e := load(path)
 		if e != nil {
 			return nil, nil, e
@@ -165,10 +178,13 @@ func main() {
 		v, e := find(f, a.Key)
 		if e != nil {
 			return nil, nil, e
+		}
+		if account, _ := ctx.Value(jiraAccountKey{}).(string); v.AssigneeAccountID != account {
+			return nil, nil, errors.New("issue is not assigned to signed-in user")
 		}
 		return nil, v, nil
 	})
-	mcp.AddTool(server, &mcp.Tool{Name: "jira_get_issue_fields", Description: "Fetch nonempty Jira fields with display names and IDs."}, func(_ context.Context, _ *mcp.CallToolRequest, a keyArg) (*mcp.CallToolResult, any, error) {
+	mcp.AddTool(server, &mcp.Tool{Name: "jira_get_issue_fields", Description: "Fetch an assigned issue's nonempty fields."}, func(ctx context.Context, _ *mcp.CallToolRequest, a keyArg) (*mcp.CallToolResult, any, error) {
 		f, e := load(path)
 		if e != nil {
 			return nil, nil, e
@@ -176,6 +192,9 @@ func main() {
 		v, e := find(f, a.Key)
 		if e != nil {
 			return nil, nil, e
+		}
+		if account, _ := ctx.Value(jiraAccountKey{}).(string); v.AssigneeAccountID != account {
+			return nil, nil, errors.New("issue is not assigned to signed-in user")
 		}
 		return nil, map[string]any{"key": v.Key, "fields": issueFields(v)}, nil
 	})
@@ -187,7 +206,20 @@ func main() {
 		}
 		return err
 	})
-	mux.Handle("/mcp", mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true}))
+	stream := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
+	mux.HandleFunc("/mcp", func(w http.ResponseWriter, r *http.Request) {
+		token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if !ok || token == "" {
+			http.Error(w, "Bearer token required", http.StatusUnauthorized)
+			return
+		}
+		profile, err := team.Profile(r.Context(), token)
+		if err != nil || profile.JiraAccountID == "" {
+			http.Error(w, "Invalid identity or Jira account", http.StatusUnauthorized)
+			return
+		}
+		stream.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), jiraAccountKey{}, profile.JiraAccountID)))
+	})
 	mux.HandleFunc("GET /rest/api/3/issue/{key}", func(w http.ResponseWriter, r *http.Request) {
 		f, e := load(path)
 		if e != nil {
@@ -232,9 +264,5 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{"issues": items})
 	})
-	listen := os.Getenv("MOCK_LISTEN")
-	if listen == "" {
-		listen = "127.0.0.1:8080"
-	}
-	log.Fatal(http.ListenAndServe(listen, mux))
+	return mux
 }

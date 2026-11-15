@@ -1,71 +1,119 @@
 {
-    "project_key":  "SCRUM",
-    "issues":  [
-                   {
-                       "key":  "SCRUM-7",
-                       "summary":  "\\лоывраолвырлоарволарол",
-                       "status":  "В работе",
-                       "status_category":  "indeterminate",
-                       "description":  "",
-                       "due_date":  "2026-11-13",
-                       "start_date":  "2026-11-10",
-                       "assignee_account_id":  "712020:dac8b504-c5af-48c6-961f-501520b7615d",
-                       "assignee_name":  "Gapshin Mihail"
-                   },
-                   {
-                       "key":  "SCRUM-6",
-                       "summary":  "тестова бля задача",
-                       "status":  "К выполнению",
-                       "status_category":  "new",
-                       "description":  ""
-                   },
-                   {
-                       "key":  "SCRUM-5",
-                       "summary":  "Hack\u0026Change: тестовая заявка на доступ к Учебное пространство команды",
-                       "status":  "К выполнению",
-                       "status_category":  "new",
-                       "description":  "Hack\u0026Change — тестовая заявка на доступ. Это демонстрация, а не заявка в корпоративную систему Авито.\nЗапрошенный ресурс: учебное пространство команды.\nПричина: проверка сценария AI-buddy на хакатоне.\nОжидаемый результат: проверить учебный запрос и зафиксировать решение в этой задаче. Создание задачи само по себе не выдаёт доступ."
-                   },
-                   {
-                       "key":  "SCRUM-2",
-                       "summary":  "Задача 2",
-                       "status":  "В работе",
-                       "status_category":  "indeterminate",
-                       "description":  "Цель: проверить сквозной сценарий онбординга стажёра в учебном AI-buddy.\nРаботы: отвечать по базе знаний с источниками; обрабатывать запросы параллельно через очередь и WebSocket; по явному подтверждению создавать тестовую заявку на доступ в Jira.\nКритерий готовности: интерфейс показывает ответ, источники, ключ и статус Jira-задачи; результат сохраняется после перезапуска; тесты проходят с покрытием выше 80%.",
-                       "due_date":  "2026-11-14"
-                   },
-                   {
-                       "key":  "SCRUM-1",
-                       "summary":  "Задача 1",
-                       "status":  "К выполнению",
-                       "status_category":  "new",
-                       "description":  "Цель: подготовить открытую базу знаний для учебного AI-buddy Hack\u0026Change.\nРаботы: индексировать AvitoTech Playbook и выдержку из открытого чек-листа стажёра в Qdrant; обеспечить поиск с названиями и ссылками на источники; описать запуск в README.\nКритерий готовности: поиск возвращает релевантные фрагменты с источниками; закрытые данные и внутренние правила Авито не используются.",
-                       "due_date":  "2026-11-09"
-                   },
-                   {
-                       "key":  "SCRUM-4",
-                       "summary":  "Подзадача 2.1",
-                       "status":  "К выполнению",
-                       "status_category":  "new",
-                       "description":  ""
-                   },
-                   {
-                       "key":  "SCRUM-3",
-                       "summary":  "Задача 3",
-                       "status":  "В работе",
-                       "status_category":  "indeterminate",
-                       "description":  ""
-                   },
-                   {
-                       "key":  "SCRUM-8",
-                       "summary":  "Проверка напоминаний перед сроком",
-                       "status":  "В работе",
-                       "status_category":  "indeterminate",
-                       "description":  "Учебная задача для проверки уведомлений стажёру и наставнику.",
-                       "due_date":  "2026-11-14",
-                       "due_at":  "2026-11-14T23:06:03+03:00",
-                       "assignee_account_id":  "712020:dac8b504-c5af-48c6-961f-501520b7615d",
-                       "assignee_name":  "Gapshin Mihail"
-                   }
-               ]
+  "project_key": "SCRUM",
+  "issues": [
+    {
+      "key": "SCRUM-9",
+      "summary": "Демо: проверить форму заявки на доступ",
+      "status": "К выполнению",
+      "status_category": "new",
+      "description": "Проверить поля формы на тестовом стенде и записать результат.",
+      "start_date": "2026-11-16",
+      "due_date": "2026-11-17",
+      "due_at": "2026-11-17T17:00:00+03:00",
+      "assignee_account_id": "demo-intern",
+      "assignee_name": "Стажёр 1"
+    },
+    {
+      "key": "SCRUM-10",
+      "summary": "Демо: проверить календарь Бобби",
+      "status": "К выполнению",
+      "status_category": "new",
+      "description": "Проверить, что под ролью второго стажёра видны запланированные события.",
+      "start_date": "2026-11-16",
+      "due_date": "2026-11-17",
+      "due_at": "2026-11-17T18:00:00+03:00",
+      "assignee_account_id": "demo-intern2",
+      "assignee_name": "Стажёр 2"
+    },
+    {
+      "key": "SCRUM-7",
+      "summary": "Изучить сценарий онбординга",
+      "status": "В работе",
+      "status_category": "indeterminate",
+      "description": "",
+      "due_date": "2026-11-13",
+      "start_date": "2026-11-10",
+      "assignee_account_id": "demo-intern",
+      "assignee_name": "Стажёр 1"
+    },
+    {
+      "key": "SCRUM-6",
+      "summary": "Проверить каталог учебных материалов",
+      "status": "К выполнению",
+      "status_category": "new",
+      "description": "",
+      "assignee_account_id": "demo-intern",
+      "assignee_name": "Стажёр 1"
+    },
+    {
+      "key": "SCRUM-5",
+      "summary": "Hack&Change: тестовая заявка на доступ к Учебное пространство команды",
+      "status": "К выполнению",
+      "status_category": "new",
+      "description": "Hack&Change — тестовая заявка на доступ. Это демонстрация, а не заявка в корпоративную систему Авито.\nЗапрошенный ресурс: учебное пространство команды.\nПричина: проверка сценария AI-buddy на хакатоне.\nОжидаемый результат: проверить учебный запрос и зафиксировать решение в этой задаче. Создание задачи само по себе не выдаёт доступ.",
+      "assignee_account_id": "demo-intern2",
+      "assignee_name": "Стажёр 2"
+    },
+    {
+      "key": "SCRUM-2",
+      "summary": "Задача 2",
+      "status": "В работе",
+      "status_category": "indeterminate",
+      "description": "Цель: проверить сквозной сценарий онбординга стажёра в учебном AI-buddy.\nРаботы: отвечать по базе знаний с источниками; обрабатывать запросы параллельно через очередь и WebSocket; по явному подтверждению создавать тестовую заявку на доступ в Jira.\nКритерий готовности: интерфейс показывает ответ, источники, ключ и статус Jira-задачи; результат сохраняется после перезапуска; тесты проходят с покрытием выше 80%.",
+      "due_date": "2026-11-14"
+    },
+    {
+      "key": "SCRUM-1",
+      "summary": "Задача 1",
+      "status": "К выполнению",
+      "status_category": "new",
+      "description": "Цель: подготовить открытую базу знаний для учебного AI-buddy Hack&Change.\nРаботы: индексировать AvitoTech Playbook и выдержку из открытого чек-листа стажёра в Qdrant; обеспечить поиск с названиями и ссылками на источники; описать запуск в README.\nКритерий готовности: поиск возвращает релевантные фрагменты с источниками; закрытые данные и внутренние правила Авито не используются.",
+      "due_date": "2026-11-09"
+    },
+    {
+      "key": "SCRUM-4",
+      "summary": "Подзадача 2.1",
+      "status": "К выполнению",
+      "status_category": "new",
+      "description": "",
+      "assignee_account_id": "demo-intern2",
+      "assignee_name": "Стажёр 2"
+    },
+    {
+      "key": "SCRUM-3",
+      "summary": "Задача 3",
+      "status": "В работе",
+      "status_category": "indeterminate",
+      "description": ""
+    },
+    {
+      "key": "SCRUM-8",
+      "summary": "Проверка напоминаний перед сроком",
+      "status": "В работе",
+      "status_category": "indeterminate",
+      "description": "Учебная задача для проверки уведомлений стажёру и наставнику.",
+      "due_date": "2026-11-14",
+      "due_at": "2026-11-14T23:06:03+03:00",
+      "assignee_account_id": "demo-intern",
+      "assignee_name": "Стажёр 1"
+    },
+    {
+      "key": "SCRUM-11",
+      "summary": "Подготовить учебную памятку по API",
+      "status": "В работе",
+      "status_category": "indeterminate",
+      "description": "Демонстрационная задача другого участника команды.",
+      "assignee_account_id": "demo-colleague-alina",
+      "assignee_name": "Алина, коллега"
+    },
+    {
+      "key": "SCRUM-12",
+      "summary": "Проверить демо-дашборд команды",
+      "status": "К выполнению",
+      "status_category": "new",
+      "description": "Демонстрационная задача другого участника команды.",
+      "assignee_account_id": "demo-colleague-roman",
+      "assignee_name": "Роман, коллега"
+    }
+  ]
 }

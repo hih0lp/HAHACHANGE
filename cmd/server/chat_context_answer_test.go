@@ -34,6 +34,10 @@ func TestAnswerUsesRecentChatEvenWhenOlderSearchIsEmpty(t *testing.T) {
 					t.Error("model did not receive the rule for answering directly when the question is ambiguous")
 				}
 				context, _ := input.Messages[1]["content"].(string)
+				last := input.Messages[len(input.Messages)-1]
+				if calls == 1 && (last["role"] != "user" || last["content"] != "Ответь на мой последний запрос: О чём говорили выше?") {
+					t.Error("current question was not placed after recent history")
+				}
 				if !strings.Contains(context, `"recent_chat":[{"question":"Что проверим?","answer":"Сверим макет."}]`) ||
 					!strings.Contains(context, `"current_question":"О чём говорили выше?"`) {
 					t.Error("recent history and current question were not passed to the model")

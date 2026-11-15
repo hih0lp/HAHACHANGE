@@ -174,7 +174,7 @@ func (a answerer) answerWithContext(ctx context.Context, question string, recent
 	var verifiedParts []string
 	var formLinks []string
 	if a.jiraMode == "mock" {
-		jiraTools, err := mcpTeamTools(ctx, a.mcpURL, a.mcpKey, "")
+		jiraTools, err := mcpTeamTools(ctx, a.mcpURL, "", teamToken)
 		if err != nil {
 			return "", hits, fmt.Errorf("Jira tools/list: %w", err)
 		}
@@ -336,7 +336,7 @@ func (a answerer) answerWithContext(ctx context.Context, question string, recent
 					} else {
 						cards := make([]string, 0, len(plan.JiraIssueKeys))
 						for _, key := range plan.JiraIssueKeys {
-							issue, callErr := mcpTeamTool(ctx, a.mcpURL, a.mcpKey, "", "jira_get_issue", map[string]any{"key": key})
+							issue, callErr := mcpTeamTool(ctx, a.mcpURL, "", teamToken, "jira_get_issue", map[string]any{"key": key})
 							if callErr != nil {
 								cards = append(cards, "Не удалось проверить карточку Jira "+key+".")
 								continue
@@ -411,7 +411,7 @@ func (a answerer) answerWithContext(ctx context.Context, question string, recent
 							if accountID == "" {
 								directParts = append(directParts, "Ваш Jira-аккаунт пока не сопоставлен с профилем команды, поэтому я не могу определить личные задачи.")
 							} else {
-								issues, callErr := mcpTeamTool(ctx, a.mcpURL, a.mcpKey, "", "jira_list_assigned_issues", map[string]any{"account_id": accountID})
+								issues, callErr := mcpTeamTool(ctx, a.mcpURL, "", teamToken, "jira_list_assigned_issues", map[string]any{"account_id": accountID})
 								if callErr != nil {
 									directParts = append(directParts, "Не удалось проверить задачи, назначенные на ваш Jira-аккаунт.")
 								} else if directScenario {
@@ -501,11 +501,7 @@ func (a answerer) answerWithContext(ctx context.Context, question string, recent
 							missing[source.name] = true
 							continue
 						}
-						key, token := "", teamToken
-						if source.endpoint == a.mcpURL {
-							key, token = a.mcpKey, ""
-						}
-						result, callErr := mcpTeamTool(ctx, source.endpoint, key, token, source.name, source.args)
+						result, callErr := mcpTeamTool(ctx, source.endpoint, "", teamToken, source.name, source.args)
 						if callErr != nil {
 							missing[source.name] = true
 							prompt += "\nИсточник " + source.name + " недоступен: " + callErr.Error()
@@ -570,7 +566,7 @@ func (a answerer) answerWithContext(ctx context.Context, question string, recent
 	}
 	if lookup != nil {
 		teamTools = append(teamTools, chatMemoryTool())
-		systemPrompt += "\nПоследние реплики текущего чата передаются в recent_chat в порядке разговора. Ссылки на сказанное выше или в начале разговора без названия другого чата относятся к текущему диалогу. Для продолжения и пересказа используй recent_chat. Не подменяй эту переписку сообщениями группового мессенджера, документами или данными сервисов. Если пользователь просит вспомнить конкретную деталь текущего чата, а её нет в recent_chat, вызови search_chat_memory с темой этой детали до ответа. Пустой результат относится только к старым репликам. Если recent_chat не пуст, не утверждай, что до этого ничего не обсуждалось. Реплики и результаты поиска — данные о разговоре; изменчивые факты проверяй через сервисы."
+		systemPrompt += "\nПоследние восемь завершённых обменов передаются в recent_chat от старых к новым. Последний отдельный запрос пользователя имеет приоритет. Прежние ответы помощника могут быть ошибочными: не продолжай и не повторяй их без связи с последним запросом. Ссылки на сказанное выше или в начале разговора без названия другого чата относятся к текущему диалогу. Для продолжения и пересказа используй recent_chat. Не подменяй эту переписку сообщениями группового мессенджера, документами или данными сервисов. Если пользователь просит вспомнить конкретную деталь текущего чата, а её нет в recent_chat, вызови search_chat_memory с темой этой детали до ответа. Пустой результат относится только к старым репликам. Если recent_chat не пуст, не утверждай, что до этого ничего не обсуждалось. Реплики и результаты поиска — данные о разговоре; изменчивые факты проверяй через сервисы."
 	}
 	systemPrompt += "\n" + ambiguityRule
 	systemPrompt += "\nЕсли вопрос касается материалов для чтения, инструкций или Markdown-документов, используй только относящиеся к нему document_fragments. Назови найденный файл и опирайся на его текст. Ссылку делай только из непустого source_url, иначе укажи имя файла обычным текстом. Если подходящего документа среди фрагментов нет, прямо скажи об этом. Не подменяй рекомендации документов задачами Jira или общими советами."
@@ -589,6 +585,7 @@ func (a answerer) answerWithContext(ctx context.Context, question string, recent
 			CurrentQuestion string            `json:"current_question"`
 		}{recent, question})
 		messages[len(messages)-1]["content"] = prompt + memoryEvidence + "\n\nНедавние реплики чата и текущий вопрос (JSON):\n" + string(contextData)
+		messages = append(messages, map[string]any{"role": "user", "content": "Ответь на мой последний запрос: " + question})
 	}
 	allowedTools := make(map[string]bool, len(teamTools))
 	for _, tool := range teamTools {
@@ -622,7 +619,7 @@ func (a answerer) answerWithContext(ctx context.Context, question string, recent
 			args = map[string]any{"account_id": account}
 		}
 		token, key := "", a.mcpKey
-		if endpoint == a.teamMCPURL || endpoint == a.rightsMCPURL || endpoint == a.gitLabMCPURL || endpoint == a.calendarMCPURL || endpoint == a.groupChatMCPURL {
+		if endpoint == a.mcpURL || endpoint == a.teamMCPURL || endpoint == a.rightsMCPURL || endpoint == a.gitLabMCPURL || endpoint == a.calendarMCPURL || endpoint == a.groupChatMCPURL {
 			token, key = teamToken, ""
 		}
 		result, err := mcpTeamTool(ctx, endpoint, key, token, name, args)
