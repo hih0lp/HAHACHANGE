@@ -33,6 +33,10 @@ func TestAnswerUsesRecentChatEvenWhenOlderSearchIsEmpty(t *testing.T) {
 					if input.Messages[0]["content"] != chatContextDecisionPrompt {
 						t.Error("context decision did not receive its own prompt")
 					}
+					last := input.Messages[len(input.Messages)-1]
+					if last["role"] != "user" || last["content"] != "О чём говорили выше?" {
+						t.Error("context decision did not receive the current question as the last message")
+					}
 					fmt.Fprint(w, `{"choices":[{"message":{"content":"{}"}}]}`)
 					return
 				}
