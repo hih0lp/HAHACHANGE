@@ -39,6 +39,7 @@ type calendarPlan struct {
 	NeedsTeamDirectory    bool     `json:"needs_team_directory"`
 	FormID                string   `json:"form_id"`
 	PeriodKind            string   `json:"period_kind"`
+	DaysAhead             int      `json:"days_ahead"`
 	Historical            bool     `json:"historical"`
 	TimeMin               string   `json:"time_min"`
 	TimeMax               string   `json:"time_max"`
@@ -96,12 +97,13 @@ Classify only what the user requests in the current question. If a reference or 
 - needs_access_check: explicit question about existing permission. Select resource_id from available_resources and capability from that resource, if specified. Leave ambiguous values empty.
 - needs_my_jira_issues: the user wants their own assigned work, tasks or deadlines. Set this even if they do not name Jira or an issue key. The team profile is used internally to resolve the user's Jira identity. This does not require the team's roster in the answer.
 - needs_jira_issue and jira_issue_keys: the user asks about a specific issue. Copy explicit keys, never invent.
-- needs_team_directory: the user asks to identify teammates, team roles or their mentor. Leave it false for requests solely about assigned work or deadlines, even when the work belongs to the user's team or mentions a person. If the current question separately asks for assigned work and a mentor's identity, set both needs_my_jira_issues and needs_team_directory.
+- needs_team_directory: the user asks who is on the team or who holds a role. Merely mentioning a mentor in a schedule, availability or work question does not ask for a roster or the mentor's identity.
 - needs_document_evidence: answer a question about a handbook, guide, onboarding instructions, an event announcement, its agenda or how to attend. A question about what a document recommends is a document question; do not request live Jira data unless the user also asks for actual tasks. needs_recommendation: personalized learning advice about what this particular user should do.
 - needs_gitlab: GitLab content. Add needs_gitlab_projects for a visible project list or overview. Note that a general request to inspect GitLab content is not a permission check. Keep a separately requested permission check.
 - needs_group_chat: messenger history. Add latest_group_messages for newest messages instead of topic search. If the user names a group, copy the group name into chat_group, without quotation marks. Set all_chat_groups only for unscoped requests; never set it when a group name was provided.
 - needs_chat_memory: older discussions, decisions or preferences.
-- needs_company_events: dates and schedules of company-wide events. needs_events: meetings in the mentor or onboarding calendar. needs_availability: mentor's free or busy time. Add nearest_event_only only if the user requests one next event. Use Europe/Moscow and period_kind current_week, next_week, explicit or upcoming. For stated dates or a stated number of days use explicit and supply both RFC3339 bounds. Use current_week and next_week only for calendar weeks. Unspecified future means upcoming for 30 days. Set historical only for explicitly past events.
+- Calendar scope: use needs_events for meetings with the mentor, the mentor's schedule and onboarding meetings. Use needs_company_events only for a company-wide event schedule. If the user only asks about meetings with the mentor, set needs_events and leave needs_company_events and needs_team_directory false. For free or busy time use needs_availability. Set nearest_event_only only if the user asks for one event.
+- For a rolling range of upcoming days, copy the requested number into days_ahead as an integer. The server adds it to the current time. Do not convert a rolling range to a calendar week. Use period_kind current_week or next_week only for calendar weeks, not a number of days. For fixed dates use explicit and supply time_min and time_max in RFC3339, in Europe/Moscow. An unspecified future period is upcoming for 30 days. Set historical only for explicitly past events.
 Preserve independent intents in compound questions. For general conversation without internal evidence return {}.`
 	plan, err := a.requestPlan(ctx, instruction, map[string]any{"current_time": now.Format(time.RFC3339), "recent_chat": recent, "available_forms": forms, "available_resources": resources, "question": question})
 	if err != nil {
@@ -176,6 +178,14 @@ func (a answerer) requestPlan(ctx context.Context, instruction string, input map
 
 func normalizeCalendarPlan(plan calendarPlan, now time.Time) (calendarPlan, error) {
 	if !plan.NeedsEvents && !plan.NeedsAvailability && !plan.NeedsCompanyEvents {
+		return plan, nil
+	}
+	if plan.DaysAhead != 0 {
+		if plan.DaysAhead < 1 || plan.DaysAhead > 31 {
+			return plan, errors.New("calendar days_ahead must be between 1 and 31")
+		}
+		plan.TimeMin = now.Format(time.RFC3339)
+		plan.TimeMax = now.Add(time.Duration(plan.DaysAhead) * 24 * time.Hour).Format(time.RFC3339)
 		return plan, nil
 	}
 	defaultUpcoming := func() {

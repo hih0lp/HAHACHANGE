@@ -181,3 +181,14 @@ func TestLatestMessagesRecoversNamedGroupBeforeUsingAllGroups(t *testing.T) {
 		t.Fatalf("unexpected plan: %+v, %v", plan, err)
 	}
 }
+
+func TestCompanyCalendarRollingDaysStartNow(t *testing.T) {
+	now, err := time.Parse(time.RFC3339, "2026-11-15T15:00:00+03:00")
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := normalizeCalendarPlan(calendarPlan{NeedsCompanyEvents: true, DaysAhead: 7, PeriodKind: "current_week"}, now)
+	if err != nil || plan.TimeMin != "2026-11-15T15:00:00+03:00" || plan.TimeMax != "2026-11-22T15:00:00+03:00" {
+		t.Fatalf("unexpected plan: %+v, %v", plan, err)
+	}
+}
