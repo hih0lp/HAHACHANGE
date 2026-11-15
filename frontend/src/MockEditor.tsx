@@ -129,7 +129,8 @@ function Rows<T>({ noun, objectLabel, rows, describe, add, change, render }: Row
 
 function JiraFields({ data, change }: { data: JiraData; change: (value: JiraData) => void }) {
   const statuses: Option[] = [['new','К выполнению'], ['indeterminate','В работе'], ['done','Готово']];
-  const assignees = new Map([['demo-intern','Стажёр 1'], ['demo-intern2','Стажёр 2']]);
+  const assignees = new Map(data.assignees?.map(({ account_id, name }) => [account_id, name]) ??
+    [['demo-intern', 'Стажёр 1'], ['demo-intern2', 'Стажёр 2']]);
   for (const issue of data.issues) if (issue.assignee_account_id) {
     assignees.set(issue.assignee_account_id, issue.assignee_name || assignees.get(issue.assignee_account_id) || issue.assignee_account_id);
   }

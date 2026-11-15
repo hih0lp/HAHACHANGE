@@ -5,7 +5,10 @@ export type JiraIssue = {
   due_date?: string; due_at?: string; start_date?: string;
   assignee_account_id?: string; assignee_name?: string;
 };
-export type JiraData = { project_key: string; issues: JiraIssue[] };
+export type JiraData = {
+  project_key: string; issues: JiraIssue[];
+  assignees?: { account_id: string; name: string }[];
+};
 export type CalendarEntry = {
   id: string; summary: string; description?: string; status?: string;
   start: { dateTime: string; timeZone?: string }; end: { dateTime: string; timeZone?: string };
