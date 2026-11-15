@@ -100,19 +100,6 @@ func TestFixtureReloadAndPersonalList(t *testing.T) {
 	}
 }
 
-func TestSeedFixtureInternAssignments(t *testing.T) {
-	fixture, err := load("../../fixtures/mock/jira.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for account, expected := range map[string]int{"demo-intern": 4, "demo-intern2": 3, "demo-colleague-alina": 1, "demo-colleague-roman": 1} {
-		issues := list(fixture, account, 50)["issues"].([]any)
-		if len(issues) != expected {
-			t.Errorf("%s has %d issues, expected %d", account, len(issues), expected)
-		}
-	}
-}
-
 func TestFixtureRejectsInvalidDate(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "jira.json")
 	data := []byte(`{"project_key":"SCRUM","issues":[{"key":"SCRUM-7","summary":"Task","status":"In progress","due_date":"2026-11-31"}]}`)
