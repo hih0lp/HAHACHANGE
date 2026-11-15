@@ -222,7 +222,7 @@ services:
       TEAM_ACCESS_INTERN_PASSWORD: bobby-local-intern
       TEAM_ACCESS_INTERN2_PASSWORD: bobby-local-intern2
       TEAM_ACCESS_APPROVER_PASSWORD: bobby-local-approver
-      TEAM_JIRA_ACCOUNTS_JSON: '{"intern":"712020:dac8b504-c5af-48c6-961f-501520b7615d"}'
+      TEAM_JIRA_ACCOUNTS_JSON: '{"intern":"demo-intern","intern2":"demo-intern2","approver":"demo-approver"}'
       JIRA_MODE: mock
       JIRA_BASE_URL: http://mock-jira:8080
 
