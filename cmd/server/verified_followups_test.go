@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hackchange/avito-rag/internal/distributed"
 	"github.com/hackchange/avito-rag/internal/rag"
@@ -58,6 +59,21 @@ func TestVerifiedOneOnOneUsesCalendarEventsAndDescribesBookingLimit(t *testing.T
 	answer, err := formatVerifiedCalendarEvents(data, "календаря наставника", true)
 	if err != nil || !strings.Contains(answer, "17.11.2026 15:30–16:00") || strings.Contains(answer, "Ревью задач") || !strings.Contains(answer, "свободны ли") {
 		t.Fatalf("answer=%q err=%v", answer, err)
+	}
+}
+
+func TestCalendarConfirmationKeepsPreviousOneOnOneAndPeriod(t *testing.T) {
+	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		content := `{"needs_events":true,"period_kind":"current_week"}`
+		fmt.Fprintf(w, `{"choices":[{"message":{"content":%q}}]}`, content)
+	}))
+	defer model.Close()
+	a := answerer{url: model.URL}
+	now := time.Date(2026, 11, 15, 20, 0, 0, 0, time.FixedZone("MSK", 3*3600))
+	recent := []chatContextTurn{{Question: "Когда я доступен для 1:1 со стажёрами на неделе?"}}
+	plan, err := a.planCalendar(context.Background(), "я и прошу тебя проверить в календаре", now, recent, nil)
+	if err != nil || !plan.NeedsOneOnOne || plan.TimeMax != "2026-11-22T20:00:00+03:00" {
+		t.Fatalf("plan=%+v err=%v", plan, err)
 	}
 }
 

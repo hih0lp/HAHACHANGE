@@ -8,6 +8,23 @@ import (
 var explicitChatGroup = regexp.MustCompile("(?i)групп[еуыеи]\\s+[«\"]([^»\"]+)[»\"]")
 var searchTicket = regexp.MustCompile(`\b[A-Z][A-Z0-9_]*-[0-9]+\b`)
 
+func calendarConfirmationQuestion(question string, recent []chatContextTurn) string {
+	q := strings.ToLower(strings.TrimSpace(strings.Trim(question, " .!?")))
+	switch q {
+	case "я и прошу тебя проверить в календаре", "я и прошу проверить в календаре",
+		"проверь в календаре", "посмотри в календаре":
+		if len(recent) > 0 {
+			previous := recent[len(recent)-1].Question
+			p := strings.ToLower(previous)
+			if strings.Contains(p, "календар") || strings.Contains(p, "1:1") ||
+				strings.Contains(p, "встреч") || strings.Contains(p, "событи") {
+				return previous
+			}
+		}
+	}
+	return question
+}
+
 // Preserve explicit scope even when the model carries an unrelated intent
 // forward from the preceding conversation.
 func refineExplicitScope(plan *calendarPlan, question string) bool {

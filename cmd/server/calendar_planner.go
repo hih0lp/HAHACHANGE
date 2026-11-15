@@ -83,6 +83,7 @@ func (a answerer) planCalendar(ctx context.Context, question string, now time.Ti
 		contextTurns[i].Question = modeloutput.PublicTextLimit(contextTurns[i].Question, 500)
 		contextTurns[i].Answer = modeloutput.PublicTextLimit(contextTurns[i].Answer, 950)
 	}
+	question = calendarConfirmationQuestion(question, contextTurns)
 	plan, err := a.planQuestion(ctx, question, now, contextTurns, nil, resources)
 	if query := contextualGoDocumentation(question, contextTurns); query != "" {
 		plan.NeedsDocumentEvidence, plan.NeedsRecommendation = true, false
