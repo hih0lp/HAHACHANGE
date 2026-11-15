@@ -73,6 +73,25 @@ func registerMockEditors(mux *http.ServeMux, key string, endpoints map[string]st
 		w.Header().Set("Cache-Control", "no-store")
 		writeJSON(w, 200, result)
 	})))
+	mux.Handle("GET /v1/tasks/gitlab/{project}/branches", authorize(key, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token, ok := teamBearer(r)
+		if !ok {
+			writeError(w, 401, errText("Требуется демосессия."))
+			return
+		}
+		project := r.PathValue("project")
+		if project == "" || strings.Contains(project, "/") {
+			writeError(w, 400, errText("Некорректный проект GitLab."))
+			return
+		}
+		result, err := mcpTeamTool(r.Context(), gitlab, "", token, "gitlab_branches", map[string]any{"project": project})
+		if err != nil {
+			writeError(w, 503, errText("Не удалось загрузить ветки GitLab."))
+			return
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		writeJSON(w, 200, result)
+	})))
 }
 
 func teamBearer(r *http.Request) (string, bool) {

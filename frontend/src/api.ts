@@ -35,6 +35,7 @@ export type Reminder = { id: string; key: string; summary: string; url: string; 
 export type DeadlineNotification = Omit<Reminder, 'id'> & { id: number; kind: string };
 export type CalendarEvent = {
   id: string; summary?: string; start?: { dateTime?: string; date?: string };
+  end?: { dateTime?: string; date?: string };
   htmlLink?: string; status?: string;
 };
 type Auth = { token?: string; key?: string };
@@ -97,6 +98,16 @@ export const api = {
     request<Receipt>(formPath(id) + '/submit', { ...auth, idem, body: { version, values, confirmed: true } }),
   jira: (auth: Auth) => request<{ enabled: boolean; reminders: (Omit<Reminder, 'due_at'> & { due_at?: string; date_only?: boolean; status?: string })[] }>('/v1/tasks/jira', auth),
   gitlab: (auth: Auth) => request<{ data: GitLabOverview[] }>('/v1/tasks/gitlab', auth),
+  gitlabBranches: (project: number, auth: Auth) => request<{ data: { name: string; default?: boolean }[] }>(
+    '/v1/tasks/gitlab/' + encodeURIComponent(project) + '/branches', auth),
+  updateJiraIssue: (key: string, body: { summary?: string; description?: string; due_date?: string; due_at?: string | null }, auth: Auth) =>
+    request<{ saved: boolean; version: number }>('/v1/mock-data/jira/issues/' + encodeURIComponent(key), { ...auth, method: 'PUT', body }),
+  updateCalendarEvent: (id: string, body: { start?: string; end?: string }, auth: Auth) =>
+    request<{ saved: boolean; version: number }>('/v1/mock-data/calendar/events/' + encodeURIComponent(id), { ...auth, method: 'PUT', body }),
+  renameGitlabBranch: (project: number, current: string, name: string, auth: Auth) =>
+    request<{ saved: boolean; version: number }>(
+      '/v1/mock-data/gitlab/projects/' + encodeURIComponent(project) + '/branches/' + current.split('/').map(encodeURIComponent).join('/'),
+      { ...auth, method: 'PUT', body: { name } }),
   mockData: (source: MockSource, auth: Options) => request<Snapshot<MockData>>('/v1/mock-data/' + source, auth),
   saveMockData: (source: MockSource, body: Snapshot<MockData>, auth: Auth) =>
     request<Snapshot<MockData>>('/v1/mock-data/' + source, { ...auth, method: 'PUT', body }),

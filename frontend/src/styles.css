@@ -500,6 +500,10 @@
   .task-sources.task-sources-with-gitlab { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 dialog.mock-editor { width: min(720px, calc(100% - 32px)); }
+.item-edit-button { margin-top: 12px; }
+dialog.item-editor { width: min(540px, calc(100% - 32px)); }
+.item-editor .field-stack { margin-top: 18px; }
+.item-editor .actions { margin-top: 8px; }
 .mock-editor-fields { border: 0; padding: 0; margin: 16px 0; min-width: 0; }
 .mock-record { margin-top: 16px; width: 100%; }
 .mock-record-tools { display: flex; align-items: end; gap: 12px; width: 100%; }

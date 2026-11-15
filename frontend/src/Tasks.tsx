@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { api, ApiError, errorText } from './api';
 import { MockEditor } from './MockEditor';
+import { ItemEditor } from './ItemEditor';
+import type { EditableItem } from './ItemEditor';
 import type { MockSource } from './mockData';
 import { External, Notice, Stamp } from './ui';
 import { Icon } from './visuals';
 
-type Task = { id: string; title: string; href?: string; status: string; date?: string; dateOnly?: boolean; detail?: string };
+type Task = { id: string; title: string; href?: string; status: string; date?: string; dateOnly?: boolean; detail?: string; editable?: EditableItem };
 type Source = 'Jira' | 'Календарь' | 'GitLab';
 type Result = { state: 'loading' } | { state: 'error'; message: string } | { state: 'ready'; items: Task[] };
 const sources: Source[] = ['Jira', 'Календарь', 'GitLab'];
@@ -18,6 +20,7 @@ export function Tasks({ token, apiKey, canEdit, onProfile }: { token: string; ap
   const [reload, setReload] = useState(0);
   const [mockAvailable, setMockAvailable] = useState(false);
   const [editor, setEditor] = useState<MockSource>();
+  const [itemEditor, setItemEditor] = useState<EditableItem>();
   useEffect(() => {
     if (!token) return;
     let active = true;
@@ -28,6 +31,7 @@ export function Tasks({ token, apiKey, canEdit, onProfile }: { token: string; ap
         return { state: 'ready', items: result.data.map(project => ({
           id: String(project.id), title: project.name + ' · ' + project.path_with_namespace,
           status: project.default_branch, detail: project.description,
+          editable: { kind: 'gitlab', project: project.id, title: project.name } as const,
         })) } as const;
       },
       Jira: async () => {
@@ -37,6 +41,9 @@ export function Tasks({ token, apiKey, canEdit, onProfile }: { token: string; ap
           id: item.id, title: item.key + ' · ' + item.summary, href: item.url, status: item.status || 'Задача',
           date: item.due_at && item.date_only ? new Date(Date.parse(item.due_at) - 1).toISOString() : item.due_at,
           dateOnly: item.date_only,
+          editable: { kind: 'jira', key: item.key, summary: item.summary,
+            dueAt: item.due_at && item.date_only ? new Date(Date.parse(item.due_at) - 1).toISOString() : item.due_at,
+            dateOnly: item.date_only } as const,
         })) } as const;
       },
       Календарь: async () => {
@@ -47,6 +54,8 @@ export function Tasks({ token, apiKey, canEdit, onProfile }: { token: string; ap
         return { state: 'ready', items: (result.data.items || []).filter(item => item.status !== 'cancelled').map(item => ({
           id: item.id, title: item.summary || 'Событие', href: item.htmlLink, status: 'Запланировано',
           date: item.start?.dateTime || item.start?.date, dateOnly: !item.start?.dateTime,
+          editable: { kind: 'calendar', id: item.id, summary: item.summary || 'Событие',
+            start: item.start?.dateTime, end: item.end?.dateTime } as const,
         })) } as const;
       },
     };
@@ -89,7 +98,7 @@ export function Tasks({ token, apiKey, canEdit, onProfile }: { token: string; ap
             <div className="section-heading"><h2><span className={'source-icon ' + colors[source]} aria-hidden="true">{initials[source]}</span>{source}</h2>
               {canEdit && mockAvailable && <button type="button" className="button secondary" onClick={() => setEditor(
                 source === 'Jira' ? 'jira' : source === 'Календарь' ? 'calendar' : 'gitlab'
-              )} aria-label={'Редактировать · ' + source}>Редактировать</button>}
+              )} aria-label={'Редактировать весь список · ' + source}>Весь список</button>}
             </div>
             {canEdit && mockAvailable && source === 'Календарь' && <button type="button" className="button secondary"
               onClick={() => setEditor('company-calendar')}>Редактировать календарь компании</button>}
@@ -100,12 +109,17 @@ export function Tasks({ token, apiKey, canEdit, onProfile }: { token: string; ap
               <span className="pill">{item.status}</span>
               {item.date && <div className="muted"><Stamp value={item.date} dateOnly={item.dateOnly}/></div>}
               {item.detail && <div className="muted">{item.detail}</div>}
+              {item.editable && <button type="button" className="button secondary item-edit-button" onClick={() => setItemEditor(item.editable)}
+                aria-label={(item.editable.kind === 'gitlab' ? 'Переименовать ветку · ' : 'Изменить · ') + item.title}>
+                {item.editable.kind === 'gitlab' ? 'Переименовать ветку' : 'Изменить'}</button>}
             </li>)}</ul> : <p className="muted">Список пуст.</p>)}
           </section>;
         })}
       </div>
       {editor && <MockEditor key={editor} source={editor} token={token} apiKey={apiKey}
         onClose={() => setEditor(undefined)} onSave={() => setReload(n => n + 1)}/>}
+      {itemEditor && <ItemEditor key={itemEditor.kind + ':' + ('key' in itemEditor ? itemEditor.key : 'id' in itemEditor ? itemEditor.id : itemEditor.project)}
+        item={itemEditor} token={token} apiKey={apiKey} onClose={() => setItemEditor(undefined)} onSave={() => setReload(n => n + 1)}/>}
     </>}
   </div>;
 }
