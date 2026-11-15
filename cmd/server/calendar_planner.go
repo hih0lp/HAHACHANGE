@@ -17,6 +17,7 @@ import (
 type calendarPlan struct {
 	NeedsRecentContext    bool     `json:"needs_recent_context"`
 	NeedsEvents           bool     `json:"needs_events"`
+	NeedsCompanyEvents    bool     `json:"needs_company_events"`
 	NeedsAvailability     bool     `json:"needs_availability"`
 	NeedsForm             bool     `json:"needs_form"`
 	NeedsMyJiraIssues     bool     `json:"needs_my_jira_issues"`
@@ -29,6 +30,7 @@ type calendarPlan struct {
 	NeedsGroupChat        bool     `json:"needs_group_chat"`
 	LatestGroupMessages   bool     `json:"latest_group_messages"`
 	ChatGroup             string   `json:"chat_group"`
+	AllChatGroups         bool     `json:"all_chat_groups"`
 	ResourceID            string   `json:"resource_id"`
 	Capability            string   `json:"capability"`
 	NearestEventOnly      bool     `json:"nearest_event_only"`
@@ -73,8 +75,19 @@ func (a answerer) planCalendar(ctx context.Context, question string, now time.Ti
 			plan.FormID = selection.FormID
 		}
 	}
+	if err == nil && plan.LatestGroupMessages && strings.TrimSpace(plan.ChatGroup) == "" {
+		scope, scopeErr := a.requestPlan(ctx, groupScopePrompt, map[string]any{"question": question, "recent_chat": contextTurns})
+		plan.ChatGroup = ""
+		plan.AllChatGroups = false
+		if scopeErr == nil {
+			plan.ChatGroup = strings.TrimSpace(scope.ChatGroup)
+			plan.AllChatGroups = scope.AllChatGroups && plan.ChatGroup == ""
+		}
+	}
 	return plan, err
 }
+
+const groupScopePrompt = `Extract the group filter for the current messenger request. Return JSON. If a group is named, return {"chat_group":"<exact name>"} without surrounding quote marks. If the question asks for messages without naming or referring to any specific group, return {"all_chat_groups":true}. If the question refers to a particular group but its name is unresolved, return {}. Use recent_chat only to resolve references. Do not invent group names.`
 
 func (a answerer) planQuestion(ctx context.Context, question string, now time.Time, recent []chatContextTurn, forms []formChoice, resources []resourceChoice) (calendarPlan, error) {
 	instruction := `Classify the current question. Return a JSON object with only relevant fields; omit false flags. Do not answer the question.
@@ -84,13 +97,26 @@ Classify only what the user requests in the current question. If a reference or 
 - needs_my_jira_issues: the user wants their own assigned work, tasks or deadlines. Set this even if they do not name Jira or an issue key. The team profile is used internally to resolve the user's Jira identity. This does not require the team's roster in the answer.
 - needs_jira_issue and jira_issue_keys: the user asks about a specific issue. Copy explicit keys, never invent.
 - needs_team_directory: the user asks to identify teammates, team roles or their mentor. Leave it false for requests solely about assigned work or deadlines, even when the work belongs to the user's team or mentions a person. If the current question separately asks for assigned work and a mentor's identity, set both needs_my_jira_issues and needs_team_directory.
-- needs_document_evidence: internal policy or onboarding. needs_recommendation: personalized learning advice.
+- needs_document_evidence: answer a question about a handbook, guide, onboarding instructions, an event announcement, its agenda or how to attend. A question about what a document recommends is a document question; do not request live Jira data unless the user also asks for actual tasks. needs_recommendation: personalized learning advice about what this particular user should do.
 - needs_gitlab: GitLab content. Add needs_gitlab_projects for a visible project list or overview. Note that a general request to inspect GitLab content is not a permission check. Keep a separately requested permission check.
-- needs_group_chat: messenger history. Add latest_group_messages for newest messages instead of topic search. Copy chat_group if named.
+- needs_group_chat: messenger history. Add latest_group_messages for newest messages instead of topic search. If the user names a group, copy the group name into chat_group, without quotation marks. Set all_chat_groups only for unscoped requests; never set it when a group name was provided.
 - needs_chat_memory: older discussions, decisions or preferences.
-- needs_events: scheduled events. needs_availability: mentor's free or busy time. Add nearest_event_only for a single next event. Use Europe/Moscow and period_kind current_week, next_week, explicit or upcoming. For explicit dates return time_min and time_max in RFC3339. Unspecified future means upcoming for 30 days. Set historical only for explicitly past events.
+- needs_company_events: dates and schedules of company-wide events. needs_events: meetings in the mentor or onboarding calendar. needs_availability: mentor's free or busy time. Add nearest_event_only for a single next event. Use Europe/Moscow and period_kind current_week, next_week, explicit or upcoming. For explicit dates return time_min and time_max in RFC3339. Unspecified future means upcoming for 30 days. Set historical only for explicitly past events.
 Preserve independent intents in compound questions. For general conversation without internal evidence return {}.`
-	plannerInput, _ := json.Marshal(map[string]any{"current_time": now.Format(time.RFC3339), "recent_chat": recent, "available_forms": forms, "available_resources": resources, "question": question})
+	plan, err := a.requestPlan(ctx, instruction, map[string]any{"current_time": now.Format(time.RFC3339), "recent_chat": recent, "available_forms": forms, "available_resources": resources, "question": question})
+	if err != nil {
+		return calendarPlan{}, err
+	}
+	plan.NeedsGitLab = plan.NeedsGitLab || plan.NeedsGitLabProjects
+	plan.NeedsGroupChat = plan.NeedsGroupChat || plan.LatestGroupMessages
+	return normalizeCalendarPlan(plan, now)
+}
+
+func (a answerer) requestPlan(ctx context.Context, instruction string, input map[string]any) (calendarPlan, error) {
+	plannerInput, err := json.Marshal(input)
+	if err != nil {
+		return calendarPlan{}, err
+	}
 	request := map[string]any{"model": a.model, "stream": false, "messages": []map[string]string{{"role": "system", "content": instruction}, {"role": "user", "content": string(plannerInput)}}}
 	applyReasoningEffort(request)
 	body, err := json.Marshal(request)
@@ -135,13 +161,11 @@ Preserve independent intents in compound questions. For general conversation wit
 	if json.Unmarshal([]byte(strings.TrimSpace(content)), &plan) != nil {
 		return calendarPlan{}, errors.New("invalid calendar plan")
 	}
-	plan.NeedsGitLab = plan.NeedsGitLab || plan.NeedsGitLabProjects
-	plan.NeedsGroupChat = plan.NeedsGroupChat || plan.LatestGroupMessages
-	return normalizeCalendarPlan(plan, now)
+	return plan, nil
 }
 
 func normalizeCalendarPlan(plan calendarPlan, now time.Time) (calendarPlan, error) {
-	if !plan.NeedsEvents && !plan.NeedsAvailability {
+	if !plan.NeedsEvents && !plan.NeedsAvailability && !plan.NeedsCompanyEvents {
 		return plan, nil
 	}
 	defaultUpcoming := func() {

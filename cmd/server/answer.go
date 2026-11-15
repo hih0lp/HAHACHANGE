@@ -259,9 +259,9 @@ func (a answerer) ask(ctx context.Context, question string) (string, []rag.Searc
 			}
 			calendarProblem := ""
 			if planErr != nil {
-				if plan.NeedsEvents || plan.NeedsAvailability {
+				if plan.NeedsEvents || plan.NeedsAvailability || plan.NeedsCompanyEvents {
 					calendarProblem = "Не удалось определить период календаря для проверки расписания. Уточните даты."
-					plan.NeedsEvents, plan.NeedsAvailability = false, false
+					plan.NeedsEvents, plan.NeedsAvailability, plan.NeedsCompanyEvents = false, false, false
 				} else {
 					prompt = question
 					hits = nil
@@ -269,7 +269,7 @@ func (a answerer) ask(ctx context.Context, question string) (string, []rag.Searc
 					systemPrompt = agentSystemPrompt + "\n\n" + untrustedEvidenceRule + "\n\nЕсли для этого вопроса нужны внутренние данные, а сервисы не удалось выбрать, прямо скажи, что сейчас не можешь их проверить. Не запрашивай период, которого пользователь не обязан указывать для ближайшего расписания."
 				}
 			}
-			if planErr == nil && !plan.NeedsGroupChat && !plan.NeedsDocumentEvidence && !plan.NeedsRecommendation && !plan.NeedsJiraIssue && !plan.NeedsMyJiraIssues && !plan.NeedsTeamDirectory && !plan.NeedsForm && !plan.NeedsGitLab && !plan.NeedsAccessCheck && !plan.NeedsEvents && !plan.NeedsAvailability {
+			if planErr == nil && !plan.NeedsGroupChat && !plan.NeedsDocumentEvidence && !plan.NeedsRecommendation && !plan.NeedsJiraIssue && !plan.NeedsMyJiraIssues && !plan.NeedsTeamDirectory && !plan.NeedsForm && !plan.NeedsGitLab && !plan.NeedsAccessCheck && !plan.NeedsEvents && !plan.NeedsAvailability && !plan.NeedsCompanyEvents {
 				prompt = question
 				hits = nil
 				teamTools = nil
@@ -403,12 +403,19 @@ func (a answerer) ask(ctx context.Context, question string) (string, []rag.Searc
 						}
 					}
 				}
-				if a.calendarMCPURL != "" && (plan.NeedsEvents || plan.NeedsAvailability) {
+				if plan.NeedsCompanyEvents && toolEndpoints["calendar_company_events"] == "" {
+					directParts = append(directParts, "Не удалось проверить расписание корпоративных мероприятий: календарь компании недоступен.")
+				}
+				if a.calendarMCPURL != "" && (plan.NeedsEvents || plan.NeedsAvailability || plan.NeedsCompanyEvents) {
 					var directAnswers []string
 					for _, need := range []struct {
-						enabled     bool
-						name, label string
-					}{{plan.NeedsEvents, "calendar_onboarding_events", "События календаря наставника"}, {plan.NeedsAvailability, "calendar_mentor_freebusy", "Занятость наставника"}} {
+						enabled               bool
+						name, label, calendar string
+					}{
+						{plan.NeedsEvents, "calendar_onboarding_events", "События календаря наставника", "календаря наставника"},
+						{plan.NeedsAvailability, "calendar_mentor_freebusy", "Занятость наставника", ""},
+						{plan.NeedsCompanyEvents && toolEndpoints["calendar_company_events"] != "", "calendar_company_events", "Корпоративные мероприятия", "календаря компании"},
+					} {
 						if !need.enabled {
 							continue
 						}
@@ -424,11 +431,11 @@ func (a answerer) ask(ctx context.Context, question string) (string, []rag.Searc
 						if directScenario {
 							var answer string
 							var formatErr error
-							if need.name == "calendar_onboarding_events" {
+							if need.calendar != "" {
 								if plan.NearestEventOnly {
-									answer, formatErr = formatCalendarEvents(result, 1)
+									answer, formatErr = formatCalendarEventList(result, need.calendar, 1)
 								} else {
-									answer, formatErr = formatCalendarEvents(result)
+									answer, formatErr = formatCalendarEventList(result, need.calendar)
 								}
 							} else {
 								answer, formatErr = formatCalendarBusy(result)
@@ -505,7 +512,14 @@ func (a answerer) ask(ctx context.Context, question string) (string, []rag.Searc
 					directParts = append(directParts, "Сейчас не удалось подключиться к истории группового мессенджера.")
 				}
 				if plan.LatestGroupMessages && toolEndpoints["latest_group_messages"] != "" {
-					directParts = append(directParts, a.latestGroupMessages(ctx, teamToken, plan.ChatGroup, moscow))
+					if strings.TrimSpace(plan.ChatGroup) == "" && !plan.AllChatGroups {
+						directParts = append(directParts, "Уточните название группы, чтобы я мог проверить её сообщения.")
+					} else {
+						directParts = append(directParts, a.latestGroupMessages(ctx, teamToken, plan.ChatGroup, moscow))
+					}
+				}
+				if plan.NeedsDocumentEvidence {
+					systemPrompt += "\nНа часть вопроса о документации или описании мероприятия отвечай по найденным фрагментам. Укажи имя файла источника. Сохрани различие между анонсом и подтверждённым расписанием. Если нужного фрагмента нет, скажи, каких данных не хватает."
 				}
 				if plan.NeedsGroupChat && !plan.LatestGroupMessages && toolEndpoints["search_group_messages"] != "" {
 					verifiedParts = append(verifiedParts, directParts...)
@@ -518,9 +532,15 @@ func (a answerer) ask(ctx context.Context, question string) (string, []rag.Searc
 					verifiedParts = append(verifiedParts, directParts...)
 					teamTools = nil
 					prompt = "Вопрос о прежнем разговоре: " + question + ". Проверенные текущие данные уже подготовлены отдельно; ответь только по найденной памяти."
-				} else if directScenario && len(formLinks) > 0 {
+				} else if directScenario && (len(formLinks) > 0 || plan.NeedsDocumentEvidence) {
 					verifiedParts = append(verifiedParts, directParts...)
 					teamTools = nil
+					if plan.NeedsDocumentEvidence && len(formLinks) == 0 {
+						prompt = answerEvidencePrompt(question, searchState, hits)
+						if len(verifiedParts) > 0 {
+							prompt += "\nДанные из сервисов уже собраны отдельно. Ответь только на часть вопроса, для которой нужна документация."
+						}
+					}
 				} else if directScenario && len(directParts) > 0 {
 					return strings.Join(directParts, "\n\n"), hits, nil
 				}
@@ -647,6 +667,9 @@ func (a answerer) ask(ctx context.Context, question string) (string, []rag.Searc
 				answerText += "\n\n" + strings.Join(formLinks, "\n")
 			}
 			return answerText, hits, nil
+		}
+		if len(teamTools) == 0 {
+			return "", hits, fmt.Errorf("LLM requested a tool with no tools available")
 		}
 		messages = append(messages, map[string]any{"role": "assistant", "content": message.Content, "tool_calls": message.ToolCalls})
 		for _, call := range message.ToolCalls {

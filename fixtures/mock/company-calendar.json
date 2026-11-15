@@ -1,0 +1,14 @@
+{
+  "calendar_id": "demo-company",
+  "summary": "Демо-календарь компании",
+  "time_zone": "Europe/Moscow",
+  "events": [
+    {
+      "id": "demo-engineering-open-mic-20261118",
+      "summary": "Демо: инженерный открытый микрофон",
+      "start": {"dateTime": "2026-11-18T16:00:00+03:00", "timeZone": "Europe/Moscow"},
+      "end": {"dateTime": "2026-11-18T16:45:00+03:00", "timeZone": "Europe/Moscow"},
+      "status": "confirmed"
+    }
+  ]
+}

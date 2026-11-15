@@ -62,6 +62,10 @@ func formatCalendarBusy(result any) (string, error) {
 }
 
 func formatCalendarEvents(result any, maxItems ...int) (string, error) {
+	return formatCalendarEventList(result, "календаря наставника", maxItems...)
+}
+
+func formatCalendarEventList(result any, calendar string, maxItems ...int) (string, error) {
 	raw, err := json.Marshal(result)
 	if err != nil {
 		return "", err
@@ -96,7 +100,7 @@ func formatCalendarEvents(result any, maxItems ...int) (string, error) {
 		return "", err
 	}
 	if len(response.Data.Items) == 0 {
-		return "В проверенном календаре за указанный период событий нет.", nil
+		return "Нет событий " + calendar + " за указанный период.", nil
 	}
 	lines := make([]string, 0, len(response.Data.Items))
 	for _, event := range response.Data.Items {
@@ -116,7 +120,7 @@ func formatCalendarEvents(result any, maxItems ...int) (string, error) {
 		lines = append(lines, line)
 	}
 	if len(maxItems) > 0 && maxItems[0] == 1 {
-		return "Ближайшее событие календаря наставника:\n" + strings.Join(lines, "\n"), nil
+		return "Ближайшее событие " + calendar + ":\n" + strings.Join(lines, "\n"), nil
 	}
-	return "События календаря наставника:\n" + strings.Join(lines, "\n"), nil
+	return "События " + calendar + ":\n" + strings.Join(lines, "\n"), nil
 }

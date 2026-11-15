@@ -98,10 +98,25 @@ func main() {
 	}
 	directory := os.Getenv("TEAM_DIRECTORY_URL")
 	subjects := calendarSubjects(os.Getenv("CALENDAR_DEMO_SUBJECT"))
+	companyPath := os.Getenv("MOCK_COMPANY_CALENDAR_JSON")
 	if directory == "" || len(subjects) == 0 {
 		log.Fatal("team directory binding required")
 	}
 	server := mcp.NewServer(&mcp.Implementation{Name: "bobby-mock-calendar", Version: "1.0.0"}, nil)
+	if companyPath != "" {
+		mcp.AddTool(server, &mcp.Tool{Name: "calendar_company_events", Description: "List confirmed company events for the requested RFC3339 period."}, func(_ context.Context, _ *mcp.CallToolRequest, q query) (*mcp.CallToolResult, map[string]any, error) {
+			start, end, err := rangeQuery(q)
+			if err != nil {
+				return nil, nil, err
+			}
+			f, err := load(companyPath)
+			if err != nil {
+				return nil, nil, err
+			}
+			data := map[string]any{"kind": "calendar#events", "summary": f.Summary, "timeZone": f.TimeZone, "items": selectEvents(f, start, end)}
+			return nil, map[string]any{"data": data, "source": "Демо-календарь компании", "time_min": q.TimeMin, "time_max": q.TimeMax}, nil
+		})
+	}
 	for _, tool := range []struct{ name, description string }{{"calendar_onboarding_events", "Fetch scheduled events from the mentor calendar for a bounded RFC3339 range."}, {"calendar_mentor_freebusy", "Fetch busy intervals from the same mentor calendar; does not identify event titles."}} {
 		tool := tool
 		mcp.AddTool(server, &mcp.Tool{Name: tool.name, Description: tool.description}, func(_ context.Context, _ *mcp.CallToolRequest, q query) (*mcp.CallToolResult, map[string]any, error) {

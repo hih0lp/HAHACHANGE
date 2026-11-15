@@ -155,3 +155,29 @@ func TestPlannerReceivesPreviousTurnAndReadsOnlyPublicJSON(t *testing.T) {
 		t.Fatalf("unexpected plan: %+v, %v", plan, err)
 	}
 }
+
+func TestLatestMessagesRecoversNamedGroupBeforeUsingAllGroups(t *testing.T) {
+	calls := 0
+	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		var payload struct{ Messages []struct{ Content string } }
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil || len(payload.Messages) != 2 {
+			t.Errorf("invalid model input: %v", err)
+			return
+		}
+		if calls == 1 {
+			fmt.Fprint(w, `{"choices":[{"message":{"content":"{\"latest_group_messages\":true,\"all_chat_groups\":true}"}}]}`)
+			return
+		}
+		if payload.Messages[0].Content != groupScopePrompt || !strings.Contains(payload.Messages[1].Content, "Каталог") {
+			t.Error("missing focused group selection")
+		}
+		fmt.Fprint(w, `{"choices":[{"message":{"content":"{\"chat_group\":\"Каталог\"}"}}]}`)
+	}))
+	defer model.Close()
+	a := answerer{url: model.URL, model: "test", client: model.Client()}
+	plan, err := a.planCalendar(context.Background(), "Какие последние сообщения в группе «Каталог»?", time.Now(), nil, nil)
+	if err != nil || calls != 2 || plan.ChatGroup != "Каталог" || plan.AllChatGroups {
+		t.Fatalf("unexpected plan: %+v, %v", plan, err)
+	}
+}

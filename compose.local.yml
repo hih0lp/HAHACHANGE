@@ -288,11 +288,13 @@ services:
     restart: unless-stopped
     environment:
       MOCK_CALENDAR_JSON: /fixtures/calendar.json
+      MOCK_COMPANY_CALENDAR_JSON: /fixtures/company-calendar.json
       MOCK_LISTEN: :8080
       TEAM_DIRECTORY_URL: http://team-access:8080
       CALENDAR_DEMO_SUBJECT: ${CALENDAR_DEMO_SUBJECT:-intern,intern2}
     volumes:
       - ./fixtures/mock/calendar.json:/fixtures/calendar.json:ro
+      - ./fixtures/mock/company-calendar.json:/fixtures/company-calendar.json:ro
 
   qdrant:
     image: qdrant/qdrant:v1.12.6
