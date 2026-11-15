@@ -1,3 +1,5 @@
+import type { GitLabOverview, MockData, MockSource, Snapshot } from './mockData';
+
 export type Role = 'intern' | 'intern2' | 'mentor';
 export type Session = { access_token: string; expires_in: number; role?: Role };
 export type Job = {
@@ -36,7 +38,7 @@ export type CalendarEvent = {
   htmlLink?: string; status?: string;
 };
 type Auth = { token?: string; key?: string };
-type Options = Auth & { body?: unknown; idem?: string; signal?: AbortSignal; account?: boolean };
+type Options = Auth & { method?: 'PUT'; body?: unknown; idem?: string; signal?: AbortSignal; account?: boolean };
 
 export class ApiError extends Error {
   readonly status: number;
@@ -47,7 +49,7 @@ export class ApiError extends Error {
 }
 
 export async function request<T>(path: string, options: Options = {}): Promise<T> {
-  const { token, key, body, idem, signal, account } = options;
+  const { token, key, body, idem, signal, account, method } = options;
   const headers = new Headers({ Accept: 'application/json' });
   if (token) headers.set('Authorization', 'Bearer ' + token);
   if (key) headers.set('X-API-Key', key);
@@ -56,7 +58,7 @@ export async function request<T>(path: string, options: Options = {}): Promise<T
   if (body !== undefined) headers.set('Content-Type', 'application/json');
   const timeout = AbortSignal.timeout(18_000);
   const response = await fetch(path, {
-    method: body === undefined ? 'GET' : 'POST',
+    method: method ?? (body === undefined ? 'GET' : 'POST'),
     headers,
     body: body === undefined ? undefined : JSON.stringify(body),
     signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
@@ -94,6 +96,10 @@ export const api = {
   submit: (id: string, version: number, values: Values, idem: string, auth: Auth) =>
     request<Receipt>(formPath(id) + '/submit', { ...auth, idem, body: { version, values, confirmed: true } }),
   jira: (auth: Auth) => request<{ enabled: boolean; reminders: (Omit<Reminder, 'due_at'> & { due_at?: string; date_only?: boolean; status?: string })[] }>('/v1/tasks/jira', auth),
+  gitlab: (auth: Auth) => request<{ data: GitLabOverview[] }>('/v1/tasks/gitlab', auth),
+  mockData: (source: MockSource, auth: Options) => request<Snapshot<MockData>>('/v1/mock-data/' + source, auth),
+  saveMockData: (source: MockSource, body: Snapshot<MockData>, auth: Auth) =>
+    request<Snapshot<MockData>>('/v1/mock-data/' + source, { ...auth, method: 'PUT', body }),
   calendar: (auth: Auth) => request<{ data?: { items?: CalendarEvent[] } }>('/v1/calendar/events', auth),
 };
 

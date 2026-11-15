@@ -149,7 +149,7 @@ function App() {
           catalog={catalog} draft={draft} onDraft={setDraft} onForm={id => navigate('chat', id)} onCloseForm={() => navigate('chat', '', !!formID && !!history.state?.catalog)}
           onCatalog={() => { navigate('chat', '', true); }} widget={widget}
           onOpenChat={() => { if (view !== 'chat') navigate('chat'); }}/>
-        {view === 'tasks' && <Tasks token={token} apiKey={apiKey} onProfile={openProfile}/>}
+        {view === 'tasks' && <Tasks token={token} apiKey={apiKey} canEdit={role === "mentor"} onProfile={openProfile}/>}
       </div>}
       {!token && <div className="section-page">
         <Notice error={!!demoError} action={demoError && <button className="text-button" onClick={() => {

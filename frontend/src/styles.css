@@ -495,3 +495,20 @@
     .loading-dot { animation: none; }
   }
 }
+
+@media (min-width: 1050px) {
+  .task-sources.task-sources-with-gitlab { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+dialog.mock-editor { width: min(720px, calc(100% - 32px)); }
+.mock-editor-fields { border: 0; padding: 0; margin: 16px 0; min-width: 0; }
+.mock-record { margin-top: 16px; width: 100%; }
+.mock-record-tools { display: flex; align-items: end; gap: 12px; width: 100%; }
+.mock-record-tools label { display: grid; gap: 6px; flex: 1; min-width: 0; font-weight: 600; }
+.mock-record-tools select { width: 100%; min-width: 0; min-height: var(--control); padding: 8px 12px; border: 1px solid var(--control-line); border-radius: var(--radius-s); }
+.mock-field-pair { width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.mock-remove { margin-top: 16px; }
+.mock-editor-actions { padding-top: 12px; border-top: 1px solid var(--line); }
+@media (max-width: 620px) {
+  dialog.mock-editor { width: 100%; }
+  .mock-field-pair { grid-template-columns: 1fr; }
+}

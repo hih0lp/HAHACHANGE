@@ -70,6 +70,12 @@ func newHandler(service *rag.Service, cfg config) http.Handler {
 		registerDemoRoleRoute(mux)
 		registerDistributedJobRoutes(mux, cfg.Distributed, cfg.APIKey)
 		registerHistoryRoutes(mux, cfg.APIKey, cfg.Distributed)
+		if envBool("MOCK_EDITOR_ENABLED", false) && cfg.Jira.Mode == "mock" {
+			gitlab, calendar := os.Getenv("GITLAB_MCP_URL"), os.Getenv("CALENDAR_MCP_URL")
+			registerMockEditors(mux, cfg.APIKey, map[string]string{
+				"jira": cfg.Jira.BaseURL, "calendar": calendar, "company-calendar": calendar, "gitlab": gitlab,
+			}, gitlab)
+		}
 		if endpoint := os.Getenv("TEAM_ACCESS_URL"); endpoint != "" {
 			teamClient := scenario.Client{BaseURL: endpoint, RightsURL: os.Getenv("RIGHTS_URL")}
 			registerJiraTasks(mux, cfg.APIKey, cfg.Jira, cfg.Reminder, teamClient)

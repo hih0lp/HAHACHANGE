@@ -25,6 +25,7 @@ services:
     restart: unless-stopped
     environment:
       APP_ROLE: api
+      MOCK_EDITOR_ENABLED: "true"
       DISTRIBUTED_MODE: "true"
       LLM_URL: http://ollama:11434
       LLM_MODEL: ${BOBBY_MODEL:-qwen3:4b}
@@ -275,8 +276,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.mock-jira
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
     environment:
+      MOCK_DATABASE_URL: postgres://aibuddy:bobby-local-postgres@postgres:5432/aibuddy?sslmode=disable
       MOCK_JIRA_JSON: /fixtures/jira.json
       MOCK_LISTEN: :8080
       TEAM_DIRECTORY_URL: http://team-access:8080
@@ -287,13 +292,17 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.mock-calendar
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
     environment:
+      MOCK_DATABASE_URL: postgres://aibuddy:bobby-local-postgres@postgres:5432/aibuddy?sslmode=disable
       MOCK_CALENDAR_JSON: /fixtures/calendar.json
       MOCK_COMPANY_CALENDAR_JSON: /fixtures/company-calendar.json
       MOCK_LISTEN: :8080
       TEAM_DIRECTORY_URL: http://team-access:8080
-      CALENDAR_DEMO_SUBJECT: ${CALENDAR_DEMO_SUBJECT:-intern,intern2}
+      CALENDAR_DEMO_SUBJECT: ${CALENDAR_DEMO_SUBJECT:-intern,intern2,approver}
     volumes:
       - ./fixtures/mock/calendar.json:/fixtures/calendar.json:ro
       - ./fixtures/mock/company-calendar.json:/fixtures/company-calendar.json:ro
@@ -316,8 +325,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.gitlab-integration
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
     environment:
+      MOCK_DATABASE_URL: postgres://aibuddy:bobby-local-postgres@postgres:5432/aibuddy?sslmode=disable
       GITLAB_MODE: mock
     healthcheck:
       test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:8080/healthz"]

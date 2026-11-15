@@ -141,7 +141,21 @@ func main() {
 	if path == "" {
 		log.Fatal("MOCK_JIRA_JSON is required")
 	}
-	mux := newMockJiraHandler(path, scenario.Client{BaseURL: os.Getenv("TEAM_DIRECTORY_URL")})
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	db, err := mockfixture.OpenDatabase(ctx, os.Getenv("MOCK_DATABASE_URL"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	if db != nil {
+		defer db.Close()
+	}
+	data, err := mockfixture.Seed(ctx, db, "jira", func() ([]byte, error) { return os.ReadFile(path) }, validateJiraFixture)
+	if err != nil {
+		log.Fatal(err)
+	}
+	cancel()
+	mux := newMockJiraHandler(path, scenario.Client{BaseURL: os.Getenv("TEAM_DIRECTORY_URL")}, data)
 	listen := os.Getenv("MOCK_LISTEN")
 	if listen == "" {
 		listen = "127.0.0.1:8080"
@@ -149,10 +163,32 @@ func main() {
 	log.Fatal(http.ListenAndServe(listen, mux))
 }
 
-func newMockJiraHandler(path string, team scenario.Client) http.Handler {
+func validateJiraFixture(data []byte) error {
+	f, err := parseFixture(data)
+	if err == nil && f.Issues == nil {
+		return errors.New("Требуется список задач Jira.")
+	}
+	return err
+}
+
+func newMockJiraHandler(path string, team scenario.Client, datasets ...*mockfixture.Dataset) http.Handler {
+	var dataset *mockfixture.Dataset
+	if len(datasets) > 0 {
+		dataset = datasets[0]
+	}
+	read := func(ctx context.Context) (fixture, error) {
+		if dataset == nil {
+			return load(path)
+		}
+		data, err := dataset.Bytes(ctx)
+		if err != nil {
+			return fixture{}, err
+		}
+		return parseFixture(data)
+	}
 	server := mcp.NewServer(&mcp.Implementation{Name: "bobby-mock-jira", Version: "1.0.0"}, nil)
 	mcp.AddTool(server, &mcp.Tool{Name: "jira_list_issues", Description: "List issues assigned to the signed-in user in the configured project."}, func(ctx context.Context, _ *mcp.CallToolRequest, _ emptyArg) (*mcp.CallToolResult, any, error) {
-		f, e := load(path)
+		f, e := read(ctx)
 		if e != nil {
 			return nil, nil, e
 		}
@@ -160,7 +196,7 @@ func newMockJiraHandler(path string, team scenario.Client) http.Handler {
 		return nil, list(f, account, 10), nil
 	})
 	mcp.AddTool(server, &mcp.Tool{Name: "jira_list_assigned_issues", Description: "Find issues assigned to the signed-in user."}, func(ctx context.Context, _ *mcp.CallToolRequest, a assigneeArg) (*mcp.CallToolResult, any, error) {
-		f, e := load(path)
+		f, e := read(ctx)
 		if e != nil {
 			return nil, nil, e
 		}
@@ -171,7 +207,7 @@ func newMockJiraHandler(path string, team scenario.Client) http.Handler {
 		return nil, list(f, account, 50), nil
 	})
 	mcp.AddTool(server, &mcp.Tool{Name: "jira_get_issue", Description: "Fetch an assigned issue's title, status, description, dates, assignee and URL."}, func(ctx context.Context, _ *mcp.CallToolRequest, a keyArg) (*mcp.CallToolResult, any, error) {
-		f, e := load(path)
+		f, e := read(ctx)
 		if e != nil {
 			return nil, nil, e
 		}
@@ -185,7 +221,7 @@ func newMockJiraHandler(path string, team scenario.Client) http.Handler {
 		return nil, v, nil
 	})
 	mcp.AddTool(server, &mcp.Tool{Name: "jira_get_issue_fields", Description: "Fetch an assigned issue's nonempty fields."}, func(ctx context.Context, _ *mcp.CallToolRequest, a keyArg) (*mcp.CallToolResult, any, error) {
-		f, e := load(path)
+		f, e := read(ctx)
 		if e != nil {
 			return nil, nil, e
 		}
@@ -199,13 +235,18 @@ func newMockJiraHandler(path string, team scenario.Client) http.Handler {
 		return nil, map[string]any{"key": v.Key, "fields": issueFields(v)}, nil
 	})
 	mux := http.NewServeMux()
-	mockfixture.Register(mux, path, "jira_save_fixture", os.Getenv("MOCK_FIXTURE_WRITE_TOKEN"), func(data []byte) error {
-		f, err := parseFixture(data)
-		if err == nil && f.Issues == nil {
-			return errors.New("issues must be an array")
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+		if _, err := read(r.Context()); err != nil {
+			http.Error(w, "Jira data unavailable", http.StatusServiceUnavailable)
+			return
 		}
-		return err
+		w.WriteHeader(http.StatusNoContent)
 	})
+	if dataset != nil {
+		dataset.Register(mux, team)
+	} else {
+		mockfixture.Register(mux, path, "jira_save_fixture", os.Getenv("MOCK_FIXTURE_WRITE_TOKEN"), validateJiraFixture)
+	}
 	stream := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
 	mux.HandleFunc("/mcp", func(w http.ResponseWriter, r *http.Request) {
 		token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
@@ -221,7 +262,7 @@ func newMockJiraHandler(path string, team scenario.Client) http.Handler {
 		stream.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), jiraAccountKey{}, profile.JiraAccountID)))
 	})
 	mux.HandleFunc("GET /rest/api/3/issue/{key}", func(w http.ResponseWriter, r *http.Request) {
-		f, e := load(path)
+		f, e := read(r.Context())
 		if e != nil {
 			http.Error(w, e.Error(), 500)
 			return
@@ -240,7 +281,7 @@ func newMockJiraHandler(path string, team scenario.Client) http.Handler {
 		json.NewEncoder(w).Encode(map[string]any{"key": v.Key, "fields": fields})
 	})
 	mux.HandleFunc("GET /rest/api/3/search/jql", func(w http.ResponseWriter, r *http.Request) {
-		f, e := load(path)
+		f, e := read(r.Context())
 		if e != nil {
 			http.Error(w, e.Error(), 500)
 			return

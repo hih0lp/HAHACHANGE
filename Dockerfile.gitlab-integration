@@ -2,6 +2,8 @@ FROM golang:1.23-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 COPY cmd/gitlab-integration ./cmd/gitlab-integration
+COPY internal/scenario ./internal/scenario
+COPY internal/mockfixture ./internal/mockfixture
 RUN CGO_ENABLED=0 go build -trimpath -o /gitlab-integration ./cmd/gitlab-integration
 FROM alpine:3.20
 RUN apk add --no-cache ca-certificates

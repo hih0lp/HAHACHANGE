@@ -1,12 +1,17 @@
 services:
+  api:
+    environment:
+      MOCK_EDITOR_ENABLED: "false"
   mock-jira:
     environment:
+      MOCK_DATABASE_URL: ""
       MOCK_JIRA_JSON: /fixture-data/jira.json
       MOCK_FIXTURE_WRITE_TOKEN: ${MOCK_FIXTURE_WRITE_TOKEN:?Set MOCK_FIXTURE_WRITE_TOKEN}
     volumes:
       - ${MOCK_JIRA_DATA_DIR:?Set MOCK_JIRA_DATA_DIR}:/fixture-data
   mock-calendar:
     environment:
+      MOCK_DATABASE_URL: ""
       MOCK_CALENDAR_JSON: /fixture-data/calendar.json
       MOCK_FIXTURE_WRITE_TOKEN: ${MOCK_FIXTURE_WRITE_TOKEN:?Set MOCK_FIXTURE_WRITE_TOKEN}
     volumes:

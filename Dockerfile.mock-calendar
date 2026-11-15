@@ -3,6 +3,7 @@ WORKDIR /src
 COPY go.mod go.sum ./
 COPY cmd/mock-calendar ./cmd/mock-calendar
 COPY internal/mockfixture ./internal/mockfixture
+COPY internal/scenario ./internal/scenario
 RUN CGO_ENABLED=0 go build -trimpath -o /mock-calendar ./cmd/mock-calendar
 FROM alpine:3.20
 COPY --from=build /mock-calendar /usr/local/bin/mock-calendar
