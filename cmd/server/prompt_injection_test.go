@@ -67,7 +67,7 @@ func TestPlannerKeepsFormInjectionOutOfSystemMessage(t *testing.T) {
 	}))
 	defer model.Close()
 	a := answerer{url: model.URL, model: "test", client: model.Client()}
-	if _, err := a.planCalendar(context.Background(), "Где форма?", time.Now(), []formChoice{{ID: "access", Description: attack}}); err != nil {
+	if _, err := a.planCalendar(context.Background(), "Где форма?", time.Now(), nil, []formChoice{{ID: "access", Description: attack}}); err != nil {
 		t.Fatal(err)
 	}
 }

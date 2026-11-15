@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/hackchange/avito-rag/internal/modeloutput"
+
 	"github.com/hackchange/avito-rag/internal/distributed"
 )
 
@@ -42,6 +44,7 @@ func registerHistoryRoutes(mux *http.ServeMux, apiKey string, jobs *distributed.
 				writeError(w, http.StatusServiceUnavailable, errText("chat history is unavailable"))
 				return
 			}
+			item.Answer = modeloutput.PublicText(item.Answer)
 			items = append(items, item)
 		}
 		if rows.Err() != nil {

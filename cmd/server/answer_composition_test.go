@@ -188,3 +188,39 @@ func TestConnectedGitLabKeepsVerifiedJiraCard(t *testing.T) {
 		t.Fatalf("calls=%d answer=%q err=%v", calls, answer, err)
 	}
 }
+
+func TestFormUsesFinalAnswerAndLinksFromCatalogue(t *testing.T) {
+	rights := mcp.NewServer(&mcp.Implementation{Name: "test-rights", Version: "1"}, nil)
+	mcp.AddTool(rights, &mcp.Tool{Name: "rights_forms_list"}, func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, map[string]any, error) {
+		return nil, map[string]any{"forms": []formChoice{
+			{ID: "approved-form", Title: "Запрос", Description: "Запрос прав", URL: "/forms/approved-form"},
+			{ID: "unexpected-form", Title: "Другая форма", URL: "https://example.org/untrusted"},
+		}}, nil
+	})
+	rightsHTTP := testMCPServer(t, rights)
+	defer rightsHTTP.Close()
+	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var input struct{ Messages []struct{ Content string } }
+		if json.NewDecoder(r.Body).Decode(&input) != nil || len(input.Messages) != 2 {
+			t.Error("invalid model request")
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if strings.Contains(input.Messages[0].Content, "Classify") {
+			fmt.Fprint(w, `{"choices":[{"message":{"content":"{\"needs_form\":true}"}}]}`)
+			return
+		}
+		if !strings.Contains(input.Messages[1].Content, "Запрос прав") {
+			t.Error("missing catalogue evidence")
+		}
+		fmt.Fprint(w, `{"choices":[{"message":{"content":"<think>скрытый текст</think>Эта форма помогает запросить права."}}]}`)
+	}))
+	defer model.Close()
+	service := rag.New(rag.Config{EmbeddingsURL: "http://127.0.0.1:1", QdrantURL: "http://127.0.0.1:1"})
+	a := answerer{service: service, url: model.URL, model: "test", rightsMCPURL: rightsHTTP.URL}
+	got, _, err := a.Ask(distributed.WithTeamToken(context.Background(), "test-token"), "Где запросить доступ?")
+	want := "Эта форма помогает запросить права.\n\n[Запрос](/forms/approved-form)"
+	if err != nil || got != want {
+		t.Fatalf("answer=%q, err=%v", got, err)
+	}
+}

@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hackchange/avito-rag/internal/modeloutput"
+
 	"github.com/hackchange/avito-rag/internal/rag"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -20,7 +22,7 @@ type oldChatTurn struct {
 }
 
 func indexPendingChatMemory(ctx context.Context, db *pgxpool.Pool, service *rag.Service) error {
-	rows, err := db.Query(ctx, `SELECT id::text, owner_id, created_at, left(query,1000), left(answer,3000)
+	rows, err := db.Query(ctx, `SELECT id::text, owner_id, created_at, left(query,1000), answer
 		FROM ai_jobs WHERE status='completed' AND superseded_at IS NULL AND memory_indexed_at IS NULL AND answer IS NOT NULL
 		ORDER BY completed_at, id LIMIT 4`)
 	if err != nil {
@@ -37,6 +39,7 @@ func indexPendingChatMemory(ctx context.Context, db *pgxpool.Pool, service *rag.
 			rows.Close()
 			return err
 		}
+		item.answer = modeloutput.PublicTextLimit(item.answer, 3000)
 		pending = append(pending, item)
 	}
 	err = rows.Err()
@@ -99,7 +102,7 @@ func oldChatMemory(ctx context.Context, db *pgxpool.Pool, service *rag.Service, 
 			break
 		}
 		var turn oldChatTurn
-		err := db.QueryRow(ctx, `SELECT previous.created_at, left(previous.query,1000), left(previous.answer,2000)
+		err := db.QueryRow(ctx, `SELECT previous.created_at, left(previous.query,1000), previous.answer
 			FROM ai_jobs AS previous JOIN ai_jobs AS current_job
 			  ON previous.owner_id=current_job.owner_id
 			  AND previous.thread_id IS NOT DISTINCT FROM current_job.thread_id
@@ -112,6 +115,7 @@ func oldChatMemory(ctx context.Context, db *pgxpool.Pool, service *rag.Service, 
 				ORDER BY recent.created_at DESC, recent.id DESC LIMIT 8)`, hit.JobID, owner, jobID).
 			Scan(&turn.AskedAt, &turn.Question, &turn.Answer)
 		if err == nil {
+			turn.Answer = modeloutput.PublicTextLimit(turn.Answer, 2000)
 			turns = append(turns, turn)
 		} else if !errors.Is(err, pgx.ErrNoRows) {
 			return nil, err

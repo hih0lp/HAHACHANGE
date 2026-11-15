@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 
+	"github.com/hackchange/avito-rag/internal/modeloutput"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -15,7 +17,7 @@ type chatContextTurn struct {
 // Bound both turn count and text size so a long chat cannot consume the model
 // context. The most recent eight turns are restored in chronological order.
 func recentChatTurns(ctx context.Context, db *pgxpool.Pool, owner, jobID string) ([]chatContextTurn, error) {
-	rows, err := db.Query(ctx, `SELECT left(previous.query,1000), left(previous.answer,3000)
+	rows, err := db.Query(ctx, `SELECT left(previous.query,1000), previous.answer
 		FROM ai_jobs AS previous JOIN ai_jobs AS current_job
 		  ON previous.owner_id=current_job.owner_id
 		  AND previous.thread_id IS NOT DISTINCT FROM current_job.thread_id
@@ -32,6 +34,7 @@ func recentChatTurns(ctx context.Context, db *pgxpool.Pool, owner, jobID string)
 		if err := rows.Scan(&turn.Question, &turn.Answer); err != nil {
 			return nil, err
 		}
+		turn.Answer = modeloutput.PublicTextLimit(turn.Answer, 3000)
 		turns = append(turns, turn)
 	}
 	if err := rows.Err(); err != nil {

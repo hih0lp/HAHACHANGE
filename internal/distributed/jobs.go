@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/hackchange/avito-rag/internal/modeloutput"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -160,6 +162,7 @@ func (s *System) Get(ctx context.Context, owner, id string) (Job, error) {
 		return Job{}, err
 	}
 	job.Sources = json.RawMessage(sources)
+	job.Answer = modeloutput.PublicText(job.Answer)
 	if s.Redis != nil && (job.Status == "queued" || job.Status == "running") {
 		if cached, err := s.Redis.Get(ctx, "ai-job:"+id).Bytes(); err == nil {
 			var quick struct {

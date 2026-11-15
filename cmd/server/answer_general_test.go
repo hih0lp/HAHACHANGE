@@ -23,7 +23,7 @@ func TestGeneralQuestionWorksWithoutDocumentSearch(t *testing.T) {
 		if len(input.Messages) != 2 || input.Messages[0].Role != "system" || !strings.Contains(input.Messages[0].Content, "общие вопросы") || !strings.Contains(input.Messages[1].Content, "Поиск документов временно недоступен") {
 			t.Errorf("unexpected prompt: %+v", input)
 		}
-		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"Я Бобби, ваш ИИ-помощник."}}]}`))
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"reasoning_content":"служебное поле","content":"Служебный текст</think>Я Бобби, ваш ИИ-помощник."}}]}`))
 	}))
 	defer llm.Close()
 	service := rag.New(rag.Config{EmbeddingsURL: "http://127.0.0.1:1", QdrantURL: "http://127.0.0.1:1"})
