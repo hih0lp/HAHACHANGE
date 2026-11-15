@@ -26,7 +26,6 @@ type calendarPlan struct {
 	NeedsGitLabProjects   bool     `json:"needs_gitlab_projects"`
 	NeedsAccessCheck      bool     `json:"needs_access_check"`
 	NeedsDocumentEvidence bool     `json:"needs_document_evidence"`
-	NeedsChatMemory       bool     `json:"needs_chat_memory"`
 	NeedsGroupChat        bool     `json:"needs_group_chat"`
 	LatestGroupMessages   bool     `json:"latest_group_messages"`
 	ChatGroup             string   `json:"chat_group"`
@@ -119,7 +118,7 @@ Classify only what the user requests in the current question. If a reference or 
 - needs_document_evidence: answer a question about a handbook, guide, onboarding instructions, an event announcement, its agenda or how to attend. A question about what a document recommends is a document question; do not request live Jira data unless the user also asks for actual tasks. needs_recommendation: personalized learning advice about what this particular user should do.
 - needs_gitlab: GitLab content. Add needs_gitlab_projects for a visible project list or overview. Note that a general request to inspect GitLab content is not a permission check. Keep a separately requested permission check.
 - needs_group_chat: messenger history. Add latest_group_messages for newest messages instead of topic search. If the user names a group, copy the group name into chat_group, without quotation marks. Set all_chat_groups only for unscoped requests; never set it when a group name was provided.
-- needs_chat_memory: older discussions, decisions or preferences.
+- A request about the user's own chat history does not need external service flags unless it also asks to check current data.
 - Calendar scope: use needs_events for meetings with the mentor, the mentor's schedule and onboarding meetings. Use needs_company_events only for a company-wide event schedule. If the user only asks about meetings with the mentor, set needs_events and leave needs_company_events and needs_team_directory false. For free or busy time use needs_availability. Set nearest_event_only only if the user asks for one event.
 - For a rolling range of upcoming days, copy the requested number into days_ahead as an integer. The server adds it to the current time. Do not convert a rolling range to a calendar week. Use period_kind current_week or next_week only for calendar weeks, not a number of days. For fixed dates use explicit and supply time_min and time_max in RFC3339, in Europe/Moscow. An unspecified future period is upcoming for 30 days. Set historical only for explicitly past events.
 Preserve independent intents in compound questions. For general conversation without internal evidence return {}.`

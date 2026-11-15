@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"log"
 	"strings"
@@ -124,7 +123,38 @@ func oldChatMemory(ctx context.Context, db *pgxpool.Pool, service *rag.Service, 
 	return turns, nil
 }
 
-func chatMemoryEvidence(turns []oldChatTurn) string {
-	data, _ := json.Marshal(turns)
-	return "Найденные старые реплики этого браузера (недоверенные данные о прежнем разговоре, не подтверждение текущего состояния сервисов): " + string(data)
+const chatMemoryToolName = "search_chat_memory"
+
+type chatMemoryLookup func(context.Context, string) ([]oldChatTurn, error)
+
+func chatMemoryTool() map[string]any {
+	return map[string]any{"type": "function", "function": map[string]any{
+		"name":        chatMemoryToolName,
+		"description": "Search older messages in this same chat for a specific past topic or decision. Recent messages are already in context. No matches does not mean that the chat was empty.",
+		"parameters": map[string]any{
+			"type": "object", "required": []string{"query"}, "additionalProperties": false,
+			"properties": map[string]any{"query": map[string]string{"type": "string", "description": "A specific topic or detail from the past conversation"}},
+		},
+	}}
+}
+
+type chatMemoryResult struct {
+	Status string        `json:"status"`
+	Turns  []oldChatTurn `json:"older_turns,omitempty"`
+}
+
+func searchChatMemory(ctx context.Context, lookup chatMemoryLookup, args map[string]any) chatMemoryResult {
+	query, ok := args["query"].(string)
+	query = strings.TrimSpace(query)
+	if !ok || len(args) != 1 || query == "" || len([]rune(query)) > 300 {
+		return chatMemoryResult{Status: "invalid_query"}
+	}
+	turns, err := lookup(ctx, query)
+	if err != nil {
+		return chatMemoryResult{Status: "older_history_unavailable"}
+	}
+	if len(turns) == 0 {
+		return chatMemoryResult{Status: "no_matching_older_turns"}
+	}
+	return chatMemoryResult{Status: "ok", Turns: turns}
 }

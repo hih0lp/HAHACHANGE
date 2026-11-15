@@ -9,8 +9,8 @@ import (
 )
 
 type chatContextTurn struct {
-	Question string
-	Answer   string
+	Question string `json:"question"`
+	Answer   string `json:"answer"`
 }
 
 // Read only this browser owner's completed turns before the current job.
