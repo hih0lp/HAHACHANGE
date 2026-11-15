@@ -1,52 +1,28 @@
-# Спецификация: Avito Playbook RAG
+# SDD. Бобби
 
-## Назначение
+Бобби отвечает на вопросы стажёров, показывает задачи и встречи, помогает подать заявку на доступ и напоминает о дедлайнах.
 
-Сервис даёт ИИ-агенту семантический поиск по Markdown-документам Playbook. Он возвращает короткие фрагменты вместе с источником, а агент добавляет их в контекст модели и формирует ответ с цитированием файла.
+## Компоненты и данные
 
-## Состав модулей
+| Компонент | Назначение |
+| --- | --- |
+| React и Nginx | Чат, мини-чат, задачи, формы и профиль. Шлюз отдаёт фронтенд и проксирует API и WebSocket. |
+| Go API и воркер | API сохраняет задания, публикует их из PostgreSQL в Kafka, воркер обрабатывает очередь и вызывает модель. Redis хранит краткоживущее состояние задания и командный токен. |
+| Embeddings и Qdrant | Семантический поиск по базе знаний и отдельный индекс для давнего контекста личного чата. PostgreSQL хранит историю и проверяет принадлежность найденных сообщений. |
+| Team Access и Access Rights | Профили, команды, права, схемы форм и сохранённые заявки. Командные вызовы используют [access token](ACCESS_TOKEN.md). |
+| MCP-сервисы | Jira, календарь, GitLab и мессенджер предоставляют данные по запросу. В локальном демо используются моки. Jira и календарь читают данные из JSON. |
 
-| Модуль | Назначение | Хранение состояния |
-| --- | --- | --- |
-| `playbook/` | Исходные Markdown-документы для индексации | Git-репозиторий / файловая система |
-| `api` | Go HTTP API: разбиение документов на фрагменты, индексация, поиск, авторизация | Stateless |
-| `embeddings` | Локальный Hugging Face Text Embeddings Inference c `intfloat/multilingual-e5-small` | `model-cache` Docker volume |
-| `qdrant` | Векторная БД: векторы, текст фрагментов и метаданные источника | `qdrant-data` Docker volume |
-| `pkg/knowledge` | Go-клиент, который подключается в код будущего агента | В коде агента |
+## Основные сценарии
 
-Поток данных: `playbook/*.md` → Go API (chunking) → embeddings → Qdrant → `/v1/knowledge/search` → агент → LLM-ответ.
+- [История личного чата](specs/008-chat-history.md) и [поиск по давнему контексту](specs/041-long-term-chat-memory.md).
+- [Редактирование вопроса и остановка ответа](specs/044-chat-edit-and-stop.md).
+- [Проверка и отправка форм](specs/042-form-validation-proxy.md).
+- [Напоминания о сроках](specs/035-minute-deadline-pings.md) и [карточки в чате](specs/043-exact-mock-jira-deadlines.md).
+- [Изменение данных моков](specs/045-writable-mock-fixtures.md).
 
-## Развёртывание на сервере
+Локальный запуск описан в [README](README.md#локальный-запуск) и [SDD-046](specs/046-local-compose.md). В этом профиле Compose запускает Ollama с настраиваемой моделью, по умолчанию `qwen3:4b`.
 
-Рабочая папка: `C:\Users\ADMIN\Desktop\Hack&Change\avito-rag`.
-
-```bat
-cd /d "C:\Users\ADMIN\Desktop\Hack&Change\avito-rag"
-copy .env.example .env
-docker compose up -d
-docker compose ps
-```
-
-Проверка готовности:
-
-```bat
-curl http://localhost:8000/health
-```
-
-Первый старт модели занимает несколько минут: веса сохраняются в `model-cache`, поэтому последующие перезапуски быстрее.
-
-### Офлайн-загрузка образов
-
-Если Docker Desktop не может получить публичные образы из-за ошибки credential helper, используйте заранее подготовленный tar-файл:
-
-```bat
-docker load -i .docker-images\avito-rag-server-images.tar
-docker compose up -d
-```
-
-Это не меняет Docker-аккаунт: команда лишь загружает в локальный Docker Engine те же образы Qdrant, TEI и Go API.
-
-## API-контракт
+## API базы знаний
 
 | Метод | URL | Назначение |
 | --- | --- | --- |
@@ -54,7 +30,7 @@ docker compose up -d
 | `GET` | `/` | Простая веб-страница для ручного поиска и проверки результатов |
 | `GET` | `/v1/knowledge/stats` | Число документов и фрагментов |
 | `POST` | `/v1/knowledge/search` | Семантический поиск для агента |
-| `POST` | `/v1/ask` | RAG-ответ через Qwen3 8B в LM Studio с источниками |
+| `POST` | `/v1/ask` | Ответ через настроенную модель с источниками |
 | `POST` | `/v1/knowledge/reindex` | Полная пересборка индекса после обновления документов |
 
 Запрос поиска:
@@ -78,42 +54,3 @@ docker compose up -d
   ]
 }
 ```
-
-## Подключение ИИ-агента
-
-1. Агент принимает вопрос пользователя.
-2. Вызывает `POST /v1/knowledge/search` с `limit` 3–5.
-3. Собирает поля `text` в контекст LLM, сохраняя `path` и `chunk_index`.
-4. Просит LLM отвечать только на основе найденного контекста и возвращать источники.
-
-Для Go-агента используйте `pkg/knowledge`:
-
-```go
-client := knowledge.Client{BaseURL: "http://localhost:8000"}
-hits, err := client.Search(ctx, question, 5)
-if err != nil {
-    return err
-}
-contextForLLM := knowledge.BuildContext(hits)
-```
-
-## Обновление знаний
-
-```bat
-git -C ..\playbook pull --ff-only
-curl -X POST http://localhost:8000/v1/knowledge/reindex
-```
-
-`/reindex` очищает и строит индекс заново, поэтому удалённые документы не остаются в выдаче.
-
-## Безопасность и эксплуатация
-
-- По умолчанию API и Qdrant доступны только на `127.0.0.1`.
-- Для публикации API задайте длинный `API_KEY` в `.env`; передавайте его в заголовке `X-API-Key`.
-- Не публикуйте Qdrant-порт наружу без сетевой защиты.
-- Состояние не теряется при `docker compose down`; полный сброс — `docker compose down -v`.
-- Логи: `docker compose logs -f api embeddings qdrant`.
-
-## Качество
-
-Go API собирается только после тестов. Dockerfile проверяет суммарное покрытие `go test` не ниже 90%.

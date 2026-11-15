@@ -79,3 +79,25 @@ test('empty, rejected and timed-out requests have distinct outcomes', async t =>
   assert.match(errorText(new DOMException('', 'TimeoutError'), 'fallback'), /не успел/);
   assert.equal(errorText(new Error(), 'fallback'), 'fallback');
 });
+
+test('stopping and editing send separate authenticated commands for the same job', async t => {
+  const calls: Array<{ path: string, method?: string, auth: string | null, body: unknown }> = [];
+  t.mock.method(globalThis, 'fetch', async (path: string, init: RequestInit) => {
+    calls.push({
+      path,
+      method: init.method,
+      auth: new Headers(init.headers).get('Authorization'),
+      body: JSON.parse(String(init.body)),
+    });
+    return Response.json(calls.length === 1
+      ? { id: 'original', status: 'failed', error: 'Остановлено пользователем' }
+      : { id: 'replacement', status: 'queued', query: 'Уточнение' });
+  });
+  const auth = { token: 'test-token' };
+  assert.equal((await api.stop('original', auth)).status, 'failed');
+  assert.equal((await api.edit('original', 'Уточнение', auth)).id, 'replacement');
+  assert.deepEqual(calls, [
+    { path: '/v1/jobs/original/stop', method: 'POST', auth: 'Bearer test-token', body: {} },
+    { path: '/v1/jobs/original/edit', method: 'POST', auth: 'Bearer test-token', body: { query: 'Уточнение' } },
+  ]);
+});
