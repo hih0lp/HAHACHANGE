@@ -6,12 +6,12 @@ import (
 )
 
 func TestFormatCalendarBusyUsesOnlyReturnedIntervals(t *testing.T) {
-	result := map[string]any{"data": map[string]any{"calendars": map[string]any{"mentor": map[string]any{"busy": []any{map[string]string{"start": "2026-11-19T13:00:00Z", "end": "2026-11-19T14:00:00Z"}}}}}}
+	result := map[string]any{"time_min": "2026-11-15T16:00:00+03:00", "time_max": "2026-11-22T16:00:00+03:00", "data": map[string]any{"calendars": map[string]any{"mentor": map[string]any{"busy": []any{map[string]string{"start": "2026-11-19T13:00:00Z", "end": "2026-11-19T14:00:00Z"}}}}}}
 	answer, err := formatCalendarBusy(result)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(answer, "19.11.2026 16:00–17:00 МСК") || strings.Contains(answer, "13:00") {
+	if !strings.Contains(answer, "19.11.2026 16:00–17:00 МСК") || !strings.Contains(answer, "15.11.2026 16:00 — 22.11.2026 16:00 МСК") || strings.Contains(answer, "13:00") {
 		t.Fatalf("unexpected busy answer: %q", answer)
 	}
 }

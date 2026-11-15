@@ -20,7 +20,9 @@ func formatCalendarBusy(result any) (string, error) {
 		return "", err
 	}
 	var response struct {
-		Data struct {
+		TimeMin string `json:"time_min"`
+		TimeMax string `json:"time_max"`
+		Data    struct {
 			Calendars map[string]struct {
 				Busy []struct {
 					Start string `json:"start"`
@@ -39,6 +41,15 @@ func formatCalendarBusy(result any) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	period := ""
+	if response.TimeMin != "" && response.TimeMax != "" {
+		start, startErr := time.Parse(time.RFC3339, response.TimeMin)
+		end, endErr := time.Parse(time.RFC3339, response.TimeMax)
+		if startErr != nil || endErr != nil || !end.After(start) {
+			return "", errors.New("invalid calendar busy period")
+		}
+		period = fmt.Sprintf(" за период %s — %s МСК", start.In(zone).Format("02.01.2006 15:04"), end.In(zone).Format("02.01.2006 15:04"))
+	}
 	var lines []string
 	for _, calendar := range response.Data.Calendars {
 		for _, slot := range calendar.Busy {
@@ -56,9 +67,9 @@ func formatCalendarBusy(result any) (string, error) {
 		}
 	}
 	if len(lines) == 0 {
-		return "В проверенном календаре за указанный период нет занятых интервалов.", nil
+		return "В проверенном календаре" + period + " нет занятых интервалов.", nil
 	}
-	return "По календарю наставник занят:\n" + strings.Join(lines, "\n"), nil
+	return "По календарю наставник занят" + period + ":\n" + strings.Join(lines, "\n"), nil
 }
 
 func formatCalendarEvents(result any, maxItems ...int) (string, error) {
