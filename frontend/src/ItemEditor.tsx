@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { api, errorText } from './api';
 import { Modal, Notice } from './ui';
+import type { JiraIssue } from './mockData';
 
 export type EditableItem =
   | { kind: 'jira'; key: string; summary: string; dueAt?: string; dateOnly?: boolean }
@@ -24,21 +25,39 @@ export function ItemEditor({ item, token, apiKey, onClose, onSave }: Props) {
 }
 
 function JiraEditor({ item, token, apiKey, onClose, onSave }: Props & { item: Extract<EditableItem, { kind: 'jira' }> }) {
-  const original = item.dateOnly ? item.dueAt?.slice(0, 10) || '' : moscow(item.dueAt);
+  const [issue, setIssue] = useState<JiraIssue>();
   const [summary, setSummary] = useState(item.summary);
   const [description, setDescription] = useState('');
-  const [due, setDue] = useState(original);
+  const [due, setDue] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const changed = summary !== item.summary || description !== '' || due !== original;
+  const [reload, setReload] = useState(0);
+  const originalDue = issue?.due_at ? moscow(issue.due_at) : issue?.due_date || '';
+  const changed = !!issue && (summary !== issue.summary || description !== (issue.description || '') || due !== originalDue);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setIssue(undefined);
+    setError('');
+    api.jiraIssue(item.key, { ...auth(token, apiKey), signal: controller.signal }).then(result => {
+      if (controller.signal.aborted) return;
+      setIssue(result);
+      setSummary(result.summary);
+      setDescription(result.description || '');
+      setDue(result.due_at ? moscow(result.due_at) : result.due_date || '');
+    }).catch(err => {
+      if (!controller.signal.aborted) setError(errorText(err, 'Не удалось загрузить задачу Jira.'));
+    });
+    return () => controller.abort();
+  }, [item.key, token, apiKey, reload]);
 
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (!changed || busy) return;
+    if (!issue || !changed || busy) return;
     const body: { summary?: string; description?: string; due_date?: string; due_at?: string | null } = {};
-    if (summary !== item.summary) body.summary = summary.trim();
-    if (description !== '') body.description = description;
-    if (due !== original) {
+    if (summary !== issue.summary) body.summary = summary.trim();
+    if (description !== (issue.description || '')) body.description = description;
+    if (due !== originalDue) {
       body.due_date = due.slice(0, 10);
       body.due_at = due.includes('T') ? timestamp(due) : null;
     }
@@ -50,14 +69,15 @@ function JiraEditor({ item, token, apiKey, onClose, onSave }: Props & { item: Ex
   }
 
   return <Modal title={'Задача ' + item.key} onClose={onClose} className="item-editor">
-    {error && <Notice error>{error}</Notice>}
-    <form onSubmit={save} className="field-stack">
+    {error && <Notice error action={!issue && <button type="button" className="button secondary" onClick={() => setReload(value => value + 1)}>Повторить</button>}>{error}</Notice>}
+    {!issue && !error && <Notice>Загружаем задачу…</Notice>}
+    {issue && <form onSubmit={save} className="field-stack">
       <label>Название задачи<input value={summary} required onChange={e => setSummary(e.target.value)}/></label>
-      <label>Новое описание<textarea rows={4} value={description} onChange={e => setDescription(e.target.value)} placeholder="Оставьте пустым, если описание менять не нужно"/></label>
+      <label>Описание задачи<textarea rows={4} value={description} onChange={e => setDescription(e.target.value)}/></label>
       <label>Срок (МСК)<input type={due.includes('T') ? 'datetime-local' : 'date'} value={due} onChange={e => setDue(e.target.value)}/></label>
       <button type="button" className="text-button" onClick={() => setDue(due.includes('T') ? due.slice(0, 10) : (due || new Date().toISOString().slice(0, 10)) + 'T12:00')}>Изменить формат срока: дата / дата и время</button>
       <div className="actions"><button className="button primary" disabled={!changed || busy}>{busy ? 'Сохраняем…' : 'Сохранить'}</button></div>
-    </form>
+    </form>}
   </Modal>;
 }
 

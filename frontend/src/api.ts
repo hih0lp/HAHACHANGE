@@ -1,4 +1,4 @@
-import type { GitLabOverview, MockData, MockSource, Snapshot } from './mockData';
+import type { GitLabOverview, JiraIssue, MockData, MockSource, Snapshot } from './mockData';
 
 export type Role = 'intern' | 'intern2' | 'mentor';
 export type Session = { access_token: string; expires_in: number; role?: Role };
@@ -100,6 +100,8 @@ export const api = {
   gitlab: (auth: Auth) => request<{ data: GitLabOverview[] }>('/v1/tasks/gitlab', auth),
   gitlabBranches: (project: number, auth: Auth) => request<{ data: { name: string; default?: boolean }[] }>(
     '/v1/tasks/gitlab/' + encodeURIComponent(project) + '/branches', auth),
+  jiraIssue: (key: string, auth: Auth & { signal?: AbortSignal }) => request<JiraIssue>(
+    '/v1/mock-data/jira/issues/' + encodeURIComponent(key), auth),
   updateJiraIssue: (key: string, body: { summary?: string; description?: string; due_date?: string; due_at?: string | null }, auth: Auth) =>
     request<{ saved: boolean; version: number }>('/v1/mock-data/jira/issues/' + encodeURIComponent(key), { ...auth, method: 'PUT', body }),
   updateCalendarEvent: (id: string, body: { start?: string; end?: string }, auth: Auth) =>

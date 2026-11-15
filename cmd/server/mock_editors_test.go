@@ -31,6 +31,26 @@ func TestMockItemPutProxiesBearerAndPath(t *testing.T) {
 	}
 }
 
+func TestMockJiraItemGetProxiesBearer(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "GET" || r.URL.Path != "/v1/mock-data/jira/issues/SCRUM-1" || r.Header.Get("Authorization") != "Bearer intern" {
+			t.Errorf("unexpected upstream request: %s %s %q", r.Method, r.URL.Path, r.Header.Get("Authorization"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"key":"SCRUM-1","description":"Saved details"}`))
+	}))
+	defer upstream.Close()
+	mux := http.NewServeMux()
+	registerMockEditors(mux, "", map[string]string{"jira": upstream.URL}, "")
+	r := httptest.NewRequest("GET", "/v1/mock-data/jira/issues/SCRUM-1", nil)
+	r.Header.Set("Authorization", "Bearer intern")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, r)
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"description":"Saved details"`) {
+		t.Fatalf("proxy: %d %s", w.Code, w.Body.String())
+	}
+}
+
 func TestGitLabBranchListUsesCallerTokenAndProject(t *testing.T) {
 	server := mcp.NewServer(&mcp.Implementation{Name: "fixture", Version: "1"}, nil)
 	mcp.AddTool(server, &mcp.Tool{Name: "gitlab_branches"}, func(_ context.Context, _ *mcp.CallToolRequest, in struct {

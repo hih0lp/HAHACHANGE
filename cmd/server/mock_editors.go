@@ -54,6 +54,9 @@ func registerMockEditors(mux *http.ServeMux, key string, endpoints map[string]st
 		}
 		if name != "company-calendar" {
 			mux.Handle("PUT "+path+"/{tail...}", proxy)
+			if name == "jira" {
+				mux.Handle("GET "+path+"/issues/{key}", proxy)
+			}
 		}
 	}
 	if gitlab == "" {

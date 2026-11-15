@@ -248,6 +248,9 @@ func newMockJiraHandler(path string, team scenario.Client, datasets ...*mockfixt
 	} else {
 		mockfixture.Register(mux, path, "jira_save_fixture", os.Getenv("MOCK_FIXTURE_WRITE_TOKEN"), validateJiraFixture)
 	}
+	mux.HandleFunc("GET /v1/mock-data/jira/issues/{key}", func(w http.ResponseWriter, r *http.Request) {
+		readIssue(w, r, read, team)
+	})
 	stream := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
 	mux.HandleFunc("/mcp", func(w http.ResponseWriter, r *http.Request) {
 		token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")

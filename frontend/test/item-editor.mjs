@@ -9,6 +9,7 @@ const browser = await chromium.launch({ headless: true, executablePath: process.
 try {
   const page = await browser.newPage();
   let jiraTitle = 'Начальная задача';
+  let jiraDescription = 'Исходное описание';
   let start = '2026-11-16T09:00:00+03:00';
   let branch = 'docs/demo';
   await page.route('**/session/bootstrap', route => route.fulfill({ status: 200, body: '' }));
@@ -24,9 +25,11 @@ try {
     if (path === '/v1/tasks/gitlab') return respond({ data: [{ id: 2, name: 'Проект', path_with_namespace: 'demo/project', default_branch: 'main' }] });
     if (path === '/v1/tasks/gitlab/2/branches') return respond({ data: [{ name: branch }] });
     if (path === '/v1/mock-data/jira/issues/SCRUM-1') {
-      assert.equal(request.method(), 'PUT');
       assert.equal(request.headers().authorization, 'Bearer intern-token');
-      jiraTitle = body.summary;
+      if (request.method() === 'GET') return respond({ key: 'SCRUM-1', summary: jiraTitle, description: jiraDescription, status: 'В работе', status_category: 'indeterminate', due_at: '2026-11-20T17:00:00+03:00' });
+      assert.equal(request.method(), 'PUT');
+      if ('summary' in body) jiraTitle = body.summary;
+      if ('description' in body) jiraDescription = body.description;
       return respond({ saved: true, version: 2 });
     }
     if (path === '/v1/mock-data/calendar/events/event-1') {
@@ -45,9 +48,23 @@ try {
   await page.getByText('SCRUM-1 · Начальная задача').waitFor();
   await page.getByRole('button', { name: 'Изменить · SCRUM-1' }).click();
   const jira = page.getByRole('dialog', { name: 'Задача SCRUM-1' });
+  await jira.getByRole('textbox', { name: 'Описание задачи' }).waitFor();
+  assert.equal(await jira.getByRole('textbox', { name: 'Описание задачи' }).inputValue(), 'Исходное описание');
   await jira.getByRole('textbox', { name: 'Название задачи' }).fill('Новая задача');
   await jira.getByRole('button', { name: 'Сохранить' }).click();
   await page.getByText('SCRUM-1 · Новая задача').waitFor();
+  await page.getByRole('button', { name: 'Изменить · SCRUM-1' }).click();
+  const description = page.getByRole('dialog', { name: 'Задача SCRUM-1' }).getByRole('textbox', { name: 'Описание задачи' });
+  await description.waitFor();
+  assert.equal(await description.inputValue(), 'Исходное описание');
+  await description.fill('Сохранённое описание');
+  await page.getByRole('dialog', { name: 'Задача SCRUM-1' }).getByRole('button', { name: 'Сохранить' }).click();
+  await page.getByRole('button', { name: 'Изменить · SCRUM-1' }).click();
+  await description.waitFor();
+  assert.equal(await description.inputValue(), 'Сохранённое описание');
+  await description.fill('');
+  await page.getByRole('dialog', { name: 'Задача SCRUM-1' }).getByRole('button', { name: 'Сохранить' }).click();
+  assert.equal(jiraDescription, '');
 
   await page.getByRole('button', { name: 'Изменить · Встреча' }).click();
   const calendar = page.getByRole('dialog', { name: 'Событие · Встреча' });
