@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/hackchange/avito-rag/internal/mockfixture"
@@ -96,8 +97,8 @@ func main() {
 		log.Fatal("MOCK_CALENDAR_JSON is required")
 	}
 	directory := os.Getenv("TEAM_DIRECTORY_URL")
-	subject := os.Getenv("CALENDAR_DEMO_SUBJECT")
-	if directory == "" || subject == "" {
+	subjects := calendarSubjects(os.Getenv("CALENDAR_DEMO_SUBJECT"))
+	if directory == "" || len(subjects) == 0 {
 		log.Fatal("team directory binding required")
 	}
 	server := mcp.NewServer(&mcp.Implementation{Name: "bobby-mock-calendar", Version: "1.0.0"}, nil)
@@ -158,7 +159,7 @@ func main() {
 		var p struct {
 			ID string `json:"id"`
 		}
-		if resp.StatusCode != 200 || json.NewDecoder(resp.Body).Decode(&p) != nil || p.ID != subject {
+		if resp.StatusCode != 200 || json.NewDecoder(resp.Body).Decode(&p) != nil || !subjects[p.ID] {
 			http.Error(w, "calendar binding unavailable", 403)
 			return
 		}
@@ -169,4 +170,14 @@ func main() {
 		listen = "127.0.0.1:8080"
 	}
 	log.Fatal(http.ListenAndServe(listen, mux))
+}
+
+func calendarSubjects(value string) map[string]bool {
+	subjects := map[string]bool{}
+	for _, subject := range strings.Split(value, ",") {
+		if subject = strings.TrimSpace(subject); subject != "" {
+			subjects[subject] = true
+		}
+	}
+	return subjects
 }
