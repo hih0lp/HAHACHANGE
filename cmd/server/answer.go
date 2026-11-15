@@ -158,6 +158,10 @@ func (a answerer) ask(ctx context.Context, question string) (string, []rag.Searc
 }
 
 func (a answerer) answerWithContext(ctx context.Context, question string, recent []chatContextTurn, lookup chatMemoryLookup) (string, []rag.SearchHit, error) {
+	teamToken := distributed.TeamToken(ctx)
+	if teamToken != "" && isAccessFormDestinationQuestion(question) {
+		return a.accessFormDestination(ctx, teamToken), nil, nil
+	}
 	var memoryEvidence string
 	if len(recent) == recentChatLimit && lookup != nil {
 		query, err := a.planChatMemoryQuery(ctx, question, recent)
@@ -181,7 +185,6 @@ func (a answerer) answerWithContext(ctx context.Context, question string, recent
 	if client == nil {
 		client = &http.Client{Timeout: 3 * time.Minute}
 	}
-	teamToken := distributed.TeamToken(ctx)
 	systemPrompt := agentSystemPrompt + "\n\n" + untrustedEvidenceRule
 	moscow, err := time.LoadLocation("Europe/Moscow")
 	if err != nil {
@@ -289,18 +292,7 @@ func (a answerer) answerWithContext(ctx context.Context, question string, recent
 	// A conversation uses one model-led tool loop. An independent planner
 	// without the conversation can pick an unrelated source for follow-ups.
 	if teamToken != "" && len(recent) == 0 {
-		var forms []formChoice
-		if a.rightsMCPURL != "" {
-			if listed, err := mcpTeamTool(ctx, a.rightsMCPURL, "", teamToken, "rights_forms_list", map[string]any{}); err == nil {
-				data, _ := json.Marshal(listed)
-				var catalogue struct {
-					Forms []formChoice `json:"forms"`
-				}
-				if json.Unmarshal(data, &catalogue) == nil {
-					forms = catalogue.Forms
-				}
-			}
-		}
+		forms, _ := a.listForms(ctx, teamToken)
 		{
 			plan, planErr := a.planCalendar(ctx, question, time.Now().In(moscow), recent, forms)
 			if planErr != nil {
@@ -654,7 +646,9 @@ func (a answerer) answerWithContext(ctx context.Context, question string, recent
 		}
 		return json.Marshal(result)
 	}
-	for step := 0; step < 5; step++ {
+	const maxSteps = 5
+	retriedEcho := false
+	for step := 0; step < maxSteps; step++ {
 		payload := map[string]any{"model": a.model, "stream": false, "messages": messages}
 		applyReasoningEffort(payload)
 		if len(teamTools) > 0 {
@@ -720,16 +714,28 @@ func (a answerer) answerWithContext(ctx context.Context, question string, recent
 				return "", hits, fmt.Errorf("LLM returned an empty answer")
 			}
 			answerText := message.Content
+			if isQuestionEcho(question, answerText) {
+				if !retriedEcho && step+1 < maxSteps {
+					retriedEcho = true
+					messages[0]["content"] = systemPrompt + "\nДай прямой ответ на последний запрос по доступным данным. Если данных недостаточно, назови, чего не хватает. Не повторяй вопрос пользователя."
+					continue
+				}
+				answerText = ""
+				if len(verifiedParts) == 0 && len(formLinks) == 0 {
+					answerText = "Не удалось подготовить содержательный ответ на этот запрос."
+				}
+			}
 			for name := range toolEndpoints {
 				answerText = strings.ReplaceAll(answerText, name, "подключённый сервис")
 			}
-			if len(verifiedParts) > 0 {
-				answerText = strings.Join(append(verifiedParts, answerText), "\n\n")
+			parts := verifiedParts
+			if answerText != "" {
+				parts = append(parts, answerText)
 			}
 			if len(formLinks) > 0 {
-				answerText += "\n\n" + strings.Join(formLinks, "\n")
+				parts = append(parts, strings.Join(formLinks, "\n"))
 			}
-			return answerText, hits, nil
+			return strings.Join(parts, "\n\n"), hits, nil
 		}
 		if len(teamTools) == 0 {
 			return "", hits, fmt.Errorf("LLM requested a tool with no tools available")
