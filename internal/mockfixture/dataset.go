@@ -27,6 +27,62 @@ type snapshot struct {
 	Data    json.RawMessage `json:"data"`
 }
 
+var ErrItemNotFound = errors.New("mock item not found")
+
+// RegisterMutation applies one validated edit while holding the dataset row lock.
+func (d *Dataset) RegisterMutation(mux *http.ServeMux, directory scenario.Client, pattern string, mutate func([]byte, *http.Request, []byte) ([]byte, error)) {
+	mux.HandleFunc("PUT "+pattern, func(w http.ResponseWriter, r *http.Request) {
+		token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if !ok || token == "" {
+			datasetError(w, 401, "Откройте демосессию наставника.")
+			return
+		}
+		profile, err := directory.Profile(r.Context(), token)
+		if err != nil || profile.ID == "" {
+			datasetError(w, 403, "Требуется действительная сессия пользователя.")
+			return
+		}
+		body := readBody(w, r)
+		if body == nil {
+			datasetError(w, 400, "Некорректный или слишком большой запрос.")
+			return
+		}
+		tx, err := d.db.Begin(r.Context())
+		if err != nil {
+			d.failed(w, err)
+			return
+		}
+		defer tx.Rollback(r.Context())
+		var current snapshot
+		err = tx.QueryRow(r.Context(), "SELECT version,data FROM bobby_mock_datasets WHERE name=$1 FOR UPDATE", d.name).Scan(&current.Version, &current.Data)
+		if err != nil {
+			d.failed(w, err)
+			return
+		}
+		changed, err := mutate(current.Data, r, body)
+		if errors.Is(err, ErrItemNotFound) {
+			datasetError(w, 404, "Запись не найдена.")
+			return
+		}
+		if err == nil {
+			err = d.validate(changed)
+		}
+		if err != nil {
+			datasetError(w, 400, err.Error())
+			return
+		}
+		if err = tx.QueryRow(r.Context(), "UPDATE bobby_mock_datasets SET version=version+1,data=$2 WHERE name=$1 RETURNING version,data", d.name, changed).Scan(&current.Version, &current.Data); err != nil {
+			d.failed(w, err)
+			return
+		}
+		if err = tx.Commit(r.Context()); err != nil {
+			d.failed(w, err)
+			return
+		}
+		datasetJSON(w, 200, current)
+	})
+}
+
 func OpenDatabase(ctx context.Context, url string) (*pgxpool.Pool, error) {
 	if url == "" {
 		return nil, nil

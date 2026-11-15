@@ -19,35 +19,41 @@ func registerMockEditors(mux *http.ServeMux, key string, endpoints map[string]st
 		}
 		path := "/v1/mock-data/" + name
 		target.Path, target.RawPath, target.RawQuery = path, "", ""
+		proxy := authorize(key, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if _, ok := teamBearer(r); !ok {
+				writeError(w, 401, errText("Требуется демосессия."))
+				return
+			}
+			r.Body = http.MaxBytesReader(w, r.Body, 2<<20)
+			upstream := *target
+			upstream.Path, upstream.RawPath = r.URL.Path, r.URL.RawPath
+			req, err := http.NewRequestWithContext(r.Context(), r.Method, upstream.String(), r.Body)
+			if err != nil {
+				writeError(w, 503, errText("Учебный сервис временно недоступен."))
+				return
+			}
+			req.Header.Set("Authorization", r.Header.Get("Authorization"))
+			req.Header.Set("Content-Type", "application/json")
+			resp, err := client.Do(req)
+			if err != nil {
+				writeError(w, 503, errText("Учебный сервис временно недоступен."))
+				return
+			}
+			defer resp.Body.Close()
+			if !strings.HasPrefix(resp.Header.Get("Content-Type"), "application/json") {
+				writeError(w, 503, errText("Редактор учебного сервиса временно недоступен."))
+				return
+			}
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-store")
+			w.WriteHeader(resp.StatusCode)
+			_, _ = io.Copy(w, io.LimitReader(resp.Body, 4<<20))
+		}))
 		for _, method := range []string{http.MethodGet, http.MethodPut} {
-			mux.Handle(method+" "+path, authorize(key, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if _, ok := teamBearer(r); !ok {
-					writeError(w, 401, errText("Требуется демосессия."))
-					return
-				}
-				r.Body = http.MaxBytesReader(w, r.Body, 2<<20)
-				req, err := http.NewRequestWithContext(r.Context(), r.Method, target.String(), r.Body)
-				if err != nil {
-					writeError(w, 503, errText("Учебный сервис временно недоступен."))
-					return
-				}
-				req.Header.Set("Authorization", r.Header.Get("Authorization"))
-				req.Header.Set("Content-Type", "application/json")
-				resp, err := client.Do(req)
-				if err != nil {
-					writeError(w, 503, errText("Учебный сервис временно недоступен."))
-					return
-				}
-				defer resp.Body.Close()
-				if !strings.HasPrefix(resp.Header.Get("Content-Type"), "application/json") {
-					writeError(w, 503, errText("Редактор учебного сервиса временно недоступен."))
-					return
-				}
-				w.Header().Set("Content-Type", "application/json; charset=utf-8")
-				w.Header().Set("Cache-Control", "no-store")
-				w.WriteHeader(resp.StatusCode)
-				_, _ = io.Copy(w, io.LimitReader(resp.Body, 4<<20))
-			})))
+			mux.Handle(method+" "+path, proxy)
+		}
+		if name != "company-calendar" {
+			mux.Handle("PUT "+path+"/{tail...}", proxy)
 		}
 	}
 	if gitlab == "" {

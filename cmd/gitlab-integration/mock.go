@@ -170,6 +170,7 @@ func serveMock() error {
 	})
 	if dataset != nil {
 		dataset.Register(mux, scenario.Client{BaseURL: directory})
+		dataset.RegisterMutation(mux, scenario.Client{BaseURL: directory}, "/v1/mock-data/gitlab/projects/{project}/branches/{name...}", renameMockBranch)
 	}
 	mux.HandleFunc("GET /api/v4/", func(w http.ResponseWriter, r *http.Request) {
 		serveMockGitLab(w, r, read)

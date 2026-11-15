@@ -244,6 +244,7 @@ func newMockJiraHandler(path string, team scenario.Client, datasets ...*mockfixt
 	})
 	if dataset != nil {
 		dataset.Register(mux, team)
+		dataset.RegisterMutation(mux, team, "/v1/mock-data/jira/issues/{key}", updateIssue)
 	} else {
 		mockfixture.Register(mux, path, "jira_save_fixture", os.Getenv("MOCK_FIXTURE_WRITE_TOKEN"), validateJiraFixture)
 	}

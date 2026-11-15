@@ -113,7 +113,7 @@ func TestGroupChat(t *testing.T) {
 	}
 	defer intern2.Close()
 	tools, err := intern.ListTools(ctx, nil)
-	if err != nil || len(tools.Tools) != 2 || tools.Tools[0].Name != "latest_group_messages" || tools.Tools[1].Name != "search_group_messages" {
+	if err != nil || len(tools.Tools) != 3 || tools.Tools[0].Name != "latest_group_messages" || tools.Tools[1].Name != "list_my_groups" || tools.Tools[2].Name != "search_group_messages" {
 		t.Fatalf("tools = %+v, err = %v", tools, err)
 	}
 	search := func(session *mcp.ClientSession, query, group string) []message {

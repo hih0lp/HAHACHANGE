@@ -207,6 +207,7 @@ func main() {
 	if mentor != nil {
 		team := scenario.Client{BaseURL: directory}
 		mentor.Register(mux, team)
+		mentor.RegisterMutation(mux, team, "/v1/mock-data/calendar/events/{id}", updateEvent)
 		if company != nil {
 			company.Register(mux, team)
 		}
