@@ -1,0 +1,147 @@
+package teamaccess
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"runtime"
+	"testing"
+
+	"github.com/hackchange/avito-rag/internal/testsupport"
+)
+
+func TestDirectoryAndRightsFlow(t *testing.T) {
+	ctx := context.Background()
+	_, source, _, _ := runtime.Caller(0)
+	migrations := filepath.Join(filepath.Dir(source), "../../migrations/team_access")
+	keyFile := filepath.Join(t.TempDir(), "team.key")
+	t.Setenv("TEAM_ACCESS_KEY_FILE", keyFile)
+	t.Setenv("TEAM_ACCESS_INTERN_PASSWORD", "integration-intern-password")
+	t.Setenv("TEAM_ACCESS_INTERN2_PASSWORD", "integration-intern2-password")
+	t.Setenv("TEAM_ACCESS_APPROVER_PASSWORD", "integration-approver-password")
+	t.Setenv("TEAM_ACCESS_ROLE", "team")
+	t.Setenv("TEAM_ACCESS_MIGRATION", filepath.Join(migrations, "001_team.sql"))
+	team, err := New(ctx, testsupport.Postgres(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(team.Routes())
+	defer server.Close()
+	client := server.Client()
+	login := func(username, password string) string {
+		t.Helper()
+		body, _ := json.Marshal(map[string]string{"username": username, "password": password})
+		resp, err := client.Post(server.URL+"/v1/auth/login", "application/json", bytes.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != 200 {
+			t.Fatalf("login %s: %d", username, resp.StatusCode)
+		}
+		var out struct {
+			AccessToken string `json:"access_token"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			t.Fatal(err)
+		}
+		return out.AccessToken
+	}
+	intern := login("intern", "integration-intern-password")
+	other := login("intern2", "integration-intern2-password")
+	approver := login("approver", "integration-approver-password")
+	call := func(base, method, path, token, body string, want int, headers map[string]string) map[string]any {
+		t.Helper()
+		req, err := http.NewRequest(method, base+path, bytes.NewBufferString(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/json")
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		var out map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			t.Fatal(err)
+		}
+		if resp.StatusCode != want {
+			t.Fatalf("%s %s: status %d, want %d: %v", method, path, resp.StatusCode, want, out)
+		}
+		return out
+	}
+	profile := call(server.URL, "GET", "/v1/me", intern, "", 200, nil)
+	if profile["id"] != "intern" {
+		t.Fatalf("wrong profile: %v", profile)
+	}
+	call(server.URL, "GET", "/v1/teams/demo-team/members", intern, "", 200, nil)
+	call(server.URL, "GET", "/v1/teams/search-team/members", intern, "", 404, nil)
+	call(server.URL, "GET", "/v1/teams/search-team/members", other, "", 200, nil)
+
+	seed := filepath.Join(t.TempDir(), "resources.json")
+	fixture := `{"resources":[{"id":"demo-calendar","team_id":"demo-team","kind":"calendar","name":"Calendar","external_ref":"demo","url":"https://example.test/calendar","capabilities":["read"],"approver_id":"approver"}]}`
+	if err := os.WriteFile(seed, []byte(fixture), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TEAM_ACCESS_ROLE", "rights")
+	t.Setenv("TEAM_ACCESS_MIGRATION", filepath.Join(migrations, "001_rights.sql"))
+	t.Setenv("TEAM_ACCESS_SEED_RESOURCES_FILE", seed)
+	t.Setenv("TEAM_DIRECTORY_URL", server.URL)
+	rights, err := New(ctx, testsupport.Postgres(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rightsServer := httptest.NewServer(rights.Routes())
+	defer rightsServer.Close()
+	base := rightsServer.URL
+	call(base, "GET", "/v1/teams/demo-team/resources", intern, "", 200, nil)
+	call(base, "GET", "/v1/teams/search-team/resources", intern, "", 404, nil)
+	call(base, "POST", "/v1/access/check", intern, `{"resource_id":"demo-calendar","capability":"read"}`, 200, nil)
+	call(base, "POST", "/v1/access/check", intern, `{"resource_id":"demo-calendar","capability":"write"}`, 400, nil)
+	request := `{"resource_id":"demo-calendar","capability":"read","reason":"Need calendar","confirmed":true}`
+	created := call(base, "POST", "/v1/access-requests", intern, request, 201, map[string]string{"Idempotency-Key": "integration-key-1"})
+	id, ok := created["id"].(string)
+	if !ok || id == "" {
+		t.Fatalf("missing request ID: %v", created)
+	}
+	call(base, "POST", "/v1/access-requests", intern, request, 200, map[string]string{"Idempotency-Key": "integration-key-1"})
+	call(base, "GET", "/v1/access-requests/"+id, other, "", 404, nil)
+	call(base, "GET", "/v1/access-requests", intern, "", 200, nil)
+	call(base, "GET", "/v1/approvals", approver, "", 200, nil)
+	call(base, "POST", "/v1/access-requests/"+id+"/decision", intern, `{"decision":"approve"}`, 404, nil)
+	call(base, "POST", "/v1/access-requests/"+id+"/decision", approver, `{"decision":"approve"}`, 200, nil)
+	status := call(base, "POST", "/v1/access/check", intern, `{"resource_id":"demo-calendar","capability":"read"}`, 200, nil)
+	if status["state"] != "granted" {
+		t.Fatalf("grant not visible: %v", status)
+	}
+	call(base, "POST", "/v1/access-requests/"+id+"/decision", approver, `{"decision":"approve"}`, 422, nil)
+
+	forms := call(base, "GET", "/v1/forms", intern, "", 200, nil)
+	if len(forms["forms"].([]any)) < 2 {
+		t.Fatalf("built-in forms missing: %v", forms)
+	}
+	call(base, "GET", "/v1/forms/equipment-request", intern, "", 200, nil)
+	call(base, "GET", "/v1/forms/unknown", intern, "", 404, nil)
+	valid := `{"values":{"item":"Laptop","reason":"Development"}}`
+	call(base, "POST", "/v1/forms/equipment-request/validate", intern, valid, 200, nil)
+	call(base, "POST", "/v1/forms/equipment-request/validate", intern, `{"values":{"item":"x"}}`, 400, nil)
+	submission := `{"values":{"item":"Laptop","reason":"Development"},"confirmed":true,"version":1}`
+	formResult := call(base, "POST", "/v1/forms/equipment-request/submit", intern, submission, 201, map[string]string{"Idempotency-Key": "equipment-key-1"})
+	formID := formResult["id"].(string)
+	call(base, "POST", "/v1/forms/equipment-request/submit", intern, submission, 200, map[string]string{"Idempotency-Key": "equipment-key-1"})
+	call(base, "GET", "/v1/form-submissions/"+formID, intern, "", 200, nil)
+	call(base, "GET", "/v1/form-submissions/"+formID, other, "", 404, nil)
+	newForm := `{"id":"handoff","version":1,"title":"Handoff","kind":"general","schema":{"type":"object","properties":{"note":{"type":"string"}},"required":["note"]}}`
+	call(base, "POST", "/v1/forms", intern, newForm, 403, nil)
+	call(base, "POST", "/v1/forms", approver, newForm, 201, nil)
+	call(base, "POST", "/v1/forms", approver, newForm, 409, nil)
+}
