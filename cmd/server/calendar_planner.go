@@ -151,7 +151,11 @@ func (a answerer) requestJSON(ctx context.Context, instruction string, input, ou
 	if err != nil {
 		return err
 	}
-	request := map[string]any{"model": a.model, "stream": false, "messages": []map[string]string{{"role": "system", "content": instruction}, {"role": "user", "content": string(plannerInput)}}}
+	return a.requestJSONMessages(ctx, []map[string]string{{"role": "system", "content": instruction}, {"role": "user", "content": string(plannerInput)}}, output)
+}
+
+func (a answerer) requestJSONMessages(ctx context.Context, messages []map[string]string, output any) error {
+	request := map[string]any{"model": a.model, "stream": false, "messages": messages}
 	applyReasoningEffort(request)
 	if request["reasoning_effort"] == "none" {
 		request["response_format"] = map[string]string{"type": "json_object"}
