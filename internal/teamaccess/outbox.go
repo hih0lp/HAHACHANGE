@@ -45,7 +45,12 @@ func (s *Service) PublishOutbox(ctx context.Context) {
 		}
 	}
 }
-func (s *Service) publishOne(ctx context.Context, w *kafka.Writer) error {
+
+type eventPublisher interface {
+	WriteMessages(context.Context, ...kafka.Message) error
+}
+
+func (s *Service) publishOne(ctx context.Context, w eventPublisher) error {
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
 		return err

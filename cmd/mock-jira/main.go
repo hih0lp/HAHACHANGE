@@ -137,16 +137,22 @@ func issueFields(v issue) map[string]any {
 	return fields
 }
 func main() {
+	if err := run(http.ListenAndServe); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run(serve func(string, http.Handler) error) error {
 	mux, closeDB, err := jiraHandlerFromEnvironment(context.Background())
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	defer closeDB()
 	listen := os.Getenv("MOCK_LISTEN")
 	if listen == "" {
 		listen = "127.0.0.1:8080"
 	}
-	log.Fatal(http.ListenAndServe(listen, mux))
+	return serve(listen, mux)
 }
 
 func jiraHandlerFromEnvironment(parent context.Context) (http.Handler, func(), error) {

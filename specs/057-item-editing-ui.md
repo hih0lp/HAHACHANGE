@@ -6,4 +6,7 @@ The Jira modal can change the task title, replace its description, and change it
 
 The item modals use the addressed PUT endpoints from SDD-056 and never load a full mock dataset. The full snapshot editor remains available to the mentor for broader fixture management. The browser does not treat the selected demo role as authorization: each server operation validates the JWT.
 
-Verification: TypeScript check and frontend build, focused backend route test, and browser smoke test on the test stand for each modal and save action.
+Verification: TypeScript check, backend route tests and Playwright. The browser
+checks editing each visible item, switching to the mentor, loading the latest
+Jira snapshot after a version conflict, adding a company event and saving a
+GitLab branch, commit and merge request. See [SDD-060](060-submission-test-coverage.md).

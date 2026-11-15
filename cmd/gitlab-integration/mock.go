@@ -124,7 +124,7 @@ func parseMockData(data []byte) (mockData, error) {
 	return f, nil
 }
 
-func serveMock() error {
+func serveMock(serve func(*http.Server) error) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	db, err := mockfixture.OpenDatabase(ctx, os.Getenv("MOCK_DATABASE_URL"))
@@ -143,7 +143,7 @@ func serveMock() error {
 	}
 	cancel()
 	mux := newMockGitLabHandler(dataset, os.Getenv("TEAM_DIRECTORY_URL"), "http://127.0.0.1:8080")
-	return (&http.Server{Addr: ":8080", Handler: mux, ReadHeaderTimeout: 5 * time.Second}).ListenAndServe()
+	return serve(&http.Server{Addr: ":8080", Handler: mux, ReadHeaderTimeout: 5 * time.Second})
 }
 
 func newMockGitLabHandler(dataset *mockfixture.Dataset, directory, selfURL string) http.Handler {

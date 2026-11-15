@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"errors"
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
@@ -199,14 +200,19 @@ func (s chatService) addMessage(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	if err := run(context.Background(), (*http.Server).ListenAndServe); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run(ctx context.Context, serve func(*http.Server) error) error {
 	dbURL, teamURL, embedURL := os.Getenv("CHAT_DATABASE_URL"), os.Getenv("CHAT_TEAM_ACCESS_URL"), os.Getenv("CHAT_EMBEDDINGS_URL")
 	if dbURL == "" || teamURL == "" || embedURL == "" {
-		log.Fatal("CHAT_DATABASE_URL, CHAT_TEAM_ACCESS_URL and CHAT_EMBEDDINGS_URL are required")
+		return errors.New("CHAT_DATABASE_URL, CHAT_TEAM_ACCESS_URL and CHAT_EMBEDDINGS_URL are required")
 	}
-	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, dbURL)
 	if err != nil {
-		log.Fatal("invalid PostgreSQL configuration")
+		return errors.New("invalid PostgreSQL configuration")
 	}
 	defer pool.Close()
 	service := chatService{
@@ -218,7 +224,7 @@ func main() {
 	err = service.store.seed(start, service.embed, time.Now().In(demoZone))
 	cancel()
 	if err != nil {
-		log.Fatalf("initialize chat database: %v", err)
+		return fmt.Errorf("initialize chat database: %w", err)
 	}
 	port := os.Getenv("CHAT_PORT")
 	if port == "" {
@@ -230,5 +236,5 @@ func main() {
 		WriteTimeout: 50 * time.Second, IdleTimeout: 60 * time.Second,
 	}
 	log.Printf("mock group chat listening on %s", server.Addr)
-	log.Fatal(server.ListenAndServe())
+	return serve(server)
 }

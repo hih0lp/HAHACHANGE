@@ -21,6 +21,12 @@ import (
 func runDistributed(cfg config) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	return runDistributedContext(ctx, cfg, http.ListenAndServe)
+}
+
+func runDistributedContext(ctx context.Context, cfg config, serve func(string, http.Handler) error) error {
+	ctx, cancelWork := context.WithCancel(ctx)
+	defer cancelWork()
 	if os.Getenv("DATABASE_URL") == "" || os.Getenv("SESSION_SECRET") == "" {
 		return fmt.Errorf("distributed mode requires DATABASE_URL and SESSION_SECRET")
 	}
@@ -120,5 +126,5 @@ func runDistributed(cfg config) error {
 	}()
 	log.Printf("distributed API listens on :8000")
 	handler := demoSession(os.Getenv("SESSION_SECRET"), logging(newHandler(service, cfg)))
-	return http.ListenAndServe(":8000", handler)
+	return serve(":8000", handler)
 }

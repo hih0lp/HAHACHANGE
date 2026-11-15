@@ -19,6 +19,16 @@ Compose собирает React и Go, запускает четыре отдел
 `BOBBY_MODEL`, `BOBBY_LOCAL_PORT` и `GROUP_CHAT_LOCAL_PORT` можно задать через
 окружение. Для остановки выполните `docker compose -f compose.local.yml down`.
 
+## Автотесты и спецификации
+
+Из корня репозитория запустите `pwsh -File scripts/test-coverage.ps1`.
+Нужны Docker, Go и Node.js. Скрипт создаёт отдельные тестовые PostgreSQL
+и Redis, запускает Go и Playwright и сохраняет покрытие в системную
+временную папку `bobby-test-coverage`. Путь можно изменить параметром
+`-OutputDir`. Команды и результаты доступны в [отчёте о тестах](TEST_REPORT.md).
+Проверяемые сценарии и ссылки на их контракты собраны в
+[SDD-060](specs/060-submission-test-coverage.md).
+
 Дальше описаны серверный и отдельный поисковый варианты запуска.
 
 ## Два Go-сервиса для команды и доступов

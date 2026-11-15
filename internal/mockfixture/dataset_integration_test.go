@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/hackchange/avito-rag/internal/scenario"
@@ -58,7 +59,10 @@ func TestDatasetSavesValidatedVersionsForMentor(t *testing.T) {
 		t.Fatal("seed starts at version 1")
 	}
 	request("GET", "intern", "", 403)
+	request("GET", "", "", 401)
+	request("POST", "mentor", `{}`, 405)
 	request("PUT", "intern", `{"version":1,"data":{"value":"unauthorized"}}`, 403)
+	request("PUT", "mentor", `{"version":0,"data":{"value":"bad version"}}`, 400)
 	request("PUT", "mentor", `{"version":1,"data":{}}`, 400)
 	saved := request("PUT", "mentor", `{"version":1,"data":{"value":"edited"}}`, 200)
 	if saved.Version != 2 || !bytes.Contains(saved.Data, []byte("edited")) {
@@ -73,6 +77,11 @@ func TestDatasetSavesValidatedVersionsForMentor(t *testing.T) {
 	if err != nil || !bytes.Contains(data, []byte("edited")) {
 		t.Fatalf("reopened data=%s err=%v", data, err)
 	}
+	if _, err := db.Exec(ctx, "DROP TABLE bobby_mock_datasets"); err != nil {
+		t.Fatal(err)
+	}
+	request("GET", "mentor", "", 503)
+	request("PUT", "mentor", `{"version":2,"data":{"value":"storage unavailable"}}`, 503)
 }
 
 func TestMutationAcceptsAnyValidSessionAndPersists(t *testing.T) {
@@ -123,11 +132,18 @@ func TestMutationAcceptsAnyValidSessionAndPersists(t *testing.T) {
 		}
 	}
 	put("bad", "one", `{"title":"new"}`, 403)
+	put("", "one", `{"title":"new"}`, 401)
 	put("valid", "absent", `{"title":"new"}`, 404)
+	put("valid", "one", `{`, 400)
+	put("valid", "one", strings.Repeat("x", limit+1), 400)
 	put("valid", "one", `{"title":""}`, 400)
 	put("valid", "one", `{"title":"new"}`, 200)
 	data, err := d.Bytes(ctx)
 	if err != nil || !bytes.Contains(data, []byte(`"title": "new"`)) && !bytes.Contains(data, []byte(`"title":"new"`)) {
 		t.Fatalf("stored: %s %v", data, err)
 	}
+	if _, err := db.Exec(ctx, "DROP TABLE bobby_mock_datasets"); err != nil {
+		t.Fatal(err)
+	}
+	put("valid", "one", `{"title":"storage unavailable"}`, 503)
 }

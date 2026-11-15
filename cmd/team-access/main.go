@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -12,22 +13,27 @@ import (
 )
 
 func main() {
-	ctx := context.Background()
+	if err := run(context.Background(), (*http.Server).ListenAndServe); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run(ctx context.Context, serve func(*http.Server) error) error {
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
-		log.Fatal("DATABASE_URL is required")
+		return errors.New("DATABASE_URL is required")
 	}
 	db, err := pgxpool.New(ctx, dsn)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	defer db.Close()
 	if err = db.Ping(ctx); err != nil {
-		log.Fatal(err)
+		return err
 	}
 	s, err := teamaccess.New(ctx, db)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	if os.Getenv("TEAM_ACCESS_ROLE") == "rights" {
 		go s.PublishOutbox(ctx)
@@ -55,5 +61,5 @@ func main() {
 	}
 	server := &http.Server{Addr: addr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 	log.Printf("team-access listening on %s", addr)
-	log.Fatal(server.ListenAndServe())
+	return serve(server)
 }

@@ -8,6 +8,70 @@ import (
 	"testing"
 )
 
+func TestFormGatewayDistinguishesInvalidInputAndUpstreamFailure(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		code := http.StatusServiceUnavailable
+		switch r.URL.Path {
+		case "/v1/me":
+			if r.Header.Get("Authorization") == "Bearer valid" {
+				w.Write([]byte(`{"current_team_id":"demo-team"}`))
+				return
+			}
+		case "/v1/forms/sample/validate":
+			switch r.Header.Get("Authorization") {
+			case "Bearer invalid":
+				code = http.StatusBadRequest
+			case "Bearer expired":
+				code = http.StatusUnauthorized
+			}
+		case "/v1/access/check":
+			if r.Header.Get("Authorization") == "Bearer granted" {
+				w.Write([]byte(`{"state":"granted"}`))
+				return
+			}
+		}
+		w.WriteHeader(code)
+		w.Write([]byte(`{"error":{"code":"unavailable","message":"backend failure"}}`))
+	}))
+	defer upstream.Close()
+	t.Setenv("RIGHTS_URL", upstream.URL)
+	mux := http.NewServeMux()
+	registerFormRoutes(mux, "", upstream.URL)
+	for _, tc := range []struct {
+		m, path, body, token string
+		status               int
+	}{
+		{"GET", "/v1/forms", "", "", 401},
+		{"GET", "/v1/form-resources", "", "", 401},
+		{"GET", "/v1/forms/sample", "", "", 401},
+		{"GET", "/v1/forms/sample/access-request", "", "", 401},
+		{"POST", "/v1/forms/sample/validate", "{}", "", 401},
+		{"POST", "/v1/forms/sample/submit", "{}", "", 401},
+		{"GET", "/v1/forms", "", "valid", 503},
+		{"GET", "/v1/forms/sample", "", "valid", 503},
+		{"GET", "/v1/forms/sample/access-request", "", "valid", 503},
+		{"GET", "/v1/form-resources", "", "expired", 503},
+		{"GET", "/v1/form-resources", "", "valid", 503},
+		{"POST", "/v1/forms/sample/validate", "{}", "valid", 400},
+		{"POST", "/v1/forms/sample/validate", `{"version":1,"values":{}}`, "invalid", 400},
+		{"POST", "/v1/forms/sample/validate", `{"version":1,"values":{}}`, "expired", 401},
+		{"POST", "/v1/forms/sample/validate", `{"version":1,"values":{}}`, "valid", 503},
+		{"POST", "/v1/forms/sample/submit", `{"confirmed":false}`, "valid", 400},
+		{"POST", "/v1/forms/sample/submit", `{"confirmed":true,"values":{"resource_id":"doc","capability":"read"}}`, "granted", 409},
+		{"POST", "/v1/forms/sample/submit", `{"confirmed":true,"values":{}}`, "valid", 400},
+	} {
+		req := httptest.NewRequest(tc.m, tc.path, strings.NewReader(tc.body))
+		if tc.token != "" {
+			req.Header.Set("Authorization", "Bearer "+tc.token)
+		}
+		got := httptest.NewRecorder()
+		mux.ServeHTTP(got, req)
+		if got.Code != tc.status {
+			t.Errorf("%s %s token=%s: %d want %d (%s)", tc.m, tc.path, tc.token, got.Code, tc.status, got.Body)
+		}
+	}
+}
+
 func TestFormResourcesComeFromCurrentTeam(t *testing.T) {
 	team := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/me" || r.Header.Get("Authorization") != "Bearer test-token" {

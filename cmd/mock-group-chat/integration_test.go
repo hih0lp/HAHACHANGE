@@ -133,6 +133,14 @@ func TestGroupChat(t *testing.T) {
 	if err != nil || len(tools.Tools) != 3 || tools.Tools[0].Name != "latest_group_messages" || tools.Tools[1].Name != "list_my_groups" || tools.Tools[2].Name != "search_group_messages" {
 		t.Fatalf("tools = %+v, err = %v", tools, err)
 	}
+	memberships, err := intern.CallTool(ctx, &mcp.CallToolParams{Name: "list_my_groups", Arguments: map[string]any{}})
+	if err != nil || memberships.IsError {
+		t.Fatalf("read memberships over MCP: %+v %v", memberships, err)
+	}
+	groupsJSON, err := json.Marshal(memberships.StructuredContent)
+	if err != nil || !strings.Contains(string(groupsJSON), "catalog") || strings.Contains(string(groupsJSON), "search") {
+		t.Fatalf("restricted group projection: %s %v", groupsJSON, err)
+	}
 	search := func(session *mcp.ClientSession, query, group string) []message {
 		t.Helper()
 		args := map[string]any{"query": query, "from": "2026-11-13T00:00:00+03:00", "to": "2026-11-14T00:00:00+03:00"}
@@ -218,5 +226,34 @@ func TestGroupChat(t *testing.T) {
 	}
 	if got := search(intern2, "DEMO-123", "product"); len(got) != 1 || got[0].ID != strings.TrimPrefix(location, "/?added=") {
 		t.Fatalf("posted message not returned: %+v", got)
+	}
+	for _, form := range []url.Values{
+		{"author": {"catalog:intern"}, "text": {""}},
+		{"author": {"catalog:intern"}, "text": {"hello"}, "sent_at": {"not-a-date"}},
+	} {
+		resp, err := server.Client().PostForm(server.URL+"/messages", form)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != 400 {
+			t.Fatalf("invalid message accepted: %v", form)
+		}
+	}
+	if _, err := db.Exec(ctx, "DROP TABLE chat_group_members CASCADE"); err != nil {
+		t.Fatal(err)
+	}
+	for _, input := range []*mcp.CallToolParams{
+		{Name: "list_my_groups", Arguments: map[string]any{}},
+		{Name: "latest_group_messages", Arguments: map[string]any{}},
+		{Name: "search_group_messages", Arguments: map[string]any{"query": "CAT-128", "from": "2026-11-13T00:00:00+03:00", "to": "2026-11-14T00:00:00+03:00"}},
+	} {
+		got, err := intern.CallTool(ctx, input)
+		if err != nil || !got.IsError {
+			t.Fatalf("%s: expected source error, result=%+v err=%v", input.Name, got, err)
+		}
+	}
+	if code, _ := post("product:intern", "no storage"); code != 503 {
+		t.Fatalf("post during storage failure: %d", code)
 	}
 }

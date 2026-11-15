@@ -32,10 +32,19 @@ type Job struct {
 type System struct {
 	DB       *pgxpool.Pool
 	Redis    *redis.Client
-	Writer   *kafka.Writer
-	Reader   *kafka.Reader
+	Writer   jobPublisher
+	Reader   jobConsumer
 	Topic    string
 	MaxTries int
+}
+
+type jobPublisher interface {
+	WriteMessages(context.Context, ...kafka.Message) error
+}
+
+type jobConsumer interface {
+	FetchMessage(context.Context) (kafka.Message, error)
+	CommitMessages(context.Context, ...kafka.Message) error
 }
 
 func NewID() (string, error) {

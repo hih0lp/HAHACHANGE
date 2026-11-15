@@ -4,9 +4,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
+import { browserCoverage } from './browser-coverage.mjs';
 
 const cacheDir = await mkdtemp(join(tmpdir(), 'bobby-vite-'));
-const server = await createServer({ cacheDir, server: { host: '127.0.0.1', port: 0 } });
+const coverage = browserCoverage();
+const server = await createServer({ cacheDir, plugins: coverage.plugins, server: { host: '127.0.0.1', port: 0 } });
 await server.listen();
 const { port } = server.httpServer.address();
 const base = 'http://127.0.0.1:' + port;
@@ -114,7 +116,7 @@ async function fixtures(page, { deadline = false, beforeSession = async () => {}
       return respond(committed, 201);
     }
     if (path === '/v1/tasks/jira') return respond({ enabled: true, reminders: [{ id: 'demo-5', key: 'DEMO-5', summary: 'Настроить окружение', due_at: '2026-11-14T00:00:00+03:00', url: 'https://example.atlassian.net/browse/DEMO-5' }] });
-    if (path === '/v1/calendar/reminders') return respond({ data: { items: [{ id: 'meeting', summary: 'Встреча с наставником', start: { dateTime: '2026-11-13T11:00:00Z' }, htmlLink: 'https://calendar.google.com/' }] } });
+    if (path === '/v1/calendar/events') return respond({ data: { items: [{ id: 'meeting', summary: 'Встреча с наставником', start: { dateTime: '2026-11-13T11:00:00Z' }, htmlLink: 'https://calendar.google.com/' }] } });
     return respond({ error: 'unknown fixture: ' + path }, 404);
   });
   return {
@@ -167,6 +169,7 @@ try {
   browser = await chromium.launch(launch);
   {
     const page = await browser.newPage();
+    await coverage.track(page);
     const session = Promise.withResolvers();
     await fixtures(page, { beforeSession: () => session.promise });
     await page.goto(base);
@@ -176,10 +179,12 @@ try {
     session.resolve();
     await page.getByRole('button', { name: 'С чего начать?' }).click();
     await page.getByRole('heading', { name: 'Ваш первый шаг' }).waitFor();
+    await coverage.capture(page);
     await page.close();
   }
   {
     const page = await browser.newPage();
+    await coverage.track(page);
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     const mock = await fixtures(page, { deadline: true });
@@ -455,12 +460,14 @@ try {
     assert.equal(await avatars.last().locator('.bobby-body').evaluate(element => getComputedStyle(element).transitionDuration), '0s');
     assert.equal(await avatars.last().locator('.bobby-eye').first().evaluate(element => getComputedStyle(element).animationName), 'none');
     assert.deepEqual(errors, []);
+    await coverage.capture(page);
     await page.close();
     console.log('Passed Bobby widget checks');
   }
   for (const width of [360, 768, 1440]) {
     const context = await browser.newContext({ viewport: { width, height: width === 360 ? 780 : 900 } });
     const page = await context.newPage();
+    await coverage.track(page);
     page.setDefaultTimeout(8_000);
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -585,9 +592,11 @@ try {
     await page.getByText(/14:00 МСК/).waitFor();
     await shot(page, 'tasks', width);
     assert.deepEqual(errors, []);
+    await coverage.capture(page);
     await context.close();
     console.log('Passed demo role, chat, form, and tasks checks at ' + width + ' px');
   }
+  await coverage.write(server);
 } finally {
   await browser?.close();
   await server.close();

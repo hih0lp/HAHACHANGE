@@ -262,14 +262,20 @@ func (b bridge) handler() http.Handler {
 }
 
 func main() {
+	if err := run((*http.Server).ListenAndServe); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run(serve func(*http.Server) error) error {
 	if os.Getenv("GITLAB_MODE") == "mock" {
-		log.Fatal(serveMock())
+		return serveMock(serve)
 	}
 	var tokens map[string]string
 	if path := os.Getenv("GITLAB_DEMO_TOKENS_FILE"); path != "" {
 		data, err := os.ReadFile(path)
 		if err != nil || json.Unmarshal(data, &tokens) != nil {
-			log.Fatal("GitLab demo token map is invalid")
+			return errors.New("GitLab demo token map is invalid")
 		}
 	}
 	secret := []byte{}
@@ -277,7 +283,7 @@ func main() {
 		var err error
 		secret, err = os.ReadFile(os.Getenv("GITLAB_DEMO_TOKEN_FILE"))
 		if err != nil {
-			log.Fatal("GitLab demo token file is required")
+			return errors.New("GitLab demo token file is required")
 		}
 	}
 	b := bridge{
@@ -289,14 +295,14 @@ func main() {
 	for _, origin := range []string{b.gitlab, b.directory} {
 		u, err := url.Parse(origin)
 		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
-			log.Fatal("provider origin must be an HTTP or HTTPS origin")
+			return errors.New("provider origin must be an HTTP or HTTPS origin")
 		}
 	}
 	if len(tokens) == 0 && (b.subject == "" || b.token == "") {
-		log.Fatal("a demo subject and token are required")
+		return errors.New("a demo subject and token are required")
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/mcp", b.handler())
 	server := http.Server{Addr: ":8080", Handler: mux, ReadHeaderTimeout: 5 * time.Second}
-	log.Fatal(server.ListenAndServe())
+	return serve(&server)
 }
