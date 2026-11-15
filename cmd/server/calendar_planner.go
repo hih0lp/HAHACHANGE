@@ -146,7 +146,7 @@ func (a answerer) requestPlan(ctx context.Context, instruction string, input map
 	return plan, err
 }
 
-func (a answerer) requestJSON(ctx context.Context, instruction string, input map[string]any, output any) error {
+func (a answerer) requestJSON(ctx context.Context, instruction string, input, output any) error {
 	plannerInput, err := json.Marshal(input)
 	if err != nil {
 		return err
