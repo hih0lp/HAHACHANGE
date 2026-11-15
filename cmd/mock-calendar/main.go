@@ -112,43 +112,54 @@ func selectEvents(f fixture, a, b time.Time) []event {
 	return out
 }
 func main() {
-	path := os.Getenv("MOCK_CALENDAR_JSON")
-	if path == "" {
-		log.Fatal("MOCK_CALENDAR_JSON is required")
-	}
-	directory := os.Getenv("TEAM_DIRECTORY_URL")
-	subjects := calendarSubjects(os.Getenv("CALENDAR_DEMO_SUBJECT"))
-	companyPath := os.Getenv("MOCK_COMPANY_CALENDAR_JSON")
-	if directory == "" || len(subjects) == 0 {
-		log.Fatal("team directory binding required")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	db, err := mockfixture.OpenDatabase(ctx, os.Getenv("MOCK_DATABASE_URL"))
+	mux, closeDB, err := calendarHandlerFromEnvironment(context.Background())
 	if err != nil {
 		log.Fatal(err)
 	}
-	if db != nil {
-		defer db.Close()
-	}
-	mentor, err := mockfixture.Seed(ctx, db, "calendar", func() ([]byte, error) { return os.ReadFile(path) }, validateCalendarFixture)
-	if err != nil {
-		log.Fatal(err)
-	}
-	var company *mockfixture.Dataset
-	if companyPath != "" {
-		company, err = mockfixture.Seed(ctx, db, "company-calendar", func() ([]byte, error) { return os.ReadFile(companyPath) }, validateCalendarFixture)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
-	cancel()
-	mux := newMockCalendarHandler(path, companyPath, directory, subjects, mentor, company)
+	defer closeDB()
 	listen := os.Getenv("MOCK_LISTEN")
 	if listen == "" {
 		listen = "127.0.0.1:8080"
 	}
 	log.Fatal(http.ListenAndServe(listen, mux))
+}
+
+func calendarHandlerFromEnvironment(parent context.Context) (http.Handler, func(), error) {
+	path := os.Getenv("MOCK_CALENDAR_JSON")
+	if path == "" {
+		return nil, nil, errors.New("MOCK_CALENDAR_JSON is required")
+	}
+	directory := os.Getenv("TEAM_DIRECTORY_URL")
+	subjects := calendarSubjects(os.Getenv("CALENDAR_DEMO_SUBJECT"))
+	companyPath := os.Getenv("MOCK_COMPANY_CALENDAR_JSON")
+	if directory == "" || len(subjects) == 0 {
+		return nil, nil, errors.New("team directory binding required")
+	}
+	ctx, cancel := context.WithTimeout(parent, 15*time.Second)
+	defer cancel()
+	db, err := mockfixture.OpenDatabase(ctx, os.Getenv("MOCK_DATABASE_URL"))
+	if err != nil {
+		return nil, nil, err
+	}
+	closeDB := func() {
+		if db != nil {
+			db.Close()
+		}
+	}
+	mentor, err := mockfixture.Seed(ctx, db, "calendar", func() ([]byte, error) { return os.ReadFile(path) }, validateCalendarFixture)
+	if err != nil {
+		closeDB()
+		return nil, nil, err
+	}
+	var company *mockfixture.Dataset
+	if companyPath != "" {
+		company, err = mockfixture.Seed(ctx, db, "company-calendar", func() ([]byte, error) { return os.ReadFile(companyPath) }, validateCalendarFixture)
+		if err != nil {
+			closeDB()
+			return nil, nil, err
+		}
+	}
+	return newMockCalendarHandler(path, companyPath, directory, subjects, mentor, company), closeDB, nil
 }
 
 func newMockCalendarHandler(path, companyPath, directory string, subjects map[string]bool, mentor, company *mockfixture.Dataset) http.Handler {

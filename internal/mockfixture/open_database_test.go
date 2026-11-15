@@ -16,7 +16,7 @@ func TestOpenDatabaseCreatesSharedMockStorage(t *testing.T) {
 		t.Fatal("invalid database URL accepted")
 	}
 	isolated := testsupport.Postgres(t)
-	db, err := OpenDatabase(ctx, isolated.Config().ConnString())
+	db, err := OpenDatabase(ctx, testsupport.IsolatedURL(isolated))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hackchange/avito-rag/internal/testsupport"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -19,6 +20,68 @@ func (tr calendarBearerTransport) RoundTrip(req *http.Request) (*http.Response, 
 	copy := req.Clone(req.Context())
 	copy.Header.Set("Authorization", "Bearer "+tr.token)
 	return http.DefaultTransport.RoundTrip(copy)
+}
+
+func TestCalendarStartupLoadsPersistentFixtures(t *testing.T) {
+	t.Setenv("MOCK_CALENDAR_JSON", "")
+	if _, _, err := calendarHandlerFromEnvironment(context.Background()); err == nil {
+		t.Fatal("missing calendar path accepted")
+	}
+	path := filepath.Join(t.TempDir(), "calendar.json")
+	if err := os.WriteFile(path, []byte(`{"calendar_id":"mentor","time_zone":"Europe/Moscow","events":[]}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("MOCK_CALENDAR_JSON", path)
+	t.Setenv("TEAM_DIRECTORY_URL", "")
+	if _, _, err := calendarHandlerFromEnvironment(context.Background()); err == nil {
+		t.Fatal("missing team binding accepted")
+	}
+	directory := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer approver" {
+			http.Error(w, "unauthorized", 401)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]string{"id": "approver"})
+	}))
+	defer directory.Close()
+	t.Setenv("TEAM_DIRECTORY_URL", directory.URL)
+	t.Setenv("CALENDAR_DEMO_SUBJECT", "intern")
+	db := testsupport.Postgres(t)
+	t.Setenv("MOCK_DATABASE_URL", testsupport.IsolatedURL(db))
+	if err := os.WriteFile(path, []byte("{"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := calendarHandlerFromEnvironment(context.Background()); err == nil {
+		t.Fatal("invalid seed fixture accepted")
+	}
+	if err := os.WriteFile(path, []byte(`{"calendar_id":"mentor","time_zone":"Europe/Moscow","events":[]}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	handler, closeDB, err := calendarHandlerFromEnvironment(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeDB()
+	server := httptest.NewServer(handler)
+	defer server.Close()
+	response, err := http.Get(server.URL + "/health")
+	if err != nil || response.StatusCode != http.StatusNoContent {
+		t.Fatalf("seeded health: %v %v", response, err)
+	}
+	response.Body.Close()
+	request, _ := http.NewRequest(http.MethodGet, server.URL+"/v1/mock-data/calendar", nil)
+	request.Header.Set("Authorization", "Bearer approver")
+	response, err = http.DefaultClient.Do(request)
+	if err != nil || response.StatusCode != http.StatusOK {
+		t.Fatalf("seeded snapshot: %v %v", response, err)
+	}
+	defer response.Body.Close()
+	var snapshot struct {
+		Data fixture `json:"data"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&snapshot); err != nil || snapshot.Data.CalendarID != "mentor" {
+		t.Fatalf("snapshot=%+v err=%v", snapshot, err)
+	}
 }
 
 func TestCalendarHTTPAndMCP(t *testing.T) {

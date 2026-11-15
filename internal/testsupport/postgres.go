@@ -4,11 +4,23 @@ package testsupport
 import (
 	"context"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
+
+// IsolatedURL allows a second pool to use the same per-test schema.
+func IsolatedURL(db *pgxpool.Pool) string {
+	base := db.Config().ConnConfig.ConnString()
+	separator := "?"
+	if strings.Contains(base, "?") {
+		separator = "&"
+	}
+	return base + separator + "search_path=" + url.QueryEscape(db.Config().ConnConfig.RuntimeParams["search_path"])
+}
 
 func Postgres(t *testing.T) *pgxpool.Pool {
 	t.Helper()

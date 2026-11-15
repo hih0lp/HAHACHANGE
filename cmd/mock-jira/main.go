@@ -137,30 +137,40 @@ func issueFields(v issue) map[string]any {
 	return fields
 }
 func main() {
-	path := os.Getenv("MOCK_JIRA_JSON")
-	if path == "" {
-		log.Fatal("MOCK_JIRA_JSON is required")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	db, err := mockfixture.OpenDatabase(ctx, os.Getenv("MOCK_DATABASE_URL"))
+	mux, closeDB, err := jiraHandlerFromEnvironment(context.Background())
 	if err != nil {
 		log.Fatal(err)
 	}
-	if db != nil {
-		defer db.Close()
-	}
-	data, err := mockfixture.Seed(ctx, db, "jira", func() ([]byte, error) { return os.ReadFile(path) }, validateJiraFixture)
-	if err != nil {
-		log.Fatal(err)
-	}
-	cancel()
-	mux := newMockJiraHandler(path, scenario.Client{BaseURL: os.Getenv("TEAM_DIRECTORY_URL")}, data)
+	defer closeDB()
 	listen := os.Getenv("MOCK_LISTEN")
 	if listen == "" {
 		listen = "127.0.0.1:8080"
 	}
 	log.Fatal(http.ListenAndServe(listen, mux))
+}
+
+func jiraHandlerFromEnvironment(parent context.Context) (http.Handler, func(), error) {
+	path := os.Getenv("MOCK_JIRA_JSON")
+	if path == "" {
+		return nil, nil, errors.New("MOCK_JIRA_JSON is required")
+	}
+	ctx, cancel := context.WithTimeout(parent, 15*time.Second)
+	defer cancel()
+	db, err := mockfixture.OpenDatabase(ctx, os.Getenv("MOCK_DATABASE_URL"))
+	if err != nil {
+		return nil, nil, err
+	}
+	closeDB := func() {
+		if db != nil {
+			db.Close()
+		}
+	}
+	data, err := mockfixture.Seed(ctx, db, "jira", func() ([]byte, error) { return os.ReadFile(path) }, validateJiraFixture)
+	if err != nil {
+		closeDB()
+		return nil, nil, err
+	}
+	return newMockJiraHandler(path, scenario.Client{BaseURL: os.Getenv("TEAM_DIRECTORY_URL")}, data), closeDB, nil
 }
 
 func validateJiraFixture(data []byte) error {

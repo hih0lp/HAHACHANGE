@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/hackchange/avito-rag/internal/scenario"
+	"github.com/hackchange/avito-rag/internal/testsupport"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -21,6 +22,49 @@ func (t bearerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	copy := r.Clone(r.Context())
 	copy.Header.Set("Authorization", "Bearer "+t.token)
 	return http.DefaultTransport.RoundTrip(copy)
+}
+
+func TestJiraStartupLoadsPersistentFixture(t *testing.T) {
+	t.Setenv("MOCK_JIRA_JSON", "")
+	if _, _, err := jiraHandlerFromEnvironment(context.Background()); err == nil {
+		t.Fatal("missing Jira path accepted")
+	}
+	path := filepath.Join(t.TempDir(), "jira.json")
+	t.Setenv("MOCK_JIRA_JSON", path)
+	db := testsupport.Postgres(t)
+	t.Setenv("MOCK_DATABASE_URL", testsupport.IsolatedURL(db))
+	if err := os.WriteFile(path, []byte("{"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := jiraHandlerFromEnvironment(context.Background()); err == nil {
+		t.Fatal("invalid Jira seed accepted")
+	}
+	if err := os.WriteFile(path, []byte(`{"project_key":"SCRUM","issues":[{"key":"SCRUM-1","summary":"Saved task","status":"Open","assignee_account_id":"first"}]}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	handler, closeDB, err := jiraHandlerFromEnvironment(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeDB()
+	server := httptest.NewServer(handler)
+	defer server.Close()
+	response, err := http.Get(server.URL + "/health")
+	if err != nil || response.StatusCode != http.StatusNoContent {
+		t.Fatalf("seeded health: %v %v", response, err)
+	}
+	response.Body.Close()
+	response, err = http.Get(server.URL + "/rest/api/3/issue/SCRUM-1")
+	if err != nil || response.StatusCode != http.StatusOK {
+		t.Fatalf("seeded issue: %v %v", response, err)
+	}
+	defer response.Body.Close()
+	var issue struct {
+		Key string `json:"key"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&issue); err != nil || issue.Key != "SCRUM-1" {
+		t.Fatalf("issue=%+v err=%v", issue, err)
+	}
 }
 
 func TestMockJiraScopesMCPToJWTAccount(t *testing.T) {
