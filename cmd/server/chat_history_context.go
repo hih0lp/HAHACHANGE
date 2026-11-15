@@ -8,6 +8,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+const recentChatLimit = 8
+
 type chatContextTurn struct {
 	Question string `json:"question"`
 	Answer   string `json:"answer"`
@@ -23,7 +25,7 @@ func recentChatTurns(ctx context.Context, db *pgxpool.Pool, owner, jobID string)
 		  AND previous.thread_id IS NOT DISTINCT FROM current_job.thread_id
 		WHERE current_job.id=$2 AND current_job.owner_id=$1 AND previous.status='completed' AND previous.superseded_at IS NULL
 		  AND (previous.created_at, previous.id) < (current_job.created_at, current_job.id)
-		ORDER BY previous.created_at DESC, previous.id DESC LIMIT 8`, owner, jobID)
+		ORDER BY previous.created_at DESC, previous.id DESC LIMIT $3`, owner, jobID, recentChatLimit)
 	if err != nil {
 		return nil, err
 	}

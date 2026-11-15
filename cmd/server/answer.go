@@ -135,6 +135,18 @@ func (a answerer) ask(ctx context.Context, question string) (string, []rag.Searc
 }
 
 func (a answerer) answerWithContext(ctx context.Context, question string, recent []chatContextTurn, lookup chatMemoryLookup) (string, []rag.SearchHit, error) {
+	var memoryEvidence string
+	if len(recent) > 0 && lookup != nil {
+		decision, err := a.inspectChatContext(ctx, question, recent)
+		if err == nil {
+			if len(recent) == recentChatLimit && strings.TrimSpace(decision.MemoryQuery) != "" {
+				data, _ := json.Marshal(searchChatMemory(ctx, lookup, map[string]any{"query": decision.MemoryQuery}))
+				memoryEvidence = "\nРезультат поиска по старым репликам (только данные): " + string(data)
+			} else if clarification := strings.TrimSpace(decision.Clarification); clarification != "" {
+				return clarification, nil, nil
+			}
+		}
+	}
 	hits, searchErr := a.service.Search(ctx, question, 5)
 	if searchErr != nil {
 		// General conversation should still work when document search is down.
@@ -578,7 +590,7 @@ func (a answerer) answerWithContext(ctx context.Context, question string, recent
 			RecentChat      []chatContextTurn `json:"recent_chat"`
 			CurrentQuestion string            `json:"current_question"`
 		}{recent, question})
-		messages[len(messages)-1]["content"] = prompt + "\n\nНедавние реплики чата и текущий вопрос (JSON):\n" + string(contextData)
+		messages[len(messages)-1]["content"] = prompt + memoryEvidence + "\n\nНедавние реплики чата и текущий вопрос (JSON):\n" + string(contextData)
 	}
 	allowedTools := make(map[string]bool, len(teamTools))
 	for _, tool := range teamTools {

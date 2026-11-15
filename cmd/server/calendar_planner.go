@@ -141,9 +141,15 @@ Preserve independent intents in compound questions. For general conversation wit
 }
 
 func (a answerer) requestPlan(ctx context.Context, instruction string, input map[string]any) (calendarPlan, error) {
+	var plan calendarPlan
+	err := a.requestJSON(ctx, instruction, input, &plan)
+	return plan, err
+}
+
+func (a answerer) requestJSON(ctx context.Context, instruction string, input map[string]any, output any) error {
 	plannerInput, err := json.Marshal(input)
 	if err != nil {
-		return calendarPlan{}, err
+		return err
 	}
 	request := map[string]any{"model": a.model, "stream": false, "messages": []map[string]string{{"role": "system", "content": instruction}, {"role": "user", "content": string(plannerInput)}}}
 	applyReasoningEffort(request)
@@ -154,11 +160,11 @@ func (a answerer) requestPlan(ctx context.Context, instruction string, input map
 	}
 	body, err := json.Marshal(request)
 	if err != nil {
-		return calendarPlan{}, err
+		return err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(a.url, "/")+"/v1/chat/completions", bytes.NewReader(body))
 	if err != nil {
-		return calendarPlan{}, err
+		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if key := os.Getenv("LLM_API_KEY"); key != "" {
@@ -170,11 +176,11 @@ func (a answerer) requestPlan(ctx context.Context, instruction string, input map
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return calendarPlan{}, err
+		return err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode/100 != 2 {
-		return calendarPlan{}, errors.New("calendar planner unavailable")
+		return errors.New("model planning unavailable")
 	}
 	var result struct {
 		Choices []struct {
@@ -184,17 +190,13 @@ func (a answerer) requestPlan(ctx context.Context, instruction string, input map
 		} `json:"choices"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 65536)).Decode(&result); err != nil || len(result.Choices) == 0 {
-		return calendarPlan{}, errors.New("invalid calendar planner response")
+		return errors.New("invalid model planning response")
 	}
 	content := modeloutput.PublicText(result.Choices[0].Message.Content)
 	content = strings.TrimPrefix(content, "```json")
 	content = strings.TrimPrefix(content, "```")
 	content = strings.TrimSuffix(strings.TrimSpace(content), "```")
-	var plan calendarPlan
-	if json.Unmarshal([]byte(strings.TrimSpace(content)), &plan) != nil {
-		return calendarPlan{}, errors.New("invalid calendar plan")
-	}
-	return plan, nil
+	return json.Unmarshal([]byte(strings.TrimSpace(content)), output)
 }
 
 func normalizeCalendarPlan(plan calendarPlan, now time.Time) (calendarPlan, error) {

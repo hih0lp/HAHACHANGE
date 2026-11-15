@@ -29,6 +29,13 @@ func TestAnswerUsesRecentChatEvenWhenOlderSearchIsEmpty(t *testing.T) {
 					return
 				}
 				calls++
+				if calls == 1 {
+					if input.Messages[0]["content"] != chatContextDecisionPrompt {
+						t.Error("context decision did not receive its own prompt")
+					}
+					fmt.Fprint(w, `{"choices":[{"message":{"content":"{}"}}]}`)
+					return
+				}
 				context, _ := input.Messages[1]["content"].(string)
 				if !strings.Contains(context, `"recent_chat":[{"question":"Что проверим?","answer":"Сверим макет."}]`) ||
 					!strings.Contains(context, `"current_question":"О чём говорили выше?"`) {
@@ -37,7 +44,7 @@ func TestAnswerUsesRecentChatEvenWhenOlderSearchIsEmpty(t *testing.T) {
 				if input.ToolChoice != "auto" || len(input.Tools) != 1 {
 					t.Error("memory lookup was not offered as an optional tool")
 				}
-				if calls == 1 {
+				if calls == 2 {
 					switch memoryMode {
 					case "native":
 						fmt.Fprint(w, `{"choices":[{"message":{"tool_calls":[{"id":"memory-1","type":"function","function":{"name":"search_chat_memory","arguments":"{\"query\":\"макет\"}"}}]}}]}`)
@@ -72,7 +79,7 @@ func TestAnswerUsesRecentChatEvenWhenOlderSearchIsEmpty(t *testing.T) {
 			if memoryMode == "no lookup" {
 				expectedSearches = 0
 			}
-			if err != nil || answer != "Обсуждали проверку макета." || searches != expectedSearches || calls != 1+expectedSearches {
+			if err != nil || answer != "Обсуждали проверку макета." || searches != expectedSearches || calls != 2+expectedSearches {
 				t.Fatalf("answer %q, calls %d, searches %d, error %v", answer, calls, searches, err)
 			}
 		})
