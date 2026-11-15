@@ -255,3 +255,31 @@ func readMessages(rows pgx.Rows) (searchResult, error) {
 	}
 	return result, rows.Err()
 }
+
+type chatGroup struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+type groupList struct {
+	Groups []chatGroup `json:"groups"`
+}
+
+func (s store) groups(ctx context.Context, user string) (groupList, error) {
+	out := groupList{Groups: []chatGroup{}}
+	rows, err := s.db.Query(ctx, `SELECT g.id, g.name FROM chat_groups g
+		JOIN chat_group_members m ON m.group_id=g.id
+		WHERE m.user_id=$1 ORDER BY g.name,g.id`, user)
+	if err != nil {
+		return out, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var group chatGroup
+		if err := rows.Scan(&group.ID, &group.Name); err != nil {
+			return out, err
+		}
+		out.Groups = append(out.Groups, group)
+	}
+	return out, rows.Err()
+}

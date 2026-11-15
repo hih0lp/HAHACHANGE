@@ -77,12 +77,18 @@ func formatCalendarEvents(result any, maxItems ...int) (string, error) {
 }
 
 func formatCalendarEventList(result any, calendar string, maxItems ...int) (string, error) {
+	return formatVerifiedCalendarEvents(result, calendar, false, maxItems...)
+}
+
+func formatVerifiedCalendarEvents(result any, calendar string, oneOnOne bool, maxItems ...int) (string, error) {
 	raw, err := json.Marshal(result)
 	if err != nil {
 		return "", err
 	}
 	var response struct {
-		Data struct {
+		TimeMin string `json:"time_min"`
+		TimeMax string `json:"time_max"`
+		Data    struct {
 			Items []struct {
 				Summary     string `json:"summary"`
 				Description string `json:"description"`
@@ -110,11 +116,21 @@ func formatCalendarEventList(result any, calendar string, maxItems ...int) (stri
 	if err != nil {
 		return "", err
 	}
-	if len(response.Data.Items) == 0 {
-		return "Нет событий " + calendar + " за указанный период.", nil
+	period := " за указанный период"
+	if response.TimeMin != "" || response.TimeMax != "" {
+		start, startErr := time.Parse(time.RFC3339, response.TimeMin)
+		end, endErr := time.Parse(time.RFC3339, response.TimeMax)
+		if startErr != nil || endErr != nil || !end.After(start) {
+			return "", errors.New("invalid calendar event period")
+		}
+		period = fmt.Sprintf(" за период %s — %s МСК", start.In(zone).Format("02.01.2006 15:04"), end.In(zone).Format("02.01.2006 15:04"))
 	}
 	lines := make([]string, 0, len(response.Data.Items))
 	for _, event := range response.Data.Items {
+		text := strings.ToLower(event.Summary + " " + html.UnescapeString(calendarHTMLTag.ReplaceAllString(event.Description, "")))
+		if oneOnOne && !strings.Contains(text, "1:1") && !strings.Contains(text, "1 на 1") && !strings.Contains(text, "1-на-1") {
+			continue
+		}
 		if len(maxItems) > 0 && maxItems[0] > 0 && len(lines) >= maxItems[0] {
 			break
 		}
@@ -130,8 +146,21 @@ func formatCalendarEventList(result any, calendar string, maxItems ...int) (stri
 		}
 		lines = append(lines, line)
 	}
+	if oneOnOne {
+		if len(lines) == 0 {
+			return "В календаре наставника" + period + " нет событий, обозначенных как 1:1. Статус записи на встречи в календаре не указан.", nil
+		}
+		return "Окна 1:1 в календаре наставника" + period + ":\n" + strings.Join(lines, "\n") + "\n\nКалендарь не показывает, свободны ли эти окна для записи.", nil
+	}
+	if len(lines) == 0 {
+		return "Нет событий " + calendar + period + ".", nil
+	}
 	if len(maxItems) > 0 && maxItems[0] == 1 {
 		return "Ближайшее событие " + calendar + ":\n" + strings.Join(lines, "\n"), nil
 	}
-	return "События " + calendar + ":\n" + strings.Join(lines, "\n"), nil
+	heading := "События " + calendar
+	if response.TimeMin != "" {
+		heading += period
+	}
+	return heading + ":\n" + strings.Join(lines, "\n"), nil
 }

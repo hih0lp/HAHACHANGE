@@ -13,6 +13,10 @@ func (a answerer) latestGroupMessages(ctx context.Context, token, group string, 
 	if err != nil {
 		return unavailable
 	}
+	return formatMessengerMessages(result, loc, "Последние сообщения в мессенджере", unavailable, "Мессенджер не вернул доступных сообщений для этого запроса.")
+}
+
+func formatMessengerMessages(result any, loc *time.Location, heading, unavailable, empty string) string {
 	data, err := json.Marshal(result)
 	if err != nil {
 		return unavailable
@@ -29,9 +33,9 @@ func (a answerer) latestGroupMessages(ctx context.Context, token, group string, 
 		return unavailable
 	}
 	if len(history.Messages) == 0 {
-		return "Мессенджер не вернул доступных сообщений для этого запроса."
+		return empty
 	}
-	lines := []string{"Последние сообщения в мессенджере"}
+	lines := []string{heading}
 	for _, m := range history.Messages {
 		lines = append(lines, "- "+m.Time.In(loc).Format("02.01 15:04")+" МСК · "+m.Group+" · "+m.Author+" — "+m.Text)
 	}

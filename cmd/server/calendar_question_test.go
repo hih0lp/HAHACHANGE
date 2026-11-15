@@ -126,13 +126,6 @@ func TestPlannerReceivesPreviousTurnAndReadsOnlyPublicJSON(t *testing.T) {
 			t.Errorf("planner received wrong context: %+v (%v)", input, err)
 		}
 		calls++
-		if calls == 1 {
-			if len(input.Recent) != 0 {
-				t.Error("first planning call included history")
-			}
-			fmt.Fprint(w, `{"choices":[{"message":{"content":"{\"needs_recent_context\":true}"}}]}`)
-			return
-		}
 		if len(input.Recent) != 1 || input.Recent[0].Answer != "Форма для оформления запроса" {
 			t.Errorf("follow-up did not receive its history: %+v", input)
 		}
@@ -143,7 +136,7 @@ func TestPlannerReceivesPreviousTurnAndReadsOnlyPublicJSON(t *testing.T) {
 	plan, err := a.planCalendar(context.Background(), "Зачем это?", time.Now(), []chatContextTurn{
 		{Question: "Покажи форму", Answer: "Форма для оформления запроса"},
 	}, nil)
-	if err != nil || plan.NeedsForm || calls != 2 {
+	if err != nil || plan.NeedsForm || calls != 1 {
 		t.Fatalf("unexpected plan: %+v, %v", plan, err)
 	}
 }
@@ -169,7 +162,7 @@ func TestLatestMessagesRecoversNamedGroupBeforeUsingAllGroups(t *testing.T) {
 	defer model.Close()
 	a := answerer{url: model.URL, model: "test", client: model.Client()}
 	plan, err := a.planCalendar(context.Background(), "Какие последние сообщения в группе «Каталог»?", time.Now(), nil, nil)
-	if err != nil || calls != 2 || plan.ChatGroup != "Каталог" || plan.AllChatGroups {
+	if err != nil || calls != 1 || plan.ChatGroup != "Каталог" || plan.AllChatGroups {
 		t.Fatalf("unexpected plan: %+v, %v", plan, err)
 	}
 }

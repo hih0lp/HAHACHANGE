@@ -76,6 +76,17 @@ func (s chatService) handler() http.Handler {
 		}
 		return nil, result, nil
 	})
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "list_my_groups",
+		Description: "List the messenger groups the signed-in user belongs to, including groups without messages. The user is determined by authentication.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, groupList, error) {
+		user, _ := ctx.Value(identityKey{}).(string)
+		if user == "" {
+			return nil, groupList{}, errors.New("user authorization required")
+		}
+		groups, err := s.store.groups(ctx, user)
+		return nil, groups, err
+	})
 	stream := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server },
 		&mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
 	mux := http.NewServeMux()
