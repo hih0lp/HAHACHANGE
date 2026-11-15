@@ -3,6 +3,7 @@ WORKDIR /src
 COPY go.mod go.sum ./
 COPY cmd/mock-jira ./cmd/mock-jira
 COPY internal/mockfixture ./internal/mockfixture
+COPY internal/scenario ./internal/scenario
 RUN CGO_ENABLED=0 go build -trimpath -o /mock-jira ./cmd/mock-jira
 FROM alpine:3.20
 COPY --from=build /mock-jira /usr/local/bin/mock-jira
