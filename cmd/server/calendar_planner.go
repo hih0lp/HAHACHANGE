@@ -101,7 +101,7 @@ Classify only what the user requests in the current question. If a reference or 
 - needs_gitlab: GitLab content. Add needs_gitlab_projects for a visible project list or overview. Note that a general request to inspect GitLab content is not a permission check. Keep a separately requested permission check.
 - needs_group_chat: messenger history. Add latest_group_messages for newest messages instead of topic search. If the user names a group, copy the group name into chat_group, without quotation marks. Set all_chat_groups only for unscoped requests; never set it when a group name was provided.
 - needs_chat_memory: older discussions, decisions or preferences.
-- needs_company_events: dates and schedules of company-wide events. needs_events: meetings in the mentor or onboarding calendar. needs_availability: mentor's free or busy time. Add nearest_event_only for a single next event. Use Europe/Moscow and period_kind current_week, next_week, explicit or upcoming. For explicit dates return time_min and time_max in RFC3339. Unspecified future means upcoming for 30 days. Set historical only for explicitly past events.
+- needs_company_events: dates and schedules of company-wide events. needs_events: meetings in the mentor or onboarding calendar. needs_availability: mentor's free or busy time. Add nearest_event_only only if the user requests one next event. Use Europe/Moscow and period_kind current_week, next_week, explicit or upcoming. For stated dates or a stated number of days use explicit and supply both RFC3339 bounds. Use current_week and next_week only for calendar weeks. Unspecified future means upcoming for 30 days. Set historical only for explicitly past events.
 Preserve independent intents in compound questions. For general conversation without internal evidence return {}.`
 	plan, err := a.requestPlan(ctx, instruction, map[string]any{"current_time": now.Format(time.RFC3339), "recent_chat": recent, "available_forms": forms, "available_resources": resources, "question": question})
 	if err != nil {
@@ -109,6 +109,11 @@ Preserve independent intents in compound questions. For general conversation wit
 	}
 	plan.NeedsGitLab = plan.NeedsGitLab || plan.NeedsGitLabProjects
 	plan.NeedsGroupChat = plan.NeedsGroupChat || plan.LatestGroupMessages
+	// A document request anchors the advice in that source. Current service data
+	// is fetched only for separately selected intents.
+	if plan.NeedsDocumentEvidence {
+		plan.NeedsRecommendation = false
+	}
 	return normalizeCalendarPlan(plan, now)
 }
 
@@ -119,6 +124,11 @@ func (a answerer) requestPlan(ctx context.Context, instruction string, input map
 	}
 	request := map[string]any{"model": a.model, "stream": false, "messages": []map[string]string{{"role": "system", "content": instruction}, {"role": "user", "content": string(plannerInput)}}}
 	applyReasoningEffort(request)
+	if request["reasoning_effort"] == "none" {
+		request["response_format"] = map[string]string{"type": "json_object"}
+		request["max_tokens"] = 512
+		request["temperature"] = 0
+	}
 	body, err := json.Marshal(request)
 	if err != nil {
 		return calendarPlan{}, err
@@ -133,7 +143,7 @@ func (a answerer) requestPlan(ctx context.Context, instruction string, input map
 	}
 	client := a.client
 	if client == nil {
-		client = &http.Client{Timeout: 45 * time.Second}
+		client = &http.Client{Timeout: time.Duration(envInt("LLM_PLANNER_TIMEOUT_SECONDS", 45)) * time.Second}
 	}
 	resp, err := client.Do(req)
 	if err != nil {
