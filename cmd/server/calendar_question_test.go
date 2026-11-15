@@ -118,6 +118,7 @@ func TestPlannerCanRequestOldChatMemory(t *testing.T) {
 }
 
 func TestPlannerReceivesPreviousTurnAndReadsOnlyPublicJSON(t *testing.T) {
+	calls := 0
 	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var payload struct{ Messages []struct{ Content string } }
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil || len(payload.Messages) != 2 {
@@ -129,10 +130,19 @@ func TestPlannerReceivesPreviousTurnAndReadsOnlyPublicJSON(t *testing.T) {
 			Question string
 			Recent   []chatContextTurn `json:"recent_chat"`
 		}
-		if err := json.Unmarshal([]byte(payload.Messages[1].Content), &input); err != nil ||
-			input.Question != "Зачем это?" || len(input.Recent) != 1 ||
-			input.Recent[0].Answer != "Форма для оформления запроса" {
+		if err := json.Unmarshal([]byte(payload.Messages[1].Content), &input); err != nil || input.Question != "Зачем это?" {
 			t.Errorf("planner received wrong context: %+v (%v)", input, err)
+		}
+		calls++
+		if calls == 1 {
+			if len(input.Recent) != 0 {
+				t.Error("first planning call included history")
+			}
+			fmt.Fprint(w, `{"choices":[{"message":{"content":"{\"needs_recent_context\":true}"}}]}`)
+			return
+		}
+		if len(input.Recent) != 1 || input.Recent[0].Answer != "Форма для оформления запроса" {
+			t.Errorf("follow-up did not receive its history: %+v", input)
 		}
 		fmt.Fprint(w, `{"choices":[{"message":{"content":"служебный текст</think>{}"}}]}`)
 	}))
@@ -141,7 +151,7 @@ func TestPlannerReceivesPreviousTurnAndReadsOnlyPublicJSON(t *testing.T) {
 	plan, err := a.planCalendar(context.Background(), "Зачем это?", time.Now(), []chatContextTurn{
 		{Question: "Покажи форму", Answer: "Форма для оформления запроса"},
 	}, nil)
-	if err != nil || plan.NeedsForm {
+	if err != nil || plan.NeedsForm || calls != 2 {
 		t.Fatalf("unexpected plan: %+v, %v", plan, err)
 	}
 }

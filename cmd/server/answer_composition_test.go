@@ -104,7 +104,7 @@ func TestGitLabOverviewUsesProjectsMCP(t *testing.T) {
 	}
 }
 
-func TestMixedTeamAndPersonalJiraAvoidsInternalIDsAndUnverifiedDescription(t *testing.T) {
+func TestTeamAndPersonalJiraAnswerFollowSelectedSources(t *testing.T) {
 	team := mcp.NewServer(&mcp.Implementation{Name: "test-team", Version: "1"}, nil)
 	mcp.AddTool(team, &mcp.Tool{Name: "team_profile"}, func(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, map[string]any, error) {
 		return nil, map[string]any{"jira_account_id": "account-private"}, nil
@@ -125,25 +125,34 @@ func TestMixedTeamAndPersonalJiraAvoidsInternalIDsAndUnverifiedDescription(t *te
 	})
 	jiraHTTP := testMCPServer(t, jira)
 	defer jiraHTTP.Close()
-	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		fmt.Fprint(w, `{"choices":[{"message":{"content":"{\"needs_team_directory\":true,\"needs_my_jira_issues\":true}"}}]}`)
-	}))
-	defer model.Close()
 	service := rag.New(rag.Config{EmbeddingsURL: "http://127.0.0.1:1", QdrantURL: "http://127.0.0.1:1"})
-	a := answerer{service: service, url: model.URL, model: "test", jiraMode: "mock", mcpURL: jiraHTTP.URL, teamMCPURL: teamHTTP.URL}
-	answer, _, err := a.Ask(distributed.WithTeamToken(context.Background(), "session"), "Кто мой наставник и какие у меня задачи?")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, expected := range []string{"Наставник команды", "TASK-7", "Проверенная задача"} {
-		if !strings.Contains(answer, expected) {
-			t.Fatalf("missing %q in %q", expected, answer)
-		}
-	}
-	for _, forbidden := range []string{"mentor-private", "account-private", "Описание:"} {
-		if strings.Contains(answer, forbidden) {
-			t.Fatalf("unexpected %q in %q", forbidden, answer)
-		}
+	for _, tc := range []struct {
+		name, question, plan string
+		wantJira, wantTeam   bool
+	}{
+		{"jira", "Какие задачи у меня?", `{"needs_my_jira_issues":true}`, true, false},
+		{"team", "Кто в моей команде?", `{"needs_team_directory":true}`, false, true},
+		{"mixed", "Кто мой наставник и какие у меня задачи?", `{"needs_team_directory":true,"needs_my_jira_issues":true}`, true, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				fmt.Fprintf(w, `{"choices":[{"message":{"content":%q}}]}`, tc.plan)
+			}))
+			defer model.Close()
+			a := answerer{service: service, url: model.URL, model: "test", jiraMode: "mock", mcpURL: jiraHTTP.URL, teamMCPURL: teamHTTP.URL}
+			answer, _, err := a.Ask(distributed.WithTeamToken(context.Background(), "session"), tc.question)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(answer, "TASK-7") != tc.wantJira || strings.Contains(answer, "Проверенная задача") != tc.wantJira || strings.Contains(answer, "Наставник команды") != tc.wantTeam {
+				t.Fatalf("unexpected sources in %q", answer)
+			}
+			for _, forbidden := range []string{"mentor-private", "account-private", "Описание:"} {
+				if strings.Contains(answer, forbidden) {
+					t.Fatalf("unexpected %q in %q", forbidden, answer)
+				}
+			}
+		})
 	}
 }
 
