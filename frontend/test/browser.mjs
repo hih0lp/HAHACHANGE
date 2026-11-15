@@ -80,10 +80,10 @@ async function fixtures(page, { deadline = false, beforeSession = async () => {}
       if (index === -1) return respond({ error: 'Job not found' }, 404);
       if (action[2] === 'stop') {
         const job = jobs[index];
-        if (job.status === 'running') Object.assign(job, { status: 'failed', error: 'Остановлено пользователем' });
+        if (['queued', 'running'].includes(job.status)) Object.assign(job, { status: 'failed', error: 'Остановлено пользователем' });
         return respond(job);
       }
-      if (!['queued', 'running'].includes(jobs[index].status)) return respond({ error: 'Job not found' }, 404);
+      assert.equal(jobs[index].error, 'Остановлено пользователем');
       const replacement = { ...jobs[index], id: String(++serial), query: body.query, status: 'completed', answer: 'Ответ на изменённый вопрос' };
       jobs.splice(index, 1);
       jobs.push(replacement);
@@ -394,15 +394,18 @@ try {
     await editButton.click();
     assert.equal(await completedTurn.getByRole('textbox').count(), 0);
     assert.equal(await editField.inputValue(), 'Вопрос для остановки');
+    await main.getByText('Ответ остановлен.', { exact: true }).waitFor();
     await editField.press('Escape');
     assert.equal(await draftField.inputValue(), 'Сохранённый черновик');
-    await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Изменить вопрос');
+    await draftField.fill('Вопрос для остановки');
+    await draftField.press('Enter');
+    await draftField.fill('Сохранённый черновик');
     await editButton.click();
     await editField.fill('Вопрос после редактирования');
     await editField.press('Enter');
     await main.getByText('Ответ на изменённый вопрос', { exact: true }).waitFor();
     assert.equal(await draftField.inputValue(), 'Сохранённый черновик');
-    assert.equal(await main.locator('.user-message').getByText('Вопрос для остановки', { exact: true }).count(), 0);
+    assert.equal(await main.locator('.user-message').getByText('Вопрос для остановки', { exact: true }).count(), 1);
     assert.equal(await main.locator('.turn').last().getByRole('button', { name: 'Изменить вопрос' }).count(), 0);
     await main.getByRole('textbox', { name: 'Ваш вопрос' }).fill('Вопрос для остановки');
     await main.getByRole('textbox', { name: 'Ваш вопрос' }).press('Enter');
@@ -410,9 +413,8 @@ try {
     await stop.waitFor();
     assert.equal(await main.getByRole('button', { name: 'Отправить вопрос' }).count(), 0);
     await main.getByRole('textbox', { name: 'Ваш вопрос' }).fill('Следующий черновик');
-    await main.locator('.turn').last().getByRole('button', { name: 'Изменить вопрос' }).click();
     await stop.click();
-    await main.getByText('Ответ остановлен.').waitFor();
+    await main.locator('.turn').last().getByText('Ответ остановлен.').waitFor();
     await main.getByRole('button', { name: 'Отправить вопрос' }).waitFor();
     assert.equal(await main.getByRole('textbox', { name: 'Ваш вопрос' }).inputValue(), 'Следующий черновик');
     assert.equal(await main.locator('.turn').last().getByRole('button', { name: 'Изменить вопрос' }).count(), 0);

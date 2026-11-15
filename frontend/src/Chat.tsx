@@ -85,7 +85,7 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
   }, []);
 
   useEffect(() => {
-    if (edit && !jobs.some(job => job.id === edit.id && !completed(job))) setEdit(null);
+    if (edit && !jobs.some(job => job.id === edit.id)) setEdit(null);
   }, [edit, jobs]);
 
   useEffect(() => {
@@ -184,7 +184,7 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
     event.preventDefault();
     if (edit) {
       const job = jobs.find(item => item.id === edit.id);
-      if (job && !completed(job)) void changeJob(job, edit.query.trim());
+      if (job) void changeJob(job, edit.query.trim());
     } else {
       void send(draft, fromWidget);
     }
@@ -228,7 +228,7 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
   function cancelEdit(compact = false) {
     setEdit(null);
     requestAnimationFrame(() => {
-      const target = compact ? widgetInput.current : editMessage.current?.querySelector<HTMLButtonElement>('.answer-action');
+      const target = compact ? widgetInput.current : (editMessage.current?.querySelector<HTMLButtonElement>('.answer-action') ?? input.current);
       target?.focus({ preventScroll: true });
     });
   }
@@ -391,7 +391,8 @@ export function Chat({ hidden, token, apiKey, identity, formID, catalog, draft, 
                   disabled={sending || changing} onClick={event => {
                     dictation.cancel();
                     editMessage.current = event.currentTarget.closest('.user-message');
-                    if (edit?.id !== job.id) setEdit({ id: job.id, query: job.query });
+                    setEdit({ id: job.id, query: job.query });
+                    void changeJob(job);
                     input.current?.focus({ preventScroll: true });
                   }}><Icon name="edit"/></button>}
               </div>
