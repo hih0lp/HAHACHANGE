@@ -52,6 +52,7 @@ services:
       DATABASE_URL: postgres://aibuddy:bobby-local-postgres@postgres:5432/aibuddy?sslmode=disable
     volumes:
       - ./fixtures/knowledge:/data/knowledge:ro
+      - ../playbook:/data/knowledge/playbook:ro
     healthcheck:
       test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:8000/"]
       interval: 5s
