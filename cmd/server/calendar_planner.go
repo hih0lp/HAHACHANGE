@@ -76,19 +76,33 @@ func (a answerer) planCalendar(ctx context.Context, question string, now time.Ti
 			plan.FormID = selection.FormID
 		}
 	}
-	if err == nil && plan.LatestGroupMessages && strings.TrimSpace(plan.ChatGroup) == "" {
+	if err == nil && plan.NeedsGroupChat && (!plan.LatestGroupMessages || strings.TrimSpace(plan.ChatGroup) == "") {
 		scope, scopeErr := a.requestPlan(ctx, groupScopePrompt, map[string]any{"question": question, "recent_chat": contextTurns})
 		plan.ChatGroup = ""
 		plan.AllChatGroups = false
 		if scopeErr == nil {
 			plan.ChatGroup = strings.TrimSpace(scope.ChatGroup)
 			plan.AllChatGroups = scope.AllChatGroups && plan.ChatGroup == ""
+			plan.LatestGroupMessages = plan.LatestGroupMessages || scope.LatestGroupMessages
 		}
+	}
+	if err == nil && (plan.NeedsEvents || plan.NeedsCompanyEvents || plan.NeedsAvailability) &&
+		plan.DaysAhead == 0 && plan.PeriodKind == "" && plan.TimeMin == "" && plan.TimeMax == "" {
+		period, periodErr := a.requestPlan(ctx, calendarPeriodPrompt, map[string]any{
+			"question": question, "current_time": now.Format(time.RFC3339), "recent_chat": contextTurns,
+		})
+		if periodErr == nil {
+			plan.DaysAhead, plan.PeriodKind = period.DaysAhead, period.PeriodKind
+			plan.TimeMin, plan.TimeMax, plan.Historical = period.TimeMin, period.TimeMax, period.Historical
+		}
+		plan, err = normalizeCalendarPlan(plan, now)
 	}
 	return plan, err
 }
 
-const groupScopePrompt = `Extract the group filter for the current messenger request. Return JSON. If a group is named, return {"chat_group":"<exact name>"} without surrounding quote marks. If the question asks for messages without naming or referring to any specific group, return {"all_chat_groups":true}. If the question refers to a particular group but its name is unresolved, return {}. Use recent_chat only to resolve references. Do not invent group names.`
+const groupScopePrompt = `Extract the group filter and message mode for the current messenger request. Return JSON. Set latest_group_messages to true when the user asks for the latest messages or recent history without a topic. If a group is named, set chat_group to its exact name without surrounding quote marks. Set all_chat_groups only when no specific group is named or referred to. If a reference is unresolved, leave both scope fields empty. Use recent_chat only to resolve references. Do not invent group names.`
+
+const calendarPeriodPrompt = `Extract only the calendar period from the user's question and return JSON. This week means {"period_kind":"current_week"} and next week means {"period_kind":"next_week"}. For the next N days use days_ahead as an integer. For fixed dates use period_kind explicit and RFC3339 time_min and time_max in Europe/Moscow. Only set historical for a past range. If there is no stated period return {"period_kind":"upcoming"}. Read the request in its original language. Use recent_chat only to resolve references.`
 
 func (a answerer) planQuestion(ctx context.Context, question string, now time.Time, recent []chatContextTurn, forms []formChoice, resources []resourceChoice) (calendarPlan, error) {
 	instruction := `Classify the current question. Return a JSON object with only relevant fields; omit false flags. Do not answer the question.
@@ -115,6 +129,10 @@ Preserve independent intents in compound questions. For general conversation wit
 	// is fetched only for separately selected intents.
 	if plan.NeedsDocumentEvidence {
 		plan.NeedsRecommendation = false
+	}
+	if (plan.NeedsEvents || plan.NeedsCompanyEvents || plan.NeedsAvailability) &&
+		plan.DaysAhead == 0 && plan.PeriodKind == "" && plan.TimeMin == "" && plan.TimeMax == "" {
+		return plan, nil
 	}
 	return normalizeCalendarPlan(plan, now)
 }
