@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -81,6 +82,22 @@ func TestGroupChat(t *testing.T) {
 	}
 	server := httptest.NewServer(s.handler())
 	defer server.Close()
+	page, err := server.Client().Get(server.URL + "/?added=sample-message")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pageBody strings.Builder
+	if _, err := io.Copy(&pageBody, page.Body); err != nil {
+		t.Fatal(err)
+	}
+	page.Body.Close()
+	if page.StatusCode != 200 || !strings.Contains(pageBody.String(), "Стажёр каталога") || !strings.Contains(pageBody.String(), "sample-message") {
+		t.Fatalf("demo page: status=%d body=%s", page.StatusCode, pageBody.String())
+	}
+	groups, err := s.store.groups(ctx, "intern2")
+	if err != nil || len(groups.Groups) != 2 {
+		t.Fatalf("intern2 group membership=%+v err=%v", groups, err)
+	}
 
 	login := func(user string) string {
 		t.Helper()

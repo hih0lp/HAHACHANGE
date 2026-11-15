@@ -84,3 +84,32 @@ func TestGitLabBranchListUsesCallerTokenAndProject(t *testing.T) {
 		t.Fatalf("branches: %d %s", w.Code, w.Body.String())
 	}
 }
+
+func TestMockEditorRejectsMissingIdentityAndBadUpstream(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte("<html>wrong upstream</html>"))
+	}))
+	defer upstream.Close()
+	mux := http.NewServeMux()
+	registerMockEditors(mux, "api-key", map[string]string{"jira": upstream.URL, "invalid": "file:///tmp/data"}, "http://127.0.0.1:1/mcp")
+	call := func(path, token, key string, want int) {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("Authorization", token)
+		req.Header.Set("X-API-Key", key)
+		resp := httptest.NewRecorder()
+		mux.ServeHTTP(resp, req)
+		if resp.Code != want {
+			t.Fatalf("%s: got %d want %d: %s", path, resp.Code, want, resp.Body.String())
+		}
+	}
+	call("/v1/mock-data/invalid", "Bearer intern", "api-key", 404)
+	call("/v1/mock-data/jira", "Bearer intern", "", 401)
+	call("/v1/mock-data/jira", "", "api-key", 401)
+	call("/v1/mock-data/jira", "Bearer intern", "api-key", 503)
+	call("/v1/tasks/gitlab", "", "api-key", 401)
+	call("/v1/tasks/gitlab", "Bearer intern", "api-key", 503)
+	call("/v1/tasks/gitlab/2/branches", "", "api-key", 401)
+	call("/v1/tasks/gitlab/2/branches", "Bearer intern", "api-key", 503)
+}

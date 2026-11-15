@@ -169,4 +169,29 @@ func TestDirectoryAndRightsFlow(t *testing.T) {
 		t.Fatalf("rejected request granted access: %v", check)
 	}
 	call(base, "POST", "/v1/access-requests", intern, `{"resource_id":"demo-calendar","capability":"read","reason":"Already granted","confirmed":true}`, 409, map[string]string{"Idempotency-Key": "granted-key-1"})
+
+	// Storage failures must remain explicit and never be presented as a missing
+	// permission or an empty catalogue.
+	if _, err := rights.DB.Exec(ctx, `DROP TABLE ta_requests`); err != nil {
+		t.Fatal(err)
+	}
+	call(base, "GET", "/v1/access-requests", intern, "", 503, nil)
+	call(base, "GET", "/v1/access-requests/"+id, intern, "", 503, nil)
+	call(base, "GET", "/v1/approvals", approver, "", 503, nil)
+	call(base, "POST", "/v1/access-requests/"+id+"/decision", approver, `{"decision":"approve"}`, 503, nil)
+	call(base, "POST", "/v1/access-requests", intern, `{"resource_id":"demo-docs","capability":"read","reason":"Need docs","confirmed":true}`, 503, map[string]string{"Idempotency-Key": "outage-key-1"})
+	if _, err := rights.DB.Exec(ctx, `DROP TABLE ta_resources CASCADE`); err != nil {
+		t.Fatal(err)
+	}
+	call(base, "GET", "/v1/teams/demo-team/resources", intern, "", 503, nil)
+	call(base, "POST", "/v1/access/check", intern, `{"resource_id":"demo-docs","capability":"read"}`, 503, nil)
+	if _, err := rights.DB.Exec(ctx, `DROP TABLE form_submissions`); err != nil {
+		t.Fatal(err)
+	}
+	call(base, "GET", "/v1/form-submissions/"+formID, intern, "", 503, nil)
+	if _, err := rights.DB.Exec(ctx, `DROP TABLE form_definitions`); err != nil {
+		t.Fatal(err)
+	}
+	call(base, "GET", "/v1/forms", intern, "", 503, nil)
+	call(base, "GET", "/v1/forms/equipment-request", intern, "", 503, nil)
 }
