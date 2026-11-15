@@ -100,7 +100,11 @@ func (a answerer) planCalendar(ctx context.Context, question string, now time.Ti
 	return plan, err
 }
 
-const groupScopePrompt = `Extract the group filter and message mode for the current messenger request. Return JSON. Set latest_group_messages to true when the user asks for the latest messages or recent history without a topic. If a group is named, set chat_group to its exact name without surrounding quote marks. Set all_chat_groups only when no specific group is named or referred to. If a reference is unresolved, leave both scope fields empty. Use recent_chat only to resolve references. Do not invent group names.`
+const groupScopePrompt = `Return exactly one flat JSON object with keys "latest_group_messages", "chat_group", and "all_chat_groups". No nested objects.
+"latest_group_messages" is true for the latest messages or recent history without a topic.
+"chat_group" is the exact stated group name without quotation marks, or an empty string.
+"all_chat_groups" is true only when no particular group is named or referred to. It is false for an unresolved reference.
+Use recent_chat only to resolve references. Do not invent group names.`
 
 const calendarPeriodPrompt = `Extract only the calendar period from the user's question and return JSON. This week means {"period_kind":"current_week"} and next week means {"period_kind":"next_week"}. For the next N days use days_ahead as an integer. For fixed dates use period_kind explicit and RFC3339 time_min and time_max in Europe/Moscow. Only set historical for a past range. If there is no stated period return {"period_kind":"upcoming"}. Read the request in its original language. Use recent_chat only to resolve references.`
 
