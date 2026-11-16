@@ -73,9 +73,19 @@ pwsh -File scripts/test-coverage.ps1
 
 ## Серверный стенд
 
-Распределённый тестовый стек с моками разворачивается отдельно. Его переменные
-окружения, сборка фронтенда и команды запуска описаны в
-[инструкции развёртывания](DEPLOY_MOCK_STACK.md).
+Тестовый стенд на сервере запущен из `D:\HackChange\workspace\main` как проект
+`bobby-local`. После сборки фронтенда (`npm ci` и `npm run build` в папке
+`frontend`) запустите его из корня клона:
+
+```powershell
+docker compose -p bobby-local -f compose.local.yml -f compose.local.gpu.yml -f compose.main-server.yml up -d --build --wait --wait-timeout 1200
+```
+
+`compose.local.gpu.yml` включает NVIDIA GPU. `compose.main-server.yml` —
+локальный файл сервера: он публикует gateway в Tailscale и использует
+`Dockerfile.gateway.prebuilt` для заранее собранного фронтенда. Этот файл
+не входит в репозиторий. Для другого распределённого тестового стека есть
+[отдельная инструкция](DEPLOY_MOCK_STACK.md).
 
 ## Исходные данные и API
 
