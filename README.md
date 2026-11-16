@@ -43,6 +43,20 @@ docker compose -f compose.local.yml down
 Тома сохраняются. Конфигурация и сценарии запуска описаны в
 [SDD-046](specs/046-local-compose.md).
 
+### Запуск с NVIDIA GPU
+
+На компьютере с видеокартой NVIDIA, доступной Docker, добавьте GPU-оверлей:
+
+```bash
+docker compose -f compose.local.yml -f compose.local.gpu.yml up --build --wait --wait-timeout 1200
+docker compose -f compose.local.yml -f compose.local.gpu.yml exec ollama ollama ps
+```
+
+После загрузки модели в столбце `PROCESSOR` команды `ollama ps` должно быть
+`100% GPU`. Если список пуст, сначала отправьте запрос Бобби или выполните
+`docker compose -f compose.local.yml -f compose.local.gpu.yml exec ollama ollama run qwen3:8b "Ответь OK"`,
+затем повторите `ollama ps`. На тестовом сервере Qwen3 8B показала `100% GPU`.
+
 ## Тесты
 
 Для полного прогона нужны Docker, Go, Node.js и PowerShell:
