@@ -1,0 +1,26 @@
+# syntax=docker/dockerfile:1
+FROM golang:1.23-alpine AS build
+WORKDIR /src
+ENV CGO_ENABLED=0
+COPY go.mod go.sum ./
+RUN go mod download
+COPY cmd ./cmd
+COPY internal ./internal
+COPY pkg ./pkg
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    mkdir -p /out && \
+    go build -trimpath -ldflags="-s -w" -o /out/ ./cmd/...
+
+FROM alpine:3.20 AS public-docs
+ADD --checksum=sha256:c0d36dd7687d3643371ff7fc66944bcd0651669410f329ad908f70eed048695a https://codeload.github.com/avito-tech/playbook/tar.gz/0c1d2aa1501ca6889357908f54b12695f0534e48 /tmp/playbook.tar.gz
+RUN mkdir /playbook && tar -xzf /tmp/playbook.tar.gz --strip-components=1 -C /playbook && test -s /playbook/readme.md
+
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates tzdata && \
+    adduser -D -u 10001 appuser && mkdir -p /data/keys && chown appuser /data/keys
+COPY --from=build /out /opt/bobby
+RUN mv /opt/bobby/server /opt/bobby/knowledge-api
+COPY migrations/team_access/001_team.sql migrations/team_access/001_rights.sql /app/migrations/
+COPY fixtures/knowledge /data/knowledge
+COPY --from=public-docs /playbook /data/knowledge/playbook
+USER appuser

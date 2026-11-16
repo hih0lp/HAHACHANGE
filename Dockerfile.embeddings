@@ -1,0 +1,5 @@
+# syntax=docker/dockerfile:1
+ARG TARGETARCH
+FROM ghcr.io/huggingface/text-embeddings-inference:cpu-1.6@sha256:66db77d7856c9319bbfaf2c5b80a6d0e0ac9ff128ade09eaca1d9c20213617a4 AS tei-amd64
+FROM ghcr.io/huggingface/text-embeddings-inference:cpu-arm64-1.9@sha256:798cd7615e060a72ccbdf19aa0ada52289c6a0147490195bafaece6ce04d70f1 AS tei-arm64
+FROM tei-${TARGETARCH}
